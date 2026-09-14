@@ -107,3 +107,4 @@ the realtime store.
 
 - [DMX output and movers](dmx-movers.md) — universe composition and blackout
 - [Project files and autosave](PROJECTS.md) — atmos settings travel with Serial Device Settings
+- [MIDI and keyboard mapping](midi-mapping.md) — `triggerAtmosFixture` learn target
