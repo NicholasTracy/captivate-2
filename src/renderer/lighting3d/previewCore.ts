@@ -1785,309 +1785,202 @@ export function buildTargets(
   fxtrDepthOn: boolean
 ): PreviewTarget[] {
   const placementDepth2DOnly = !fxtrDepthOn
-  const baseX = clamp01(getParam(fallbackParams, 'xAxis'))
-  const baseY = clamp01(getParam(fallbackParams, 'yAxis'))
-  const spread = clamp01(getParam(fallbackParams, 'moverSpread'))
-  const mirrorLeftRight = getParam(fallbackParams, 'moverMirrorX') > 0.5
-  const mirrorTopBottom = getParam(fallbackParams, 'moverMirrorY') > 0.5
-  const moverMode = parseMoverMode(fallbackParams)
-
-  const grouped: Record<string, MoverPreviewFixture[]> = {}
-  for (const fixture of fixtures) {
-    const groupName =
-      fixture.groupName.trim().length > 0
-        ? fixture.groupName.trim()
-        : 'Mover Group'
-    const items = grouped[groupName] ?? []
-    items.push(fixture)
-    grouped[groupName] = items
-  }
 
   const targets: PreviewTarget[] = []
   const activeFixtureIds = new Set<string>()
 
-  for (const [groupName, rawGroupFixtures] of Object.entries(grouped)) {
-    const groupFixtures = [...rawGroupFixtures].sort((left, right) => {
-      if (left.xPos !== right.xPos) return left.xPos - right.xPos
-      if (left.yPos !== right.yPos) return left.yPos - right.yPos
-      return left.fixtureId.localeCompare(right.fixtureId)
-    })
-
-    let minX = 1
-    let maxX = 0
-    let minY = 1
-    let maxY = 0
-
-    for (const fixture of groupFixtures) {
-      minX = Math.min(minX, fixture.xPos)
-      maxX = Math.max(maxX, fixture.xPos)
-      minY = Math.min(minY, fixture.yPos)
-      maxY = Math.max(maxY, fixture.yPos)
-    }
-
-    const spanX = maxX - minX
-    const spanY = maxY - minY
-    const hasHorizontalSpread = spanX > 0.0001
-    const hasVerticalSpread = spanY > 0.0001
-    const centerX = (minX + maxX) * 0.5
-    const centerY = (minY + maxY) * 0.5
-    const sideEpsilon = 0.0001
-    const isRightFlags = groupFixtures.map((fixture, fixtureIndex) =>
-      hasHorizontalSpread
-        ? fixture.xPos > centerX + sideEpsilon
-        : fixtureIndex >= Math.ceil(groupFixtures.length / 2)
-    )
-    // `yPos` uses top=1, bottom=0 in this view model.
-    const isBottomFlags = groupFixtures.map((fixture) =>
-      hasVerticalSpread ? fixture.yPos < centerY - sideEpsilon : false
-    )
-
+  for (const fixture of fixtures) {
+    activeFixtureIds.add(fixture.fixtureId)
+    const groupName =
+      fixture.groupName.trim().length > 0
+        ? fixture.groupName.trim()
+        : 'Mover Group'
     const groupColor = colorForGroup(groupName)
 
-    groupFixtures.forEach((fixture, fixtureIndex) => {
-      activeFixtureIds.add(fixture.fixtureId)
-      const relX = hasHorizontalSpread
-        ? clamp01((fixture.xPos - minX) / spanX)
-        : groupFixtures.length <= 1
-          ? 0.5
-          : fixtureIndex / (groupFixtures.length - 1)
-      const relY = hasVerticalSpread
-        ? clamp01((fixture.yPos - minY) / spanY)
-        : 0.5
+    const fixtureWorld = fixtureWorldFromUniversePosition(
+      fixture.xPos,
+      fixture.yPos,
+      fixture.zPos,
+      floorSpec,
+      stageHeight
+    )
+    const modelKind = resolveModelKind(fixture)
+    const isMoverModel = isMoverModelKind(modelKind)
+    const modelWidth = clamp(fixture.model.width, 0.2, 8)
+    const universe = Math.max(1, Math.round(fixture.universe || 1))
+    const universeData = dmxOutByUniverse[universe - 1]
 
-      let targetNormX = baseX
-      let targetNormY = baseY
-
-      if (moverMode === 1) {
-        targetNormX = baseX + (relX - 0.5) * spread
-        targetNormY = baseY + (relY - 0.5) * spread
-      } else if (moverMode === 2) {
-        const isRight = isRightFlags[fixtureIndex] === true
-        const isBottom = isBottomFlags[fixtureIndex] === true
-
-        if (mirrorLeftRight && isRight) {
-          const refIndex = findClosestReferenceIndex(
-            groupFixtures,
-            (_candidate, candidateIndex) => isRightFlags[candidateIndex] !== true,
-            fixtureIndex,
-            (left, right) => Math.abs(left.yPos - right.yPos),
-            (left, right) => Math.abs(left.xPos - right.xPos)
-          )
-          if (refIndex !== undefined) {
-            const ref = groupFixtures[refIndex]
-            // Keep forward alignment while mirroring left/right turn direction.
-            targetNormX = fixture.xPos + ref.xPos - targetNormX
-          } else {
-            targetNormX = centerX * 2 - baseX
-          }
-        }
-        if (mirrorTopBottom && isBottom) {
-          const refIndex = findClosestReferenceIndex(
-            groupFixtures,
-            (_candidate, candidateIndex) => isBottomFlags[candidateIndex] !== true,
-            fixtureIndex,
-            (left, right) => Math.abs(left.xPos - right.xPos),
-            (left, right) => Math.abs(left.yPos - right.yPos)
-          )
-          if (refIndex !== undefined) {
-            const ref = groupFixtures[refIndex]
-            // Keep forward alignment while mirroring up/down tilt direction.
-            targetNormY = fixture.yPos + ref.yPos - targetNormY
-          } else {
-            targetNormY = centerY * 2 - baseY
-          }
-        }
-      }
-
-      const fixtureWorld = fixtureWorldFromUniversePosition(
-        fixture.xPos,
-        fixture.yPos,
-        fixture.zPos,
-        floorSpec,
-        stageHeight
+    if (fixture.isLedFixture) {
+      const ledParams = resolveSplitParamsForFixture(
+        fixture.groups,
+        splitScenes,
+        splitStates,
+        fallbackParams
       )
-      const modelKind = resolveModelKind(fixture)
-      const isMoverModel = isMoverModelKind(modelKind)
-      const modelWidth = clamp(fixture.model.width, 0.2, 8)
-      const universe = Math.max(1, Math.round(fixture.universe || 1))
-      const universeData = dmxOutByUniverse[universe - 1]
-
-      if (fixture.isLedFixture) {
-        const ledParams = resolveSplitParamsForFixture(
-          fixture.groups,
-          splitScenes,
-          splitStates,
-          fallbackParams
-        )
-        const ledFixture = fixture.ledFixture
-        const ledLayers =
-          ledFixture !== undefined
-            ? ledParams.map((params) =>
-                getLedValues(params, ledFixture, master, placementDepth2DOnly)
-              )
-            : []
-        const combinedLedValues = combineLedLayers(ledLayers)
-        const emitters: PreviewEmitterTarget[] = (fixture.ledPixels ?? []).map(
-          (pixel, pixelIndex) => {
-            const pixelColor = combinedLedValues[pixelIndex]
-            const color =
-              pixelColor !== undefined
-                ? new THREE.Color(pixelColor.red, pixelColor.green, pixelColor.blue)
-                : new THREE.Color(0, 0, 0)
-            const intensity =
-              pixelColor !== undefined
-                ? clamp01(Math.max(pixelColor.red, pixelColor.green, pixelColor.blue))
-                : 0
-            return {
-              localX: pixel.x,
-              localY: pixel.y,
-              localZ: pixel.z,
-              color,
-              intensity,
-              effectIntensity: 0,
-              shape: 'disc',
-              sizeScale: 1,
-              liveChannelSet: EMPTY_BEAM_CHANNEL_SET,
-              liveEffectChannels: [],
-            }
-          }
-        )
-        if (emitters.length === 0) {
-          return
-        }
-
-        targets.push({
-          fixtureId: fixture.fixtureId,
-          modelKind,
-          modelWidth,
-          bodyShape: fixture.model.bodyShape,
-          bodyHeight: fixture.model.bodyHeight,
-          bodyDepth: fixture.model.bodyDepth,
-          bodyDiameter: fixture.model.bodyDiameter,
-          moverBeamAngleDeg: fixture.model.moverBeamAngleDeg,
-          atmosphereEffect: fixture.model.atmosphereEffect,
-          atmosphereNozzleDirection: fixture.model.atmosphereNozzleDirection,
-          hasAtmosLighting: false,
-          isMoverModel: false,
-          isLedFixture: true,
-          ledFixtureIndex: fixture.ledFixtureIndex,
-          ledWireEdges: fixture.ledWireEdges,
-          rotation: fixture.rotation,
-          fixtureX: fixtureWorld.worldX,
-          fixtureY: fixtureWorld.worldY,
-          fixtureZ: fixtureWorld.worldZ,
-          targetX: fixtureWorld.worldX,
-          targetY: fixtureWorld.worldY,
-          targetZ: fixtureWorld.worldZ,
-          focusNorm: 0,
-          hasFocusChannel: false,
-          mountInverted: false,
-          emitters,
-        })
-        return
-      }
-
-      let targetWorld = danceFloorWorldFromNormalized(
-        targetNormX,
-        targetNormY,
-        floorSpec
-      )
-      const bodyDepthForFace = clamp(fixture.model.bodyDepth, 0.04, 3)
-      const bodyHeightForFace = clamp(fixture.model.bodyHeight, 0.04, 3)
-      const bodyShapeForFace = fixture.model.bodyShape
-      const moverHeadFaceZ = moverHeadEmitterBackPlaneLocalZ(
-        modelWidth,
-        bodyDepthForFace,
-        bodyHeightForFace,
-        fixture.model.bodyDiameter,
-        modelKind === 'moverWash'
-      )
-      let aimYawDeg: number | undefined = undefined
-      let aimPitchDeg: number | undefined = undefined
-
-      const liveAxis =
-        isMoverModel ? readLiveAxisValues(fixture, dmxOutByUniverse) : undefined
-      if (isMoverModel && liveAxis !== undefined) {
-        aimYawDeg = mapPanDmxToYawDeg(
-          liveAxis.panRaw,
-          fixture.moverCalibration,
-          liveAxis.panNorm,
-          fixture.fixtureId,
-          true
-        )
-        aimPitchDeg = mapTiltDmxToPitchDeg(
-          liveAxis.tiltRaw,
-          fixture.moverCalibration,
-          liveAxis.tiltNorm,
-          fixture.moverMountOrientation === 'inverted',
-          true
-        )
-        // Match engine: linear pan/tilt decode across calibrated min/max.
-        targetWorld = targetFromLiveAxis(
-          fixture,
-          liveAxis,
-          fixtureWorld,
-          true
-        )
-      }
-
-      const focusNorm = readLiveFocusNormalized(fixture.focusChannels, universeData)
-      const hasFocusChannel = fixture.focusChannels.length > 0
-
-      const goboIndex = readLiveGoboIndex(fixture.goboMapChannels, universeData)
-      const emitters: PreviewEmitterTarget[] = []
-      let hasAtmosLighting = false
-
-      const hasPerEmitterLayout = fixture.customEmitters.length > 0
-      if (hasPerEmitterLayout) {
-        const bodyWidth = modelWidth
-        const bodyHeight = clamp(fixture.model.bodyHeight, 0.04, 3)
-        const bodyDepth = clamp(fixture.model.bodyDepth, 0.04, 3)
-        const moverFaceZ = moverHeadFaceZ
-
-        for (const customEmitter of fixture.customEmitters) {
-          const absoluteChannelSet = new Set<number>(
-            customEmitter.channelIndexes.map(
-              (channelIndex) => fixture.channelBase + channelIndex - 1
+      const ledFixture = fixture.ledFixture
+      const ledLayers =
+        ledFixture !== undefined
+          ? ledParams.map((params) =>
+              getLedValues(params, ledFixture, master, placementDepth2DOnly)
             )
-          )
-          const emitterChannels = {
-            colorChannels: fixture.colorChannels.filter((channel) =>
-              absoluteChannelSet.has(channel.channelIndex)
-            ),
-            colorMapChannels: fixture.colorMapChannels.filter((channel) =>
-              absoluteChannelSet.has(channel.channelIndex)
-            ),
-            masterChannels: fixture.masterChannels.filter((channel) =>
-              absoluteChannelSet.has(channel.channelIndex)
-            ),
-            effectChannels: fixture.effectChannels.filter((channel) =>
-              absoluteChannelSet.has(channel.channelIndex)
-            ),
+          : []
+      const combinedLedValues = combineLedLayers(ledLayers)
+      const emitters: PreviewEmitterTarget[] = (fixture.ledPixels ?? []).map(
+        (pixel, pixelIndex) => {
+          const pixelColor = combinedLedValues[pixelIndex]
+          const color =
+            pixelColor !== undefined
+              ? new THREE.Color(pixelColor.red, pixelColor.green, pixelColor.blue)
+              : new THREE.Color(0, 0, 0)
+          const intensity =
+            pixelColor !== undefined
+              ? clamp01(Math.max(pixelColor.red, pixelColor.green, pixelColor.blue))
+              : 0
+          return {
+            localX: pixel.x,
+            localY: pixel.y,
+            localZ: pixel.z,
+            color,
+            intensity,
+            effectIntensity: 0,
+            shape: 'disc',
+            sizeScale: 1,
+            liveChannelSet: EMPTY_BEAM_CHANNEL_SET,
+            liveEffectChannels: [],
           }
-          const hasLightingChannels =
-            emitterChannels.colorChannels.length > 0 ||
-            emitterChannels.colorMapChannels.length > 0 ||
-            emitterChannels.masterChannels.length > 0
+        }
+      )
+      if (emitters.length === 0) {
+        continue
+      }
 
-          const beamValues = readLiveBeamValuesForChannels(
-            {
-              colorChannels: emitterChannels.colorChannels,
-              colorMapChannels: emitterChannels.colorMapChannels,
-              masterChannels: emitterChannels.masterChannels,
-            },
-            universeData,
-            fallbackParams,
-            groupColor,
-            master
+      targets.push({
+        fixtureId: fixture.fixtureId,
+        modelKind,
+        modelWidth,
+        bodyShape: fixture.model.bodyShape,
+        bodyHeight: fixture.model.bodyHeight,
+        bodyDepth: fixture.model.bodyDepth,
+        bodyDiameter: fixture.model.bodyDiameter,
+        moverBeamAngleDeg: fixture.model.moverBeamAngleDeg,
+        atmosphereEffect: fixture.model.atmosphereEffect,
+        atmosphereNozzleDirection: fixture.model.atmosphereNozzleDirection,
+        hasAtmosLighting: false,
+        isMoverModel: false,
+        isLedFixture: true,
+        ledFixtureIndex: fixture.ledFixtureIndex,
+        ledWireEdges: fixture.ledWireEdges,
+        rotation: fixture.rotation,
+        fixtureX: fixtureWorld.worldX,
+        fixtureY: fixtureWorld.worldY,
+        fixtureZ: fixtureWorld.worldZ,
+        targetX: fixtureWorld.worldX,
+        targetY: fixtureWorld.worldY,
+        targetZ: fixtureWorld.worldZ,
+        focusNorm: 0,
+        hasFocusChannel: false,
+        mountInverted: false,
+        emitters,
+      })
+      continue
+    }
+
+    // Movers / conventional: aim and beams from live DMX only (no pad/mode math).
+    let targetWorld = {
+      worldX: fixtureWorld.worldX,
+      worldY: DANCE_FLOOR_Y,
+      worldZ: fixtureWorld.worldZ + FALLBACK_TARGET_LENGTH,
+    }
+    const bodyDepthForFace = clamp(fixture.model.bodyDepth, 0.04, 3)
+    const bodyHeightForFace = clamp(fixture.model.bodyHeight, 0.04, 3)
+    const bodyShapeForFace = fixture.model.bodyShape
+    const moverHeadFaceZ = moverHeadEmitterBackPlaneLocalZ(
+      modelWidth,
+      bodyDepthForFace,
+      bodyHeightForFace,
+      fixture.model.bodyDiameter,
+      modelKind === 'moverWash'
+    )
+    let aimYawDeg: number | undefined = undefined
+    let aimPitchDeg: number | undefined = undefined
+
+    const liveAxis =
+      isMoverModel ? readLiveAxisValues(fixture, dmxOutByUniverse) : undefined
+    if (isMoverModel && liveAxis !== undefined) {
+      aimYawDeg = mapPanDmxToYawDeg(
+        liveAxis.panRaw,
+        fixture.moverCalibration,
+        liveAxis.panNorm,
+        fixture.fixtureId,
+        true
+      )
+      aimPitchDeg = mapTiltDmxToPitchDeg(
+        liveAxis.tiltRaw,
+        fixture.moverCalibration,
+        liveAxis.tiltNorm,
+        fixture.moverMountOrientation === 'inverted',
+        true
+      )
+      targetWorld = targetFromLiveAxis(fixture, liveAxis, fixtureWorld, true)
+    }
+
+    const focusNorm = readLiveFocusNormalized(fixture.focusChannels, universeData)
+    const hasFocusChannel = fixture.focusChannels.length > 0
+
+    const goboIndex = readLiveGoboIndex(fixture.goboMapChannels, universeData)
+    const emitters: PreviewEmitterTarget[] = []
+    let hasAtmosLighting = false
+
+    const hasPerEmitterLayout = fixture.customEmitters.length > 0
+    if (hasPerEmitterLayout) {
+      const bodyWidth = modelWidth
+      const bodyHeight = clamp(fixture.model.bodyHeight, 0.04, 3)
+      const bodyDepth = clamp(fixture.model.bodyDepth, 0.04, 3)
+      const moverFaceZ = moverHeadFaceZ
+
+      for (const customEmitter of fixture.customEmitters) {
+        const absoluteChannelSet = new Set<number>(
+          customEmitter.channelIndexes.map(
+            (channelIndex) => fixture.channelBase + channelIndex - 1
           )
-          const effectLevel = readLiveEffectLevelForChannels(
-            emitterChannels.effectChannels,
-            universeData
-          )
-          if (modelKind === 'atmosphericFxtr' && hasLightingChannels) {
-            hasAtmosLighting = true
-          }
+        )
+        const emitterChannels = {
+          colorChannels: fixture.colorChannels.filter((channel) =>
+            absoluteChannelSet.has(channel.channelIndex)
+          ),
+          colorMapChannels: fixture.colorMapChannels.filter((channel) =>
+            absoluteChannelSet.has(channel.channelIndex)
+          ),
+          masterChannels: fixture.masterChannels.filter((channel) =>
+            absoluteChannelSet.has(channel.channelIndex)
+          ),
+          effectChannels: fixture.effectChannels.filter((channel) =>
+            absoluteChannelSet.has(channel.channelIndex)
+          ),
+        }
+        const hasLightingChannels =
+          emitterChannels.colorChannels.length > 0 ||
+          emitterChannels.colorMapChannels.length > 0 ||
+          emitterChannels.masterChannels.length > 0
+
+        const beamValues = readLiveBeamValuesForChannels(
+          {
+            colorChannels: emitterChannels.colorChannels,
+            colorMapChannels: emitterChannels.colorMapChannels,
+            masterChannels: emitterChannels.masterChannels,
+          },
+          universeData,
+          fallbackParams,
+          groupColor,
+          master
+        )
+        const effectLevel = readLiveEffectLevelForChannels(
+          emitterChannels.effectChannels,
+          universeData
+        )
+        if (modelKind === 'atmosphericFxtr' && hasLightingChannels) {
+          hasAtmosLighting = true
+        }
 
           const placementCtx: FixturePlacementContext = {
             modelKind,
@@ -2538,7 +2431,6 @@ export function buildTargets(
         mountInverted: fixture.moverMountOrientation === 'inverted',
         emitters,
       })
-    })
   }
 
   for (const fixtureId of Array.from(previewPanYawByFixtureId.keys())) {

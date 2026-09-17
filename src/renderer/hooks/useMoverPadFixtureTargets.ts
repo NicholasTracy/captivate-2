@@ -36,6 +36,7 @@ function fixtureMatchesSplitGroups(
 function buildMoverPlacementsForSplit(
   splitGroups: Record<string, boolean | undefined>,
   moverGroupByFixtureId: Record<string, string>,
+  sequenceByFixtureId: Record<string, number>,
   universe: Array<{
     id?: string
     type: string
@@ -66,11 +67,16 @@ function buildMoverPlacementsForSplit(
       fixtureType.name.trim() ||
       'Fixture Group'
 
+    const sequenceOverride = sequenceByFixtureId[fixtureId]
     const placement: MoverPadPlacementEntry = {
       key: fixtureId,
       x: clamp01(fixture.window?.x?.pos ?? 0.5),
       y: clamp01(fixture.window?.y?.pos ?? 0.5),
       sortOrder: fixtureIndex,
+      sequenceOverride:
+        sequenceOverride !== undefined && Number.isFinite(sequenceOverride)
+          ? Number(sequenceOverride)
+          : undefined,
     }
 
     const groupItems = fixturesByGroup[groupName] ?? []
@@ -99,22 +105,41 @@ export function useMoverPadFixtureTargets(
     }
 
     const moverMode = parseMoverModeFromParams(params)
-    if (moverMode === 0) {
+    const kinematicsByGroup: Record<string, boolean> = {}
+    for (const [groupName, settings] of Object.entries(
+      dmx.moverGroupSettings ?? {}
+    )) {
+      kinematicsByGroup[groupName] = settings?.kinematicsEnabled === true
+    }
+    const anyKinematics = Object.values(kinematicsByGroup).some(Boolean)
+
+    // Ghost cursors only when multi-target modes are active for kinematics groups
+    // or when mirror is active for raw groups.
+    if (moverMode === 0 && !anyKinematics) {
+      return null
+    }
+    if (moverMode === 0 && anyKinematics) {
+      // Follow spot: all same target; no multi-cursor needed
       return null
     }
 
     const fixturesByGroup = buildMoverPlacementsForSplit(
       splitGroups,
       dmx.moverGroupByFixtureId,
+      dmx.moverSequenceByFixtureId ?? {},
       dmx.universe,
       dmx.fixtureTypesByID
     )
 
-    const targets = resolveMoverPadTargetsFromParams(fixturesByGroup, params)
+    const targets = resolveMoverPadTargetsFromParams(fixturesByGroup, params, {
+      kinematicsByGroup,
+    })
     return targets.length > 0 ? targets : null
   }, [
     dmx.fixtureTypesByID,
     dmx.moverGroupByFixtureId,
+    dmx.moverGroupSettings,
+    dmx.moverSequenceByFixtureId,
     dmx.universe,
     moverAdvancedControlEnabled,
     params,

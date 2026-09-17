@@ -24,8 +24,10 @@ export type DefaultParam =
   | 'xAxis'
   | 'yAxis'
   | 'xMirror'
-  | 'moverFloorLock'
   | 'moverSpread'
+  | 'moverPhase'
+  | 'moverPhasePan'
+  | 'moverPhaseTilt'
   | 'moverMirrorX'
   | 'moverMirrorY'
   | 'moverMode'
@@ -99,8 +101,10 @@ export function initParams(): { [key in DefaultParam]: number } {
     xAxis: 0.5,
     yAxis: 0.5,
     xMirror: 0.0,
-    moverFloorLock: 0.0,
     moverSpread: 0.0,
+    moverPhase: 0.0,
+    moverPhasePan: 0.0,
+    moverPhaseTilt: 0.0,
     moverMirrorX: 0.0,
     moverMirrorY: 0.0,
     moverMode: 0.0,
@@ -144,8 +148,10 @@ const defaultParams: { [key in DefaultParam]: number } = {
   xAxis: 0.5,
   yAxis: 0.5,
   xMirror: 0.0,
-  moverFloorLock: 0.0,
   moverSpread: 0.0,
+  moverPhase: 0.0,
+  moverPhasePan: 0.0,
+  moverPhaseTilt: 0.0,
   moverMirrorX: 0.0,
   moverMirrorY: 0.0,
   moverMode: 0.0,
@@ -164,6 +170,41 @@ const defaultParams: { [key in DefaultParam]: number } = {
 
 export function getParam(params: Params, param: DefaultParam): number {
   return params[param] ?? defaultParams[param]
+}
+
+/** Max sequential stagger in degrees for moverPhasePan / moverPhaseTilt (param 1.0 = this). */
+export const MOVER_PHASE_MAX_DEG = 45
+
+/**
+ * Read pan/tilt phase amounts (0–1 → 0..MOVER_PHASE_MAX_DEG).
+ * Prefer explicit moverPhasePan / moverPhaseTilt when present on the split;
+ * else fall back to legacy combined moverPhase for both axes.
+ */
+export function getMoverPhaseParams(params: Params): {
+  phasePan: number
+  phaseTilt: number
+} {
+  const hasPan = params.moverPhasePan !== undefined
+  const hasTilt = params.moverPhaseTilt !== undefined
+  const hasLegacy = params.moverPhase !== undefined
+  if (!hasPan && !hasTilt && !hasLegacy) {
+    return { phasePan: 0, phaseTilt: 0 }
+  }
+  const legacy = hasLegacy ? clampPhase01(Number(params.moverPhase)) : 0
+  return {
+    phasePan: hasPan ? clampPhase01(Number(params.moverPhasePan)) : legacy,
+    phaseTilt: hasTilt ? clampPhase01(Number(params.moverPhaseTilt)) : legacy,
+  }
+}
+
+function clampPhase01(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(1, Math.max(0, value))
+}
+
+/** Degrees for phase param 0–1 (display + engine). */
+export function moverPhaseParamToDegrees(normalized: number): number {
+  return clampPhase01(normalized) * MOVER_PHASE_MAX_DEG
 }
 
 export function defaultOutputParams(): Params {
@@ -213,8 +254,9 @@ export const defaultParamsList: DefaultParam[] = [
   'randomize',
   'xAxis',
   'yAxis',
-  'moverFloorLock',
   'moverSpread',
+  'moverPhasePan',
+  'moverPhaseTilt',
   'moverMirrorX',
   'moverMirrorY',
   'moverMode',
@@ -246,8 +288,10 @@ const paramDisplayNames: { [key: string]: string } = {
   xAxis: 'Pan',
   yAxis: 'Tilt',
   xMirror: 'Pan Mirror',
-  moverFloorLock: 'Floor Bounds Lock',
   moverSpread: 'Tandem Spread',
+  moverPhase: 'Mover Phase (legacy)',
+  moverPhasePan: 'Pan Phase',
+  moverPhaseTilt: 'Tilt Phase',
   moverMirrorX: 'Mirror Left/Right',
   moverMirrorY: 'Mirror Top/Bottom',
   moverMode: 'Mover Mode',

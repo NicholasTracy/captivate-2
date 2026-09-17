@@ -4084,6 +4084,7 @@ export type FlattenedFixture = {
   moverCalibration?: MoverCalibration
   moverBounds?: MoverBounds
   moverMountOrientation?: MoverMountOrientation
+  rotation?: FixtureRotation
 }
 
 

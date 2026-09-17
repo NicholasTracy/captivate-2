@@ -19,10 +19,6 @@ import {
   setMaster,
   setBaseParams,
 } from '../../renderer/redux/controlSlice'
-import {
-  setMoverFollowOverridePan,
-  setMoverFollowOverrideTilt,
-} from '../../renderer/redux/guiSlice'
 import NodeLink from 'node-link'
 import { PayloadAction } from '@reduxjs/toolkit'
 
@@ -177,10 +173,6 @@ export function handleMessage(
       )
     } else if (action.type === 'setMaster') {
       return state.control.master
-    } else if (action.type === 'setMoverFollowOverridePan') {
-      return state.gui.moverFollowOverridePan
-    } else if (action.type === 'setMoverFollowOverrideTilt') {
-      return state.gui.moverFollowOverrideTilt
     }
 
     return 0
@@ -211,10 +203,6 @@ export function handleMessage(
       nodeLink.setTempo(bounded)
     } else if (action.type === 'tapTempo') {
       tapTempo()
-    } else if (action.type === 'setMoverFollowOverridePan') {
-      dispatch(setMoverFollowOverridePan(clamp(bounded, 0, 1)))
-    } else if (action.type === 'setMoverFollowOverrideTilt') {
-      dispatch(setMoverFollowOverrideTilt(clamp(bounded, 0, 1)))
     }
   }
 

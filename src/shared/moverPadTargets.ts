@@ -1,20 +1,21 @@
 import { clampNormalized } from '../math/util'
 import { getParam, Params } from './params'
+import { orderMoverFixtures, type MoverOrderEntry } from './moverOrdering'
 
 export const MOVER_TANDEM_MAX_SPREAD = 0.65
 
-export type MoverPadPlacementEntry = {
-  key: string
-  x: number
-  y: number
-  sortOrder?: number
-}
+export const MOVER_MODE_FOLLOW_SPOT = 0
+export const MOVER_MODE_TANDEM = 1
+export const MOVER_MODE_MIRROR = 2
+
+export type MoverPadPlacementEntry = MoverOrderEntry
 
 export type MoverPadTarget = {
   key: string
   x: number
   y: number
   mirrored: boolean
+  sequenceIndex: number
 }
 
 export function mirrorAroundCenter(value: number, center: number): number {
@@ -27,6 +28,12 @@ export function parseMoverModeFromParams(params: Params): number {
   return Math.max(0, Math.min(2, Math.round(raw)))
 }
 
+/**
+ * Resolve pad targets for a group.
+ * Kinematics on: follow-spot / tandem / mirror.
+ * Kinematics off: shared pad ± mirror only (tandem ignored).
+ * Phase is applied later in joint degrees (see applySequentialJointPhaseDmx).
+ */
 export function resolveMoverPadTargetsForGroup(
   fixtures: ReadonlyArray<MoverPadPlacementEntry>,
   options: {
@@ -38,6 +45,7 @@ export function resolveMoverPadTargetsForGroup(
     mirrorTopBottom: boolean
     hasPanTarget?: boolean
     hasTiltTarget?: boolean
+    kinematicsEnabled?: boolean
   }
 ): MoverPadTarget[] {
   if (fixtures.length === 0) {
@@ -48,19 +56,21 @@ export function resolveMoverPadTargetsForGroup(
   const hasTiltTarget = options.hasTiltTarget !== false
   const baseX = clampNormalized(options.baseX)
   const baseY = clampNormalized(options.baseY)
-  const moverMode = Math.max(0, Math.min(2, Math.round(options.moverMode)))
-  const spread = Math.min(
-    MOVER_TANDEM_MAX_SPREAD,
-    clampNormalized(options.spread)
-  )
+  const kinematicsEnabled = options.kinematicsEnabled === true
+  const requestedMode = Math.max(0, Math.min(2, Math.round(options.moverMode)))
+  // Without kinematics: only mirror is a non-raw mode.
+  const moverMode = kinematicsEnabled
+    ? requestedMode
+    : requestedMode === MOVER_MODE_MIRROR
+      ? MOVER_MODE_MIRROR
+      : MOVER_MODE_FOLLOW_SPOT
+  const spread = kinematicsEnabled
+    ? Math.min(MOVER_TANDEM_MAX_SPREAD, clampNormalized(options.spread))
+    : 0
   const mirrorLeftRight = options.mirrorLeftRight
   const mirrorTopBottom = options.mirrorTopBottom
 
-  const orderedFixtures = [...fixtures].sort((left, right) => {
-    if (left.x !== right.x) return left.x - right.x
-    if (left.y !== right.y) return left.y - right.y
-    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
-  })
+  const orderedFixtures = orderMoverFixtures(fixtures)
 
   let minX = 1
   let maxX = 0
@@ -93,32 +103,38 @@ export function resolveMoverPadTargetsForGroup(
       : entryIndex >= Math.ceil(orderedFixtures.length / 2)
   )
 
+  const n = orderedFixtures.length
+  const denom = Math.max(1, n - 1)
+
   return orderedFixtures.map((entry, entryIndex) => {
     const relX = hasHorizontalSpread
       ? clampNormalized((entry.x - minX) / spanX)
-      : orderedFixtures.length <= 1
+      : n <= 1
         ? 0.5
-        : entryIndex / (orderedFixtures.length - 1)
+        : entryIndex / denom
 
     const isRight = isRightFlags[entryIndex] === true
     const isBottom = isBottomFlags[entryIndex] === true
+    const sequenceIndex = entry.sequenceIndex
 
     let fixtureX = hasPanTarget ? baseX : 0.5
     let fixtureY = hasTiltTarget ? baseY : 0.5
     let mirrored = false
 
-    if (moverMode === 1 && hasPanTarget) {
-      fixtureX = baseX + (relX - 0.5) * spread
+    if (kinematicsEnabled && moverMode === MOVER_MODE_TANDEM && hasPanTarget) {
+      fixtureX = fixtureX + (relX - 0.5) * spread
     }
 
-    const applyGroupMirrorX = hasPanTarget && moverMode === 2 && mirrorLeftRight
-    const applyGroupMirrorY = hasTiltTarget && moverMode === 2 && mirrorTopBottom
+    const applyMirrorX =
+      hasPanTarget && moverMode === MOVER_MODE_MIRROR && mirrorLeftRight
+    const applyMirrorY =
+      hasTiltTarget && moverMode === MOVER_MODE_MIRROR && mirrorTopBottom
 
-    if (applyGroupMirrorX && isRight) {
+    if (applyMirrorX && isRight) {
       fixtureX = mirrorAroundCenter(fixtureX, 0.5)
       mirrored = true
     }
-    if (applyGroupMirrorY && isBottom) {
+    if (applyMirrorY && isBottom) {
       fixtureY = mirrorAroundCenter(fixtureY, 0.5)
       mirrored = true
     }
@@ -128,13 +144,20 @@ export function resolveMoverPadTargetsForGroup(
       x: clampNormalized(hasPanTarget ? fixtureX : baseX),
       y: clampNormalized(hasTiltTarget ? fixtureY : baseY),
       mirrored,
+      sequenceIndex,
     }
   })
 }
 
 export function resolveMoverPadTargetsFromParams(
-  fixturesByGroup: Readonly<Record<string, ReadonlyArray<MoverPadPlacementEntry>>>,
-  params: Params
+  fixturesByGroup: Readonly<
+    Record<string, ReadonlyArray<MoverPadPlacementEntry>>
+  >,
+  params: Params,
+  options?: {
+    kinematicsByGroup?: Readonly<Record<string, boolean>>
+    defaultKinematics?: boolean
+  }
 ): MoverPadTarget[] {
   const baseX = clampNormalized(Number(params.xAxis ?? 0.5))
   const baseY = clampNormalized(Number(params.yAxis ?? 0.5))
@@ -142,9 +165,12 @@ export function resolveMoverPadTargetsFromParams(
   const spread = clampNormalized(getParam(params, 'moverSpread'))
   const mirrorLeftRight = getParam(params, 'moverMirrorX') > 0.5
   const mirrorTopBottom = getParam(params, 'moverMirrorY') > 0.5
+  const defaultKinematics = options?.defaultKinematics === true
 
   const targets: MoverPadTarget[] = []
-  for (const fixtures of Object.values(fixturesByGroup)) {
+  for (const [groupName, fixtures] of Object.entries(fixturesByGroup)) {
+    const kinematicsEnabled =
+      options?.kinematicsByGroup?.[groupName] ?? defaultKinematics
     targets.push(
       ...resolveMoverPadTargetsForGroup(fixtures, {
         baseX,
@@ -153,6 +179,7 @@ export function resolveMoverPadTargetsFromParams(
         spread,
         mirrorLeftRight,
         mirrorTopBottom,
+        kinematicsEnabled,
       })
     )
   }

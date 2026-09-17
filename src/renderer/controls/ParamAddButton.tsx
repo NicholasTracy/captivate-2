@@ -56,8 +56,9 @@ const visualSliderParamSet = new Set<string>(visualSliderParams as readonly stri
 const moverOnlyParamSet = new Set<string>([
   'xAxis',
   'yAxis',
-  'moverFloorLock',
   'moverSpread',
+  'moverPhasePan',
+  'moverPhaseTilt',
   'moverMirrorX',
   'moverMirrorY',
   'moverMode',
@@ -76,8 +77,9 @@ export const paramBundles: { [key in ParamBundle]: DefaultParam[] } = {
   axis: [
     'xAxis',
     'yAxis',
-    'moverFloorLock',
     'moverSpread',
+    'moverPhasePan',
+    'moverPhaseTilt',
     'moverMirrorX',
     'moverMirrorY',
     'moverMode',

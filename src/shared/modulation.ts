@@ -538,10 +538,6 @@ function clampOutputParamValue(param: DefaultParam | string, value: number): num
     if (!Number.isFinite(value)) return 0
     return Math.max(0, Math.min(2, value))
   }
-  if (param === 'moverFloorLock') {
-    if (!Number.isFinite(value)) return 0
-    return value >= 0.5 ? 1 : 0
-  }
 
   return clampNormalized(value)
 }

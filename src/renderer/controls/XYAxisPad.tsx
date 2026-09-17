@@ -1,30 +1,33 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import styled from 'styled-components'
 import { useDispatch } from 'react-redux'
 import useDragMapped from '../hooks/useDragMapped'
 import { setBaseParams } from '../redux/controlSlice'
 import XYAxisCursor from './XYAxisCursor'
 import Select from '../base/Select'
-import { useBaseParam, useDmxSelector, useTypedSelector } from 'renderer/redux/store'
+import { useBaseParam, useDmxSelector, useTypedSelector, useActiveLightScene } from 'renderer/redux/store'
 import { isMoverFixtureType } from '../../shared/dmxFixtures'
 import MidiOverlay_xy from '../base/MidiOverlay_xy'
 import { makeSetBaseParamAction } from '../redux/deviceState'
 import {
   MoverPatternHelpButton,
 } from '../pages/moverHelpButtons'
+import {
+  MOVER_MODE_FOLLOW_SPOT,
+  MOVER_MODE_MIRROR,
+  MOVER_MODE_TANDEM,
+  MOVER_TANDEM_MAX_SPREAD,
+} from '../../shared/moverPadTargets'
+import { baseMoverGroupName } from '../../shared/moverOrdering'
+import { evaluateSceneGroups } from '../../shared/sceneGroups'
 
 interface Props {
   splitIndex: number
 }
 
-type MoverModeOption = 'follow' | 'tandem' | 'mirror'
+type MoverModeOption = 'followSpot' | 'tandem' | 'mirror'
 
-const MOVER_MODE_FOLLOW = 0
-const MOVER_MODE_TANDEM = 1
-const MOVER_MODE_MIRROR = 2
-const TANDEM_SPREAD_MAX = 0.65
 const XY_CENTER_DETENT_RADIUS = 0.04
-const MOVER_MODE_OPTIONS: MoverModeOption[] = ['follow', 'tandem', 'mirror']
 
 function applyCenterDetent(value: number): number {
   return Math.abs(value - 0.5) <= XY_CENTER_DETENT_RADIUS ? 0.5 : value
@@ -32,8 +35,8 @@ function applyCenterDetent(value: number): number {
 
 function normalizeMoverMode(value: number): number {
   const rounded = Math.round(value)
-  if (rounded < MOVER_MODE_FOLLOW || rounded > MOVER_MODE_MIRROR) {
-    return MOVER_MODE_FOLLOW
+  if (rounded < MOVER_MODE_FOLLOW_SPOT || rounded > MOVER_MODE_MIRROR) {
+    return MOVER_MODE_FOLLOW_SPOT
   }
   return rounded
 }
@@ -41,19 +44,19 @@ function normalizeMoverMode(value: number): number {
 function moverModeToOption(mode: number): MoverModeOption {
   if (mode === MOVER_MODE_TANDEM) return 'tandem'
   if (mode === MOVER_MODE_MIRROR) return 'mirror'
-  return 'follow'
+  return 'followSpot'
 }
 
 function moverModeFromOption(option: MoverModeOption): number {
   if (option === 'tandem') return MOVER_MODE_TANDEM
   if (option === 'mirror') return MOVER_MODE_MIRROR
-  return MOVER_MODE_FOLLOW
+  return MOVER_MODE_FOLLOW_SPOT
 }
 
-function moverModeOptionLabel(option: MoverModeOption) {
+function moverModeOptionLabel(option: MoverModeOption, kinematicsOn: boolean) {
   if (option === 'tandem') return 'Tandem'
   if (option === 'mirror') return 'Mirror'
-  return 'Follow'
+  return kinematicsOn ? 'Follow Spot' : 'Follow'
 }
 
 export default function XYAxispad({ splitIndex }: Props) {
@@ -67,6 +70,49 @@ export default function XYAxispad({ splitIndex }: Props) {
       return fixtureType !== undefined && isMoverFixtureType(fixtureType)
     })
   })
+  const splitGroups = useActiveLightScene(
+    (scene) => scene.splitScenes[splitIndex]?.groups ?? {}
+  )
+  // Gate modes by this split's mover groups — not global any-group kinematics.
+  const kinematicsUiEnabled = useDmxSelector((state) => {
+    const settings = state.moverGroupSettings ?? {}
+    const moverGroupById = state.moverGroupByFixtureId ?? {}
+    return state.universe.some((fixture) => {
+      const fixtureType = state.fixtureTypesByID[fixture.type]
+      const isMover =
+        fixtureType !== undefined && isMoverFixtureType(fixtureType)
+      if (!isMover) return false
+      const fixtureGroups = fixture.groups ?? []
+      const inSplit = evaluateSceneGroups(splitGroups, (group) => {
+        const normalized = group.trim()
+        if (normalized.length <= 0) return false
+        if (normalized === 'Movers') return true
+        return fixtureGroups.some((g) => g.trim() === normalized)
+      })
+      if (!inSplit) return false
+      const fixtureId =
+        typeof fixture.id === 'string' ? fixture.id.trim() : ''
+      const groupName =
+        (fixtureId.length > 0 ? moverGroupById[fixtureId]?.trim() : '') ||
+        fixtureType?.name?.trim() ||
+        ''
+      if (groupName.length === 0) {
+        return false
+      }
+      const base = baseMoverGroupName(groupName)
+      return (
+        settings[groupName]?.kinematicsEnabled === true ||
+        settings[base]?.kinematicsEnabled === true
+      )
+    })
+  })
+
+  const modeOptions = useMemo((): MoverModeOption[] => {
+    if (kinematicsUiEnabled) {
+      return ['followSpot', 'tandem', 'mirror']
+    }
+    return ['mirror']
+  }, [kinematicsUiEnabled])
 
   const [dragContainer, onPointerDown] = useDragMapped(({ x, y }) => {
     dispatch(
@@ -96,7 +142,11 @@ export default function XYAxispad({ splitIndex }: Props) {
     if (moverSpread === undefined) nextParams.moverSpread = 0
     if (moverMirrorX === undefined) nextParams.moverMirrorX = 0
     if (moverMirrorY === undefined) nextParams.moverMirrorY = 0
-    if (moverModeRaw === undefined) nextParams.moverMode = MOVER_MODE_FOLLOW
+    if (moverModeRaw === undefined) {
+      nextParams.moverMode = kinematicsUiEnabled
+        ? MOVER_MODE_FOLLOW_SPOT
+        : MOVER_MODE_MIRROR
+    }
 
     if (Object.keys(nextParams).length > 0) {
       dispatch(
@@ -108,6 +158,7 @@ export default function XYAxispad({ splitIndex }: Props) {
     }
   }, [
     dispatch,
+    kinematicsUiEnabled,
     moverMirrorX,
     moverMirrorY,
     moverModeRaw,
@@ -115,6 +166,31 @@ export default function XYAxispad({ splitIndex }: Props) {
     splitIndex,
     xAxis,
     yAxis,
+  ])
+
+  // Coerce non-mirror modes to shared raw when kinematics off.
+  useEffect(() => {
+    if (!moverAdvancedControlEnabled || moverModeRaw === undefined) {
+      return
+    }
+    if (kinematicsUiEnabled) {
+      return
+    }
+    const mode = normalizeMoverMode(moverModeRaw)
+    if (mode !== MOVER_MODE_MIRROR && mode !== MOVER_MODE_FOLLOW_SPOT) {
+      dispatch(
+        setBaseParams({
+          splitIndex,
+          params: { moverMode: MOVER_MODE_FOLLOW_SPOT },
+        })
+      )
+    }
+  }, [
+    dispatch,
+    kinematicsUiEnabled,
+    moverAdvancedControlEnabled,
+    moverModeRaw,
+    splitIndex,
   ])
 
   if (
@@ -129,9 +205,13 @@ export default function XYAxispad({ splitIndex }: Props) {
   }
 
   const moverMode = normalizeMoverMode(moverModeRaw)
-  const moverModeOption = moverModeToOption(moverMode)
   const mirrorXEnabled = moverMirrorX > 0.5
   const mirrorYEnabled = moverMirrorY > 0.5
+  const displayMode = kinematicsUiEnabled
+    ? moverMode
+    : moverMode === MOVER_MODE_MIRROR
+      ? MOVER_MODE_MIRROR
+      : MOVER_MODE_FOLLOW_SPOT
 
   return (
     <Root>
@@ -160,50 +240,87 @@ export default function XYAxispad({ splitIndex }: Props) {
           <ControlLabel>Mover Pattern</ControlLabel>
           <MoverPatternHelpButton />
         </ControlLabelRow>
-        <SelectRow>
-          <Select
-            label="Mover Pattern"
-            val={moverModeOption}
-            items={MOVER_MODE_OPTIONS}
-            labelForItem={moverModeOptionLabel}
-            onChange={(newMode) => {
-              const nextMode = moverModeFromOption(newMode)
-              const nextParams: { [key: string]: number } = {
-                moverMode: nextMode,
+        {kinematicsUiEnabled ? (
+          <SelectRow>
+            <Select
+              label="Mover Pattern"
+              val={moverModeToOption(moverMode)}
+              items={modeOptions}
+              labelForItem={(option) =>
+                moverModeOptionLabel(option, kinematicsUiEnabled)
               }
-              if (
-                nextMode === MOVER_MODE_MIRROR &&
-                !mirrorXEnabled &&
-                !mirrorYEnabled
-              ) {
-                nextParams.moverMirrorX = 1
-                nextParams.moverMirrorY = 0
-              }
-              dispatch(
-                setBaseParams({
-                  splitIndex,
-                  params: nextParams,
-                })
-              )
-            }}
-            style={{ width: '100%' }}
-          />
-        </SelectRow>
+              onChange={(newMode) => {
+                const nextMode = moverModeFromOption(newMode)
+                const nextParams: { [key: string]: number } = {
+                  moverMode: nextMode,
+                }
+                if (
+                  nextMode === MOVER_MODE_MIRROR &&
+                  !mirrorXEnabled &&
+                  !mirrorYEnabled
+                ) {
+                  nextParams.moverMirrorX = 1
+                  nextParams.moverMirrorY = 0
+                }
+                dispatch(
+                  setBaseParams({
+                    splitIndex,
+                    params: nextParams,
+                  })
+                )
+              }}
+              style={{ width: '100%' }}
+            />
+          </SelectRow>
+        ) : (
+          <SelectRow>
+            <MirrorOnlyHint>
+              Raw pad → DMX. Enable kinematics on a mover group for Follow Spot /
+              Tandem.
+            </MirrorOnlyHint>
+            <ToggleRow>
+              <RadioButton
+                type="button"
+                $active={moverMode === MOVER_MODE_MIRROR}
+                title="Enable mirror mode"
+                onClick={() => {
+                  const nextOn = moverMode !== MOVER_MODE_MIRROR
+                  dispatch(
+                    setBaseParams({
+                      splitIndex,
+                      params: {
+                        moverMode: nextOn
+                          ? MOVER_MODE_MIRROR
+                          : MOVER_MODE_FOLLOW_SPOT,
+                        ...(nextOn && !mirrorXEnabled && !mirrorYEnabled
+                          ? { moverMirrorX: 1, moverMirrorY: 0 }
+                          : {}),
+                      },
+                    })
+                  )
+                }}
+              >
+                <RadioDot $active={moverMode === MOVER_MODE_MIRROR} aria-hidden />
+                <span>Mirror</span>
+              </RadioButton>
+            </ToggleRow>
+          </SelectRow>
+        )}
 
         {!hasAnyMover && (
           <DisabledHint>
-            Add movers to enable pan/tilt follow patterns.
+            Add movers to enable pan/tilt patterns.
           </DisabledHint>
         )}
 
-        {moverMode === MOVER_MODE_TANDEM && (
+        {kinematicsUiEnabled && displayMode === MOVER_MODE_TANDEM && (
           <>
             <ControlLabel>Tandem Distance</ControlLabel>
             <SpreadInput
               type="range"
               title="Spacing between movers in tandem mode"
               min={0}
-              max={TANDEM_SPREAD_MAX}
+              max={MOVER_TANDEM_MAX_SPREAD}
               step={0.01}
               value={moverSpread}
               onMouseDown={(e) => e.stopPropagation()}
@@ -215,7 +332,10 @@ export default function XYAxispad({ splitIndex }: Props) {
                     params: {
                       moverSpread: Math.max(
                         0,
-                        Math.min(TANDEM_SPREAD_MAX, Number(event.target.value) || 0)
+                        Math.min(
+                          MOVER_TANDEM_MAX_SPREAD,
+                          Number(event.target.value) || 0
+                        )
                       ),
                     },
                   })
@@ -225,7 +345,8 @@ export default function XYAxispad({ splitIndex }: Props) {
           </>
         )}
 
-        {moverMode === MOVER_MODE_MIRROR && (
+        {(displayMode === MOVER_MODE_MIRROR ||
+          (!kinematicsUiEnabled && moverMode === MOVER_MODE_MIRROR)) && (
           <>
             <ControlLabel>Mirror Axis</ControlLabel>
             <RadioGroup>
@@ -235,7 +356,6 @@ export default function XYAxispad({ splitIndex }: Props) {
                 title="Mirror on left/right axis"
                 onClick={() => {
                   const nextX = mirrorXEnabled ? 0 : 1
-                  // Keep at least one axis active in mirror mode.
                   const safeNextX = nextX === 0 && !mirrorYEnabled ? 1 : nextX
                   dispatch(
                     setBaseParams({
@@ -256,7 +376,6 @@ export default function XYAxispad({ splitIndex }: Props) {
                 title="Mirror on top/bottom axis"
                 onClick={() => {
                   const nextY = mirrorYEnabled ? 0 : 1
-                  // Keep at least one axis active in mirror mode.
                   const safeNextY = nextY === 0 && !mirrorXEnabled ? 1 : nextY
                   dispatch(
                     setBaseParams({
@@ -403,6 +522,11 @@ const SpreadInput = styled.input`
   }
 `
 
+const ToggleRow = styled.div`
+  display: flex;
+  gap: 0.22rem;
+`
+
 const RadioGroup = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -429,7 +553,8 @@ const RadioDot = styled.span<{ $active: boolean }>`
   border-radius: 999px;
   border: 1px solid ${(props) => (props.$active ? '#dbe7ff' : '#7d8795')};
   background: ${(props) => (props.$active ? '#cfe0ff' : 'transparent')};
-  box-shadow: ${(props) => (props.$active ? '0 0 0 2px rgba(16, 19, 23, 0.6) inset' : 'none')};
+  box-shadow: ${(props) =>
+    props.$active ? '0 0 0 2px rgba(16, 19, 23, 0.6) inset' : 'none'};
   flex: 0 0 auto;
 `
 
@@ -437,4 +562,11 @@ const DisabledHint = styled.div`
   font-size: 0.58rem;
   color: #e6b7b7;
   margin-top: 0.2rem;
+`
+
+const MirrorOnlyHint = styled.div`
+  font-size: 0.58rem;
+  color: ${(props) => props.theme.colors.text.secondary};
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
 `

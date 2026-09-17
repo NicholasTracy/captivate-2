@@ -647,8 +647,7 @@ function axisOverrideDmxToChannelValue(
     clamped = nearestStep
   }
   if (!fineEnabled) {
-    // Travel / coarse-only: whole DMX steps. Fine stays at 0 (not mid), so
-    // 16-bit fixtures do not sit halfway between coarse steps while moving.
+    // Travel / coarse-only: whole DMX steps. Fine parks at mid-scale.
     clamped = Math.round(clamped)
   } else {
     clamped =
@@ -670,8 +669,8 @@ function axisOverrideDmxToChannelValue(
 
   if (channel.isFine) {
     if (!fineEnabled) {
-      // Park fine at zero while coarse owns movement.
-      return Math.floor(rLerp(channel, 0))
+      // Park fine at half scale so micro-moves can adjust either side of coarse.
+      return Math.floor(rLerp(channel, 0.5))
     }
     return Math.floor(rLerp(channel, fineValue / DMX_MAX_VALUE))
   }
@@ -1446,6 +1445,7 @@ export function flatten_fixture(
       moverCalibration,
       moverBounds: fixture.moverBounds,
       moverMountOrientation: fixture.moverMountOrientation,
+      rotation: fixture.rotation,
     }
   })
 
@@ -1465,6 +1465,7 @@ export function flatten_fixture(
     moverCalibration,
     moverBounds: fixture.moverBounds,
     moverMountOrientation: fixture.moverMountOrientation,
+    rotation: fixture.rotation,
   })
 
   // Further split each flattened fixture into channel-family partitions so

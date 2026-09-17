@@ -57,6 +57,14 @@ export interface DmxState {
   activeUniverse: number
   activeSubFixture: null | number
   moverGroupByFixtureId: { [fixtureId: string]: string }
+  /** Per base mover group name (without Upright/Hung suffix). */
+  moverGroupSettings: {
+    [groupName: string]: {
+      kinematicsEnabled: boolean
+    }
+  }
+  /** Lower number first when set; undefined fixtures use auto layout order. */
+  moverSequenceByFixtureId: { [fixtureId: string]: number }
   stage: StageDimensions
   lighting3d: Lighting3DSettings
   led: LedState
@@ -293,6 +301,8 @@ export function initDmxState(): DmxState {
     activeUniverse: 1,
     activeSubFixture: null,
     moverGroupByFixtureId: {},
+    moverGroupSettings: {},
+    moverSequenceByFixtureId: {},
     stage: initStageDimensions(),
     lighting3d: initLighting3DSettings(),
     led: initLedState(),
@@ -670,6 +680,34 @@ function syncMoverState(state: DmxState) {
       delete state.moverGroupByFixtureId[fixtureId]
     }
   }
+
+  if (state.moverGroupSettings === undefined || state.moverGroupSettings === null) {
+    state.moverGroupSettings = {}
+  }
+  if (
+    state.moverSequenceByFixtureId === undefined ||
+    state.moverSequenceByFixtureId === null
+  ) {
+    state.moverSequenceByFixtureId = {}
+  }
+
+  const validBaseGroupNames = new Set<string>()
+  for (const groupName of Object.values(state.moverGroupByFixtureId)) {
+    const trimmed = groupName.trim()
+    if (trimmed.length > 0) {
+      validBaseGroupNames.add(trimmed)
+    }
+  }
+  for (const groupName of Object.keys(state.moverGroupSettings)) {
+    if (!validBaseGroupNames.has(groupName)) {
+      delete state.moverGroupSettings[groupName]
+    }
+  }
+  for (const fixtureId of Object.keys(state.moverSequenceByFixtureId)) {
+    if (!validFixtureIds.has(fixtureId)) {
+      delete state.moverSequenceByFixtureId[fixtureId]
+    }
+  }
 }
 
 function incrementNumberSuffix(name: string): string {
@@ -767,6 +805,9 @@ export const dmxSlice = createSlice({
       state.universe.splice(payload, 1)
       if (fixture?.id) {
         delete state.moverGroupByFixtureId[fixture.id]
+        if (state.moverSequenceByFixtureId) {
+          delete state.moverSequenceByFixtureId[fixture.id]
+        }
       }
       syncFixtureGroupCatalogState(state)
       syncMoverState(state)
@@ -1183,6 +1224,60 @@ export const dmxSlice = createSlice({
         }
       }
     },
+    setMoverGroupKinematicsEnabled: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ groupName: string; kinematicsEnabled: boolean }>
+    ) => {
+      const trimmed = payload.groupName.trim()
+      if (trimmed.length <= 0) {
+        return
+      }
+      if (state.moverGroupSettings === undefined) {
+        state.moverGroupSettings = {}
+      }
+      const existing = state.moverGroupSettings[trimmed] ?? {
+        kinematicsEnabled: false,
+      }
+      state.moverGroupSettings[trimmed] = {
+        ...existing,
+        kinematicsEnabled: payload.kinematicsEnabled === true,
+      }
+    },
+    setMoverSequenceForFixture: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ fixtureId: string; sequence: number | null }>
+    ) => {
+      if (state.moverSequenceByFixtureId === undefined) {
+        state.moverSequenceByFixtureId = {}
+      }
+      if (payload.sequence === null || !Number.isFinite(payload.sequence)) {
+        delete state.moverSequenceByFixtureId[payload.fixtureId]
+        return
+      }
+      state.moverSequenceByFixtureId[payload.fixtureId] = Math.round(
+        Number(payload.sequence)
+      )
+    },
+    clearMoverSequencesForGroup: (
+      state,
+      { payload }: PayloadAction<{ groupName: string }>
+    ) => {
+      const trimmed = payload.groupName.trim()
+      if (trimmed.length <= 0 || state.moverSequenceByFixtureId === undefined) {
+        return
+      }
+      for (const [fixtureId, groupName] of Object.entries(
+        state.moverGroupByFixtureId
+      )) {
+        if (groupName.trim() === trimmed) {
+          delete state.moverSequenceByFixtureId[fixtureId]
+        }
+      }
+    },
     setFixtureMoverBounds: (
       state,
       {
@@ -1394,6 +1489,9 @@ export const {
   removeSubFixture,
   setActiveSubFixture,
   setMoverGroupForFixture,
+  setMoverGroupKinematicsEnabled,
+  setMoverSequenceForFixture,
+  clearMoverSequencesForGroup,
   setFixtureMoverBounds,
   setFixtureMoverMountOrientation,
   assignChannelToSubFixture,

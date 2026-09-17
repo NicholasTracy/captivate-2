@@ -81,12 +81,7 @@ export interface GuiState {
   /** True while the detached Laser window is open (synced from main). */
   laserWindowOpen: boolean
   moverCalibrationOverride: MoverCalibrationOverride | null
-  moverFollowOverrideEnabled: boolean
-  moverFollowOverridePan: number
-  moverFollowOverrideTilt: number
-  moverFollowOverrideUseAllGroups: boolean
-  moverFollowOverrideGroups: string[]
-  /** When true, show floor bounds calibration, follow override, and related tools. */
+  /** When true, show floor bounds calibration and related Advanced mover tools. */
   moverAdvancedControlEnabled: boolean
   colorMapCalibrationOverride: ColorMapCalibrationOverride | null
   goboMapCalibrationOverride: GoboMapCalibrationOverride | null
@@ -123,11 +118,6 @@ export function initGuiState(): GuiState {
     videoEnabled: false,
     laserWindowOpen: false,
     moverCalibrationOverride: null,
-    moverFollowOverrideEnabled: false,
-    moverFollowOverridePan: 0.5,
-    moverFollowOverrideTilt: 0.5,
-    moverFollowOverrideUseAllGroups: true,
-    moverFollowOverrideGroups: [],
     moverAdvancedControlEnabled: false,
     colorMapCalibrationOverride: null,
     goboMapCalibrationOverride: null,
@@ -206,68 +196,6 @@ const guiSlice = createSlice({
     clearMoverCalibrationOverride: (state, _: PayloadAction<undefined>) => {
       state.moverCalibrationOverride = null
     },
-    setMoverFollowOverrideEnabled: (
-      state,
-      { payload }: PayloadAction<boolean>
-    ) => {
-      state.moverFollowOverrideEnabled = payload === true
-    },
-    toggleMoverFollowOverrideEnabled: (state, _: PayloadAction<undefined>) => {
-      state.moverFollowOverrideEnabled = !state.moverFollowOverrideEnabled
-    },
-    setMoverFollowOverridePan: (
-      state,
-      { payload }: PayloadAction<number>
-    ) => {
-      const next = Number(payload)
-      state.moverFollowOverridePan = Number.isFinite(next)
-        ? Math.min(1, Math.max(0, next))
-        : 0.5
-    },
-    setMoverFollowOverrideTilt: (
-      state,
-      { payload }: PayloadAction<number>
-    ) => {
-      const next = Number(payload)
-      state.moverFollowOverrideTilt = Number.isFinite(next)
-        ? Math.min(1, Math.max(0, next))
-        : 0.5
-    },
-    setMoverFollowOverrideUseAllGroups: (
-      state,
-      { payload }: PayloadAction<boolean>
-    ) => {
-      state.moverFollowOverrideUseAllGroups = payload === true
-    },
-    setMoverFollowOverrideGroups: (
-      state,
-      { payload }: PayloadAction<string[]>
-    ) => {
-      const next = Array.isArray(payload)
-        ? payload
-            .map((group) => (typeof group === 'string' ? group.trim() : ''))
-            .filter((group) => group.length > 0)
-        : []
-      state.moverFollowOverrideGroups = Array.from(new Set(next))
-    },
-    toggleMoverFollowOverrideGroup: (
-      state,
-      { payload }: PayloadAction<string>
-    ) => {
-      const groupName =
-        typeof payload === 'string' ? payload.trim() : ''
-      if (groupName.length <= 0) {
-        return
-      }
-
-      const current = new Set(state.moverFollowOverrideGroups)
-      if (current.has(groupName)) {
-        current.delete(groupName)
-      } else {
-        current.add(groupName)
-      }
-      state.moverFollowOverrideGroups = Array.from(current)
-    },
     setMoverAdvancedControlEnabled: (
       state,
       { payload }: PayloadAction<boolean>
@@ -275,14 +203,12 @@ const guiSlice = createSlice({
       state.moverAdvancedControlEnabled = payload === true
       if (!state.moverAdvancedControlEnabled) {
         state.moverCalibrationOverride = null
-        state.moverFollowOverrideEnabled = false
       }
     },
     toggleMoverAdvancedControl: (state, _: PayloadAction<undefined>) => {
       state.moverAdvancedControlEnabled = !state.moverAdvancedControlEnabled
       if (!state.moverAdvancedControlEnabled) {
         state.moverCalibrationOverride = null
-        state.moverFollowOverrideEnabled = false
       }
     },
     setColorMapCalibrationOverride: (
@@ -422,13 +348,6 @@ export const {
   setLaserWindowOpen,
   setMoverCalibrationOverride,
   clearMoverCalibrationOverride,
-  setMoverFollowOverrideEnabled,
-  toggleMoverFollowOverrideEnabled,
-  setMoverFollowOverridePan,
-  setMoverFollowOverrideTilt,
-  setMoverFollowOverrideUseAllGroups,
-  setMoverFollowOverrideGroups,
-  toggleMoverFollowOverrideGroup,
   setMoverAdvancedControlEnabled,
   toggleMoverAdvancedControl,
   setColorMapCalibrationOverride,

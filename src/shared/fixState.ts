@@ -937,6 +937,44 @@ export function fixDmxState(dmx: DmxState) {
 
   dmx.moverGroupByFixtureId = moverGroupByFixtureId
 
+  if (dmx.moverGroupSettings === undefined || dmx.moverGroupSettings === null) {
+    dmx.moverGroupSettings = {}
+  }
+  if (
+    dmx.moverSequenceByFixtureId === undefined ||
+    dmx.moverSequenceByFixtureId === null
+  ) {
+    dmx.moverSequenceByFixtureId = {}
+  }
+
+  const validGroupNames = new Set(
+    Object.values(moverGroupByFixtureId)
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0)
+  )
+  for (const groupName of Object.keys(dmx.moverGroupSettings)) {
+    if (!validGroupNames.has(groupName)) {
+      delete dmx.moverGroupSettings[groupName]
+    } else {
+      const entry = dmx.moverGroupSettings[groupName]
+      dmx.moverGroupSettings[groupName] = {
+        kinematicsEnabled: entry?.kinematicsEnabled === true,
+      }
+    }
+  }
+  for (const fixtureId of Object.keys(dmx.moverSequenceByFixtureId)) {
+    if (!validFixtureIds.has(fixtureId)) {
+      delete dmx.moverSequenceByFixtureId[fixtureId]
+    } else {
+      const seq = Number(dmx.moverSequenceByFixtureId[fixtureId])
+      if (!Number.isFinite(seq)) {
+        delete dmx.moverSequenceByFixtureId[fixtureId]
+      } else {
+        dmx.moverSequenceByFixtureId[fixtureId] = Math.round(seq)
+      }
+    }
+  }
+
   if (
     dmx.activeFixture !== null &&
     dmx.universe[dmx.activeFixture]?.universe !== dmx.activeUniverse

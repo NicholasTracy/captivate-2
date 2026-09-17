@@ -105,13 +105,6 @@ const LOCAL_ONLY_ACTION_TYPES = new Set<string>([
 const SHARED_GUI_ACTION_TYPES = new Set<string>([
   'gui/setBlackout',
   'gui/setFxtrDepthOn',
-  'gui/setMoverFollowOverrideEnabled',
-  'gui/toggleMoverFollowOverrideEnabled',
-  'gui/setMoverFollowOverridePan',
-  'gui/setMoverFollowOverrideTilt',
-  'gui/setMoverFollowOverrideUseAllGroups',
-  'gui/setMoverFollowOverrideGroups',
-  'gui/toggleMoverFollowOverrideGroup',
   'gui/fireAtmosManualTrigger',
 ])
 

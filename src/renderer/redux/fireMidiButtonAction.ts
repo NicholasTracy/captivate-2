@@ -9,7 +9,6 @@ import {
 import {
   setBlackout,
   fireAtmosManualTrigger,
-  toggleMoverFollowOverrideEnabled,
   setActivePage,
   setLaserToolFromMidiMapping,
 } from './guiSlice'
@@ -55,8 +54,6 @@ export function fireMidiButtonAction(
     )
   } else if (action.type === 'toggleBlackout') {
     dispatch(setBlackout(!state.gui.blackout))
-  } else if (action.type === 'toggleMoverFollowOverride') {
-    dispatch(toggleMoverFollowOverrideEnabled())
   } else if (action.type === 'triggerAtmosFixture') {
     dispatch(fireAtmosManualTrigger(action.fixtureId))
   } else if (action.type === 'setActivePage') {

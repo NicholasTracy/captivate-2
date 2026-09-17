@@ -54,8 +54,9 @@ import StageLightMapSplitPreview from '../scenes/StageLightMapSplitPreview'
 const moverBundleParams = [
   'xAxis',
   'yAxis',
-  'moverFloorLock',
   'moverSpread',
+  'moverPhasePan',
+  'moverPhaseTilt',
   'moverMirrorX',
   'moverMirrorY',
   'moverMode',
@@ -331,8 +332,9 @@ export default function ParamsControl({ splitIndex }: Params) {
     const hasAnyMoverAxisParam =
       baseParams.xAxis !== undefined ||
       baseParams.yAxis !== undefined ||
-      baseParams.moverFloorLock !== undefined ||
       baseParams.moverSpread !== undefined ||
+      baseParams.moverPhasePan !== undefined ||
+      baseParams.moverPhaseTilt !== undefined ||
       baseParams.moverMirrorX !== undefined ||
       baseParams.moverMirrorY !== undefined ||
       baseParams.moverMode !== undefined
@@ -342,8 +344,9 @@ export default function ParamsControl({ splitIndex }: Params) {
       baseParams.xAxis === undefined ||
       baseParams.yAxis === undefined ||
       baseParams.moverMode === undefined ||
-      baseParams.moverFloorLock === undefined ||
       baseParams.moverSpread === undefined ||
+      baseParams.moverPhasePan === undefined ||
+      baseParams.moverPhaseTilt === undefined ||
       baseParams.moverMirrorX === undefined ||
       baseParams.moverMirrorY === undefined
     if (!missingMoverControls) return
@@ -354,8 +357,9 @@ export default function ParamsControl({ splitIndex }: Params) {
         params: {
           xAxis: baseParams.xAxis ?? 0.5,
           yAxis: baseParams.yAxis ?? 0.5,
-          moverFloorLock: baseParams.moverFloorLock ?? 0,
           moverSpread: baseParams.moverSpread ?? 0,
+          moverPhasePan: baseParams.moverPhasePan ?? 0,
+          moverPhaseTilt: baseParams.moverPhaseTilt ?? 0,
           moverMirrorX: baseParams.moverMirrorX ?? 0,
           moverMirrorY: baseParams.moverMirrorY ?? 0,
           moverMode: baseParams.moverMode ?? 0,

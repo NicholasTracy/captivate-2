@@ -476,18 +476,17 @@ function recipeMoverShowcase(ctx: SceneBuildContext, mode: 'sweep' | 'tandem' | 
   const hue = jitterHue(ctx.rng, 0.52)
   const moverPatch =
     mode === 'tandem'
-      ? { moverMode: 1, moverSpread: 0.42, moverFloorLock: 1 }
+      ? { moverMode: 1, moverSpread: 0.42 }
       : mode === 'mirror'
-        ? { moverMode: 2, moverMirrorX: 1, moverMirrorY: 1, moverFloorLock: 1 }
+        ? { moverMode: 2, moverMirrorX: 1, moverMirrorY: 1 }
         : mode === 'peak'
           ? {
               moverMode: 1,
               moverSpread: 0.55,
-              moverFloorLock: 1,
               brightness: 0.32,
               saturation: 0.85,
             }
-          : { moverFloorLock: 1, hue: 0.62, saturation: 0.55 }
+          : { hue: 0.62, saturation: 0.55 }
 
   const mods = [
     ...buildMoverPatternMods(pattern, ctx.epicness, 2, ctx.rng.next()),

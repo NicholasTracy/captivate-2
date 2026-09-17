@@ -307,7 +307,6 @@ export function moverBase(epicness: number, patch: Params = {}): Params {
     hue: 0.55,
     width: 0.8,
     height: 1,
-    moverFloorLock: epicness > 0.75 ? 1 : 0,
     moverSpread: 0,
     moverMirrorX: 0,
     moverMirrorY: 0,
@@ -451,7 +450,6 @@ export function buildMoverRowColumnSplits(
         height: zone.height,
         xAxis: zone.x,
         yAxis: moverCrowdYAxis(epicness),
-        moverFloorLock: 1,
       }),
       defaultRandomizer,
       MOVER_GROUPS,
@@ -494,7 +492,7 @@ export function moverChoreoSplit(
 ): SplitScene_t {
   return moverSplit(
     epicness,
-    { brightness: 0.1, saturation: 0.88, moverFloorLock: 1, ...patch },
+    { brightness: 0.1, saturation: 0.88, ...patch },
     {
       modManualAnchors: {
         brightness: 'bottom',

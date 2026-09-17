@@ -25,6 +25,7 @@ import {
   finalizeDmxUniverses,
   getDmxComputeIntervalMs,
 } from './dmxEngine'
+import { resetMoverJointMotionState } from '../../shared/moverKinematics'
 import {
   reuseUnchangedDmxOutByUniverse,
   reuseUnchangedSplitStates,
@@ -361,6 +362,27 @@ function controlStateAffectsLiveDmxOutput(
   return false
 }
 
+function universeMotionIdentity(dmx: CleanReduxState['dmx']): string {
+  return dmx.universe
+    .map((fixture) => `${fixture.id ?? ''}:${fixture.type}:${fixture.ch}`)
+    .join('|')
+}
+
+function shouldResetMoverJointMotion(
+  prev: CleanReduxState | null,
+  next: CleanReduxState
+): boolean {
+  if (prev === null) {
+    return true
+  }
+  const prevPath = prev.gui.projectWorkspace?.projectFilePath ?? null
+  const nextPath = next.gui.projectWorkspace?.projectFilePath ?? null
+  if (prevPath !== nextPath) {
+    return true
+  }
+  return universeMotionIdentity(prev.dmx) !== universeMotionIdentity(next.dmx)
+}
+
 function applyLiveOutputFlush() {
   if (_engineStopped || _ipcCallbacks === null || _controlState === null) {
     return
@@ -561,6 +583,9 @@ export function start(
     on_new_control_state: (newState) => {
       const prevState = _controlState
       const liveOutputChanged = controlStateAffectsLiveDmxOutput(prevState, newState)
+      if (shouldResetMoverJointMotion(prevState, newState)) {
+        resetMoverJointMotionState()
+      }
       _controlState = newState
       syncNodeLinkFromControlState(newState)
       telemetryCounter('engine', 'control_state_updates')

@@ -30,12 +30,24 @@ import { TimeState } from '../../shared/TimeState'
 import { SplitState } from 'renderer/redux/realtimeStore'
 import { getUniverseOverwrites } from '../../renderer/redux/mixerSlice'
 import { clampNormalized } from '../../math/util'
-import { getParam, type Params } from '../../shared/params'
+import { getParam, getMoverPhaseParams, type Params } from '../../shared/params'
 import {
+  MOVER_MODE_MIRROR,
   MOVER_TANDEM_MAX_SPREAD,
   parseMoverModeFromParams,
   resolveMoverPadTargetsForGroup,
 } from '../../shared/moverPadTargets'
+import {
+  baseMoverGroupName,
+} from '../../shared/moverOrdering'
+import {
+  applySequentialJointPhaseDmx,
+  emitRawAxisOverrides,
+  mapRawPadToIdealDmx,
+  solveMoverAimIdealDmx,
+  stepMoverJointMotion,
+} from '../../shared/moverKinematics'
+import { initStageDimensions } from '../../shared/stage'
 import {
   dmxRandomizerSlotIndex,
   getDmxRandomizerFixtures,
@@ -47,24 +59,6 @@ import {
 } from '../../shared/stageLightMap'
 import { getLatestStageLightMap } from './stageLightMapRuntime'
 
-type MoverPathState = {
-  panDmx: number
-  tiltDmx: number
-  panTargetDmx: number
-  tiltTargetDmx: number
-  panVelocityDmxPerSec: number
-  tiltVelocityDmxPerSec: number
-  panFineEnabled: boolean
-  tiltFineEnabled: boolean
-  lastSeenMs: number
-}
-const _moverPathStateByFixtureKey = new Map<string, MoverPathState>()
-let _lastMoverPathCleanupMs = 0
-const MOVER_PATH_MAX_DT_SEC = 0.12
-const MOVER_PATH_MIN_DT_SEC = 1 / 240
-const MOVER_PATH_MAX_PAN_DMX_PER_SEC = 360
-const MOVER_PATH_MAX_TILT_DMX_PER_SEC = 320
-
 function readDmxChannel(channels: number[], channelIdx: number): number {
   if (channelIdx < 0 || channelIdx >= DMX_NUM_CHANNELS) return 0
   const v = channels[channelIdx]
@@ -75,21 +69,6 @@ function writeDmxChannel(channels: number[], channelIdx: number, value: number):
   if (channelIdx < 0 || channelIdx >= DMX_NUM_CHANNELS) return
   channels[channelIdx] = value
 }
-const MOVER_PATH_MAX_PAN_ACCEL_DMX_PER_SEC2 = 1700
-const MOVER_PATH_MAX_TILT_ACCEL_DMX_PER_SEC2 = 1400
-const MOVER_PATH_STATE_STALE_MS = 15000
-const MOVER_PATH_TARGET_DEADBAND_DMX = 0.05
-const MOVER_PATH_SETTLE_DISTANCE_DMX = 0.08
-const MOVER_PATH_SETTLE_VELOCITY_DMX_PER_SEC = 0.9
-const MOVER_PATH_IDLE_HOLD_DISTANCE_DMX = 0.2
-const MOVER_PATH_IDLE_HOLD_VELOCITY_DMX_PER_SEC = 0.6
-// Fine channels are only for final alignment inside one coarse DMX step.
-// Coarse must own travel; enable fine only once the commanded target is still
-// and the axis has settled near it. Disable as soon as the target moves again.
-const MOVER_FINE_ENABLE_DISTANCE_DMX = 0.48
-const MOVER_FINE_ENABLE_VELOCITY_DMX_PER_SEC = 0.85
-const MOVER_FINE_DISABLE_DISTANCE_DMX = 0.85
-const MOVER_FINE_DISABLE_VELOCITY_DMX_PER_SEC = 1.8
 const LIGHTING_CONTROL_PARAM_KEYS = [
   'hue',
   'saturation',
@@ -200,104 +179,6 @@ function clampDmxFloatValue(value: number, fallback: number = 128): number {
   return Math.min(DMX_MAX_VALUE, Math.max(DMX_MIN_VALUE, value))
 }
 
-function resolveMoverPathDtSeconds(timeState: TimeState): number {
-  const dtMs = Number(timeState.dt)
-  if (!Number.isFinite(dtMs) || dtMs <= 0) {
-    return 1 / 90
-  }
-
-  return Math.min(
-    MOVER_PATH_MAX_DT_SEC,
-    Math.max(MOVER_PATH_MIN_DT_SEC, dtMs / 1000)
-  )
-}
-
-function stepPathAxisValue(
-  currentValue: number,
-  currentVelocity: number,
-  targetValue: number,
-  dtSec: number,
-  maxVelocity: number,
-  maxAcceleration: number,
-  minValue: number,
-  maxValue: number
-): { value: number; velocity: number } {
-  const clampedTarget = Math.min(maxValue, Math.max(minValue, targetValue))
-
-  if (!Number.isFinite(currentValue) || !Number.isFinite(currentVelocity)) {
-    return {
-      value: clampedTarget,
-      velocity: 0,
-    }
-  }
-  if (!Number.isFinite(dtSec) || dtSec <= 0.000001) {
-    return {
-      value: Math.min(maxValue, Math.max(minValue, currentValue)),
-      velocity: currentVelocity,
-    }
-  }
-
-  const distance = clampedTarget - currentValue
-  if (Math.abs(distance) <= 0.0001) {
-    return {
-      value: clampedTarget,
-      velocity: 0,
-    }
-  }
-
-  const safeDt = Math.max(MOVER_PATH_MIN_DT_SEC, dtSec)
-  const desiredVelocity = Math.min(
-    maxVelocity,
-    Math.max(-maxVelocity, distance / safeDt)
-  )
-  const velocityDeltaLimit = maxAcceleration * safeDt
-  const nextVelocity = Math.min(
-    currentVelocity + velocityDeltaLimit,
-    Math.max(currentVelocity - velocityDeltaLimit, desiredVelocity)
-  )
-
-  let nextValue = currentValue + nextVelocity * safeDt
-  if (
-    (distance > 0 && nextValue > clampedTarget) ||
-    (distance < 0 && nextValue < clampedTarget)
-  ) {
-    nextValue = clampedTarget
-    return {
-      value: nextValue,
-      velocity: 0,
-    }
-  }
-
-  nextValue = Math.min(maxValue, Math.max(minValue, nextValue))
-  if (
-    nextValue <= minValue + 0.0001 ||
-    nextValue >= maxValue - 0.0001
-  ) {
-    return {
-      value: nextValue,
-      velocity: 0,
-    }
-  }
-
-  return {
-    value: nextValue,
-    velocity: nextVelocity,
-  }
-}
-
-function cleanupMoverPathState(nowMs: number) {
-  if (nowMs - _lastMoverPathCleanupMs < 1000) {
-    return
-  }
-  _lastMoverPathCleanupMs = nowMs
-
-  for (const [key, state] of _moverPathStateByFixtureKey.entries()) {
-    if (nowMs - state.lastSeenMs > MOVER_PATH_STATE_STALE_MS) {
-      _moverPathStateByFixtureKey.delete(key)
-    }
-  }
-}
-
 function hasMoverAxisChannels(fixture: FlattenedFixture): boolean {
   return fixture.channels.some(([, channel]) => {
     return channel.type === 'axis' && !channel.isFine
@@ -313,9 +194,9 @@ function fixtureCenterPosition(
   }
 }
 
-function getMoverPlannerKey(
+function getMoverMotionKey(
   fixture: FlattenedFixture,
-  plannerNamespace: string
+  motionNamespace: string
 ): string {
   let panChannelNumber = -1
   let tiltChannelNumber = -1
@@ -336,7 +217,7 @@ function getMoverPlannerKey(
       ? fixture.fixtureId.trim()
       : `anon-${fixture.fixtureTypeId ?? 'fixture'}`
 
-  return `${plannerNamespace}:${fixtureIdPart}:x${panChannelNumber}:y${tiltChannelNumber}`
+  return `${motionNamespace}:${fixtureIdPart}:x${panChannelNumber}:y${tiltChannelNumber}`
 }
 
 function clampAxisToCalibrationRange(
@@ -354,38 +235,19 @@ function clampAxisToCalibrationRange(
   return Math.min(high, Math.max(low, safe))
 }
 
-function mapMoverPointToFixtureAxisTarget(
-  fixture: FlattenedFixture,
-  x: number,
-  y: number,
-  plannerKey: string | undefined,
-  timeState: TimeState
-): MoverAxisOverrides {
-  const normalizedX = clampNormalized(x)
-  const normalizedY = clampNormalized(y)
-
-  const targetPanDmx = mapNormalizedToAxisPhysicalDmx(
-    normalizedX,
-    fixture.moverCalibration?.pan
-  )
-  const targetTiltDmx = mapNormalizedToAxisPhysicalDmx(
-    normalizedY,
-    fixture.moverCalibration?.tilt
-  )
-
-  return resolveMoverAxisTargetWithPathing(
-    clampAxisToCalibrationRange(targetPanDmx, fixture.moverCalibration?.pan),
-    clampAxisToCalibrationRange(targetTiltDmx, fixture.moverCalibration?.tilt),
-    plannerKey,
-    timeState
-  )
+function groupHasKinematicsEnabled(
+  groupName: string,
+  moverGroupSettings: CleanReduxState['dmx']['moverGroupSettings'] | undefined
+): boolean {
+  const base = baseMoverGroupName(groupName)
+  const settings = moverGroupSettings?.[base] ?? moverGroupSettings?.[groupName]
+  return settings?.kinematicsEnabled === true
 }
 
-function mapMoverHomeToFixtureAxisTarget(
-  fixture: FlattenedFixture,
-  plannerKey: string | undefined,
-  timeState: TimeState
-): MoverAxisOverrides {
+function mapMoverHomeIdealDmx(fixture: FlattenedFixture): {
+  panDmx: number
+  tiltDmx: number
+} {
   const panHome = Number(fixture.moverCalibration?.pan?.home)
   const tiltHome = Number(fixture.moverCalibration?.tilt?.home)
 
@@ -396,187 +258,47 @@ function mapMoverHomeToFixtureAxisTarget(
     ? clampAxisToCalibrationRange(tiltHome, fixture.moverCalibration?.tilt)
     : mapNormalizedToAxisPhysicalDmx(0.5, fixture.moverCalibration?.tilt)
 
-  return resolveMoverAxisTargetWithPathing(
-    clampAxisToCalibrationRange(targetPanDmx, fixture.moverCalibration?.pan),
-    clampAxisToCalibrationRange(targetTiltDmx, fixture.moverCalibration?.tilt),
-    plannerKey,
-    timeState
-  )
+  return {
+    panDmx: clampAxisToCalibrationRange(
+      targetPanDmx,
+      fixture.moverCalibration?.pan
+    ),
+    tiltDmx: clampAxisToCalibrationRange(
+      targetTiltDmx,
+      fixture.moverCalibration?.tilt
+    ),
+  }
 }
 
-function resolveMoverAxisTargetWithPathing(
-  targetPanDmx: number,
-  targetTiltDmx: number,
-  plannerKey: string | undefined,
-  timeState: TimeState
+function emitMoverIdeal(
+  fixture: FlattenedFixture,
+  idealPanDmx: number,
+  idealTiltDmx: number,
+  motionKey: string | undefined,
+  timeState: TimeState,
+  useKinematicsMotion: boolean
 ): MoverAxisOverrides {
-
-  if (plannerKey === undefined || plannerKey.length <= 0) {
-    // Without planner state we cannot detect settle vs travel — coarse only.
-    return {
-      panDmx: Math.round(clampDmxFloatValue(targetPanDmx)),
-      tiltDmx: Math.round(clampDmxFloatValue(targetTiltDmx)),
-      panFineEnabled: false,
-      tiltFineEnabled: false,
-    }
-  }
-
-  const nowMs = Date.now()
-  cleanupMoverPathState(nowMs)
-  const frameDtSec = resolveMoverPathDtSeconds(timeState)
-
-  const existingState = _moverPathStateByFixtureKey.get(plannerKey)
-  const currentState = existingState ?? {
-    panDmx: clampDmxFloatValue(targetPanDmx),
-    tiltDmx: clampDmxFloatValue(targetTiltDmx),
-    panTargetDmx: clampDmxFloatValue(targetPanDmx),
-    tiltTargetDmx: clampDmxFloatValue(targetTiltDmx),
-    panVelocityDmxPerSec: 0,
-    tiltVelocityDmxPerSec: 0,
-    panFineEnabled: false,
-    tiltFineEnabled: false,
-    lastSeenMs: nowMs,
-  }
-  const elapsedSec =
-    existingState === undefined
-      ? frameDtSec
-      : Math.min(
-          MOVER_PATH_MAX_DT_SEC,
-          Math.max(0, (nowMs - existingState.lastSeenMs) / 1000)
-        )
-  const dtSec = elapsedSec
-
-  const rawPanTarget = clampDmxFloatValue(targetPanDmx)
-  const rawTiltTarget = clampDmxFloatValue(targetTiltDmx)
-  const stablePanTarget =
-    Math.abs(rawPanTarget - currentState.panTargetDmx) <=
-    MOVER_PATH_TARGET_DEADBAND_DMX
-      ? currentState.panTargetDmx
-      : rawPanTarget
-  const stableTiltTarget =
-    Math.abs(rawTiltTarget - currentState.tiltTargetDmx) <=
-    MOVER_PATH_TARGET_DEADBAND_DMX
-      ? currentState.tiltTargetDmx
-      : rawTiltTarget
-
-  const nextPan = stepPathAxisValue(
-    currentState.panDmx,
-    currentState.panVelocityDmxPerSec,
-    stablePanTarget,
-    dtSec,
-    MOVER_PATH_MAX_PAN_DMX_PER_SEC,
-    MOVER_PATH_MAX_PAN_ACCEL_DMX_PER_SEC2,
-    DMX_MIN_VALUE,
-    DMX_MAX_VALUE
+  const pan = clampAxisToCalibrationRange(
+    idealPanDmx,
+    fixture.moverCalibration?.pan
   )
-  const nextTilt = stepPathAxisValue(
-    currentState.tiltDmx,
-    currentState.tiltVelocityDmxPerSec,
-    stableTiltTarget,
-    dtSec,
-    MOVER_PATH_MAX_TILT_DMX_PER_SEC,
-    MOVER_PATH_MAX_TILT_ACCEL_DMX_PER_SEC2,
-    DMX_MIN_VALUE,
-    DMX_MAX_VALUE
+  const tilt = clampAxisToCalibrationRange(
+    idealTiltDmx,
+    fixture.moverCalibration?.tilt
   )
 
-  const settledPan =
-    Math.abs(nextPan.value - stablePanTarget) <= MOVER_PATH_SETTLE_DISTANCE_DMX &&
-    Math.abs(nextPan.velocity) <= MOVER_PATH_SETTLE_VELOCITY_DMX_PER_SEC
-      ? { value: stablePanTarget, velocity: 0 }
-      : nextPan
-  const settledTilt =
-    Math.abs(nextTilt.value - stableTiltTarget) <= MOVER_PATH_SETTLE_DISTANCE_DMX &&
-    Math.abs(nextTilt.velocity) <= MOVER_PATH_SETTLE_VELOCITY_DMX_PER_SEC
-      ? { value: stableTiltTarget, velocity: 0 }
-      : nextTilt
-
-  // Keep planner continuous. Integer snap at rest can cause visible stair-stepping
-  // during slow/manual XY pad movement.
-  const holdPanAtRest =
-    Math.abs(settledPan.value - stablePanTarget) <= MOVER_PATH_IDLE_HOLD_DISTANCE_DMX &&
-    Math.abs(settledPan.velocity) <= MOVER_PATH_IDLE_HOLD_VELOCITY_DMX_PER_SEC
-  const holdTiltAtRest =
-    Math.abs(settledTilt.value - stableTiltTarget) <= MOVER_PATH_IDLE_HOLD_DISTANCE_DMX &&
-    Math.abs(settledTilt.velocity) <= MOVER_PATH_IDLE_HOLD_VELOCITY_DMX_PER_SEC
-
-  const finalPanTarget = stablePanTarget
-  const finalTiltTarget = stableTiltTarget
-
-  const finalPan = holdPanAtRest
-    ? { value: stablePanTarget, velocity: 0 }
-    : settledPan
-  const finalTilt = holdTiltAtRest
-    ? { value: stableTiltTarget, velocity: 0 }
-    : settledTilt
-
-  const priorPanFineEnabled = existingState?.panFineEnabled === true
-  const priorTiltFineEnabled = existingState?.tiltFineEnabled === true
-
-  // Any newly accepted target means we are still aiming, not final-aligning.
-  // Slow pad tracking keeps distance≈0 with velocity forced to 0; without this,
-  // fine stays on the whole time and chatters on every sub-DMX float change.
-  const panTargetMoving =
-    Math.abs(stablePanTarget - currentState.panTargetDmx) > 1e-9
-  const tiltTargetMoving =
-    Math.abs(stableTiltTarget - currentState.tiltTargetDmx) > 1e-9
-
-  const panDistance = Math.abs(finalPan.value - finalPanTarget)
-  const panSpeed = Math.abs(finalPan.velocity)
-  const tiltDistance = Math.abs(finalTilt.value - finalTiltTarget)
-  const tiltSpeed = Math.abs(finalTilt.velocity)
-
-  const panFineEnableCandidate =
-    !panTargetMoving &&
-    panDistance <= MOVER_FINE_ENABLE_DISTANCE_DMX &&
-    panSpeed <= MOVER_FINE_ENABLE_VELOCITY_DMX_PER_SEC
-  const tiltFineEnableCandidate =
-    !tiltTargetMoving &&
-    tiltDistance <= MOVER_FINE_ENABLE_DISTANCE_DMX &&
-    tiltSpeed <= MOVER_FINE_ENABLE_VELOCITY_DMX_PER_SEC
-  const panFineDisableCandidate =
-    panTargetMoving ||
-    panDistance >= MOVER_FINE_DISABLE_DISTANCE_DMX ||
-    panSpeed >= MOVER_FINE_DISABLE_VELOCITY_DMX_PER_SEC
-  const tiltFineDisableCandidate =
-    tiltTargetMoving ||
-    tiltDistance >= MOVER_FINE_DISABLE_DISTANCE_DMX ||
-    tiltSpeed >= MOVER_FINE_DISABLE_VELOCITY_DMX_PER_SEC
-
-  const panFineEnabled = priorPanFineEnabled
-    ? !panFineDisableCandidate
-    : panFineEnableCandidate
-  const tiltFineEnabled = priorTiltFineEnabled
-    ? !tiltFineDisableCandidate
-    : tiltFineEnableCandidate
-
-  // While travelling, publish integer coarse DMX so fine never sees float residue.
-  // When fine is on for final align, quantize lightly to kill LSB chatter.
-  const panOut = panFineEnabled
-    ? Math.round(finalPan.value * 64) / 64
-    : Math.round(finalPan.value)
-  const tiltOut = tiltFineEnabled
-    ? Math.round(finalTilt.value * 64) / 64
-    : Math.round(finalTilt.value)
-
-  _moverPathStateByFixtureKey.set(plannerKey, {
-    panDmx: finalPan.value,
-    tiltDmx: finalTilt.value,
-    panTargetDmx: finalPanTarget,
-    tiltTargetDmx: finalTiltTarget,
-    panVelocityDmxPerSec: finalPan.velocity,
-    tiltVelocityDmxPerSec: finalTilt.velocity,
-    panFineEnabled,
-    tiltFineEnabled,
-    lastSeenMs: nowMs,
-  })
-
-  return {
-    panDmx: panOut,
-    tiltDmx: tiltOut,
-    panFineEnabled,
-    tiltFineEnabled,
+  if (useKinematicsMotion && motionKey) {
+    return stepMoverJointMotion({
+      motionKey,
+      idealPanDmx: pan,
+      idealTiltDmx: tilt,
+      dtMs: Number(timeState.dt) || 1000 / 90,
+      panCalibration: fixture.moverCalibration?.pan,
+      tiltCalibration: fixture.moverCalibration?.tilt,
+    })
   }
+
+  return emitRawAxisOverrides(pan, tilt)
 }
 
 function buildMoverAxisOverridesForSplit(
@@ -584,24 +306,24 @@ function buildMoverAxisOverridesForSplit(
   baseParams: SplitState['outputParams'],
   outputParams: SplitState['outputParams'],
   timeState: TimeState,
-  plannerNamespace: string,
-  override?: {
-    enabled: boolean
-    pan: number
-    tilt: number
-    groupNames?: string[]
-  },
+  motionNamespace: string,
+  dmxState: CleanReduxState['dmx'],
   options?: {
     advancedControl?: boolean
   }
 ): { [fixtureIdx: number]: MoverAxisOverrides } {
-  const axisOverridesByFixtureIdx: { [fixtureIdx: number]: MoverAxisOverrides } = {}
+  const axisOverridesByFixtureIdx: { [fixtureIdx: number]: MoverAxisOverrides } =
+    {}
   const resolvedAxisParams = {
     ...baseParams,
     ...outputParams,
   }
   const advancedControl = options?.advancedControl === true
+  const stage = dmxState.stage ?? initStageDimensions()
+  const sequenceById = dmxState.moverSequenceByFixtureId ?? {}
+  const groupSettings = dmxState.moverGroupSettings ?? {}
 
+  // Basic (no Advanced): shared raw pad → DMX, no modes/motion.
   if (!advancedControl) {
     const baseX = clampNormalized(Number(resolvedAxisParams.xAxis ?? 0.5))
     const baseY = clampNormalized(Number(resolvedAxisParams.yAxis ?? 0.5))
@@ -611,34 +333,26 @@ function buildMoverAxisOverridesForSplit(
         return
       }
 
-      const plannerKey = getMoverPlannerKey(fixture, plannerNamespace)
-      axisOverridesByFixtureIdx[fixtureIdx] = mapMoverPointToFixtureAxisTarget(
+      const ideal = mapRawPadToIdealDmx(fixture, baseX, baseY)
+      const motionKey = getMoverMotionKey(fixture, motionNamespace)
+      axisOverridesByFixtureIdx[fixtureIdx] = emitMoverIdeal(
         fixture,
-        baseX,
-        baseY,
-        plannerKey,
-        timeState
+        ideal.panDmx,
+        ideal.tiltDmx,
+        motionKey,
+        timeState,
+        false
       )
     })
 
     return axisOverridesByFixtureIdx
   }
 
-  const overrideEnabled = override?.enabled === true
-  const overrideX = clampNormalized(Number(override?.pan ?? 0.5))
-  const overrideY = clampNormalized(Number(override?.tilt ?? 0.5))
-  const overrideGroupSet =
-    overrideEnabled && Array.isArray(override?.groupNames) && override.groupNames.length > 0
-      ? new Set(
-          override.groupNames
-            .map((name) => name.trim())
-            .filter((name) => name.length > 0)
-        )
-      : null
   const spread = Math.min(
     MOVER_TANDEM_MAX_SPREAD,
     clampNormalized(getParam(resolvedAxisParams, 'moverSpread'))
   )
+  const { phasePan, phaseTilt } = getMoverPhaseParams(resolvedAxisParams)
   const mirrorLeftRight = getParam(resolvedAxisParams, 'moverMirrorX') > 0.5
   const mirrorTopBottom = getParam(resolvedAxisParams, 'moverMirrorY') > 0.5
   const baseMoverMode = parseMoverModeFromParams(resolvedAxisParams)
@@ -649,6 +363,7 @@ function buildMoverAxisOverridesForSplit(
       fixture: FlattenedFixture
       x: number
       y: number
+      key: string
     }>
   } = {}
 
@@ -659,85 +374,129 @@ function buildMoverAxisOverridesForSplit(
     }
 
     const center = fixtureCenterPosition(fixture)
+    const fixtureKey =
+      typeof fixture.fixtureId === 'string' && fixture.fixtureId.trim().length > 0
+        ? fixture.fixtureId.trim()
+        : `idx-${fixtureIdx}`
     const groupItems = fixturesByGroup[groupName] ?? []
     groupItems.push({
       fixtureIdx,
       fixture,
       x: center.x,
       y: center.y,
+      key: fixtureKey,
     })
     fixturesByGroup[groupName] = groupItems
   })
 
   for (const [groupName, fixturesInGroup] of Object.entries(fixturesByGroup)) {
     const normalizedGroupName = groupName.trim()
-    const groupOverrideEnabled =
-      overrideEnabled &&
-      (overrideGroupSet === null || overrideGroupSet.has(normalizedGroupName))
-    const hasPanTarget =
-      groupOverrideEnabled || Number.isFinite(resolvedAxisParams.xAxis)
-    const hasTiltTarget =
-      groupOverrideEnabled || Number.isFinite(resolvedAxisParams.yAxis)
-    const baseX = groupOverrideEnabled
-      ? overrideX
-      : hasPanTarget
-        ? clampNormalized(Number(resolvedAxisParams.xAxis))
-        : 0.5
-    const baseY = groupOverrideEnabled
-      ? overrideY
-      : hasTiltTarget
-        ? clampNormalized(Number(resolvedAxisParams.yAxis))
-        : 0.5
-    const moverMode = groupOverrideEnabled ? 0 : baseMoverMode
-    const useMirrorLeftRight = !groupOverrideEnabled && mirrorLeftRight
-    const useMirrorTopBottom = !groupOverrideEnabled && mirrorTopBottom
+    const kinematicsEnabled = groupHasKinematicsEnabled(
+      normalizedGroupName,
+      groupSettings
+    )
+    const hasPanTarget = Number.isFinite(resolvedAxisParams.xAxis)
+    const hasTiltTarget = Number.isFinite(resolvedAxisParams.yAxis)
+    const baseX = hasPanTarget
+      ? clampNormalized(Number(resolvedAxisParams.xAxis))
+      : 0.5
+    const baseY = hasTiltTarget
+      ? clampNormalized(Number(resolvedAxisParams.yAxis))
+      : 0.5
 
-    const orderedFixtures = [...fixturesInGroup].sort((left, right) => {
-      if (left.x !== right.x) return left.x - right.x
-      if (left.y !== right.y) return left.y - right.y
-      return left.fixtureIdx - right.fixtureIdx
-    })
+    let moverMode = baseMoverMode
+    if (!kinematicsEnabled && moverMode !== MOVER_MODE_MIRROR) {
+      moverMode = 0
+    }
+
+    const useMirrorLeftRight =
+      mirrorLeftRight && moverMode === MOVER_MODE_MIRROR
+    const useMirrorTopBottom =
+      mirrorTopBottom && moverMode === MOVER_MODE_MIRROR
 
     const padTargets = resolveMoverPadTargetsForGroup(
-      orderedFixtures.map((entry) => ({
-        key: String(entry.fixtureIdx),
-        x: entry.x,
-        y: entry.y,
-        sortOrder: entry.fixtureIdx,
-      })),
+      fixturesInGroup.map((entry) => {
+        const sequenceOverride = sequenceById[entry.key]
+        return {
+          key: String(entry.fixtureIdx),
+          x: entry.x,
+          y: entry.y,
+          sortOrder: entry.fixtureIdx,
+          sequenceOverride:
+            sequenceOverride !== undefined && Number.isFinite(sequenceOverride)
+              ? Number(sequenceOverride)
+              : undefined,
+        }
+      }),
       {
         baseX,
         baseY,
         moverMode,
-        spread,
+        spread: kinematicsEnabled ? spread : 0,
         mirrorLeftRight: useMirrorLeftRight,
         mirrorTopBottom: useMirrorTopBottom,
         hasPanTarget,
         hasTiltTarget,
+        kinematicsEnabled,
       }
     )
 
-    padTargets.forEach((padTarget, entryIndex) => {
-      const entry = orderedFixtures[entryIndex]
-      const plannerKey = getMoverPlannerKey(entry.fixture, plannerNamespace)
+    const targetByFixtureIdx = new Map(
+      padTargets.map((target) => [Number(target.key), target] as const)
+    )
+    const groupFixtureCount = fixturesInGroup.length
+
+    for (const entry of fixturesInGroup) {
+      const motionKey = getMoverMotionKey(entry.fixture, motionNamespace)
+      const padTarget = targetByFixtureIdx.get(entry.fixtureIdx)
 
       if (!hasPanTarget && !hasTiltTarget) {
-        axisOverridesByFixtureIdx[entry.fixtureIdx] = mapMoverHomeToFixtureAxisTarget(
+        const home = mapMoverHomeIdealDmx(entry.fixture)
+        axisOverridesByFixtureIdx[entry.fixtureIdx] = emitMoverIdeal(
           entry.fixture,
-          plannerKey,
-          timeState
+          home.panDmx,
+          home.tiltDmx,
+          motionKey,
+          timeState,
+          kinematicsEnabled
         )
-        return
+        continue
       }
 
-      axisOverridesByFixtureIdx[entry.fixtureIdx] = mapMoverPointToFixtureAxisTarget(
+      const padX = padTarget?.x ?? baseX
+      const padY = padTarget?.y ?? baseY
+
+      let ideal: { panDmx: number; tiltDmx: number }
+      if (kinematicsEnabled) {
+        ideal = solveMoverAimIdealDmx({
+          fixture: entry.fixture,
+          padX,
+          padY,
+          stage,
+        })
+        ideal = applySequentialJointPhaseDmx({
+          panDmx: ideal.panDmx,
+          tiltDmx: ideal.tiltDmx,
+          sequenceIndex: padTarget?.sequenceIndex ?? 0,
+          fixtureCount: groupFixtureCount,
+          phasePan01: phasePan,
+          phaseTilt01: phaseTilt,
+          calibration: entry.fixture.moverCalibration,
+          mountOrientation: entry.fixture.moverMountOrientation,
+        })
+      } else {
+        ideal = mapRawPadToIdealDmx(entry.fixture, padX, padY)
+      }
+
+      axisOverridesByFixtureIdx[entry.fixtureIdx] = emitMoverIdeal(
         entry.fixture,
-        padTarget.x,
-        padTarget.y,
-        plannerKey,
-        timeState
+        ideal.panDmx,
+        ideal.tiltDmx,
+        motionKey,
+        timeState,
+        kinematicsEnabled
       )
-    })
+    }
   }
 
   return axisOverridesByFixtureIdx
@@ -897,12 +656,16 @@ function calculateDmxForUniverse(
       const splitHasAxisBundle =
         splitScene.baseParams.xAxis !== undefined ||
         splitScene.baseParams.yAxis !== undefined ||
-        splitScene.baseParams.moverFloorLock !== undefined ||
         splitScene.baseParams.moverSpread !== undefined ||
+        splitScene.baseParams.moverPhase !== undefined ||
+        splitScene.baseParams.moverPhasePan !== undefined ||
+        splitScene.baseParams.moverPhaseTilt !== undefined ||
         splitScene.baseParams.moverMirrorX !== undefined ||
         splitScene.baseParams.moverMirrorY !== undefined ||
         splitScene.baseParams.moverMode !== undefined ||
-        outputParams.moverFloorLock !== undefined ||
+        outputParams.moverPhase !== undefined ||
+        outputParams.moverPhasePan !== undefined ||
+        outputParams.moverPhaseTilt !== undefined ||
         outputParams.xAxis !== undefined ||
         outputParams.yAxis !== undefined
       const splitHasAtmosControlBundle =
@@ -921,10 +684,6 @@ function calculateDmxForUniverse(
         splitGroups,
         intensityCeiling
       )
-      const followOverrideGroupNames =
-        state.gui.moverFollowOverrideUseAllGroups === true
-          ? undefined
-          : state.gui.moverFollowOverrideGroups
       const splitMoverAxisOverrides =
         splitHasAxisBundle && universeHasMoverFixtureType
           ? buildMoverAxisOverridesForSplit(
@@ -933,14 +692,7 @@ function calculateDmxForUniverse(
               outputParams,
               timeState,
               plannerNamespace,
-              {
-                enabled:
-                  state.gui.moverAdvancedControlEnabled === true &&
-                  state.gui.moverFollowOverrideEnabled === true,
-                pan: state.gui.moverFollowOverridePan,
-                tilt: state.gui.moverFollowOverrideTilt,
-                groupNames: followOverrideGroupNames,
-              },
+              state.dmx,
               {
                 advancedControl: state.gui.moverAdvancedControlEnabled === true,
               }

@@ -1,5 +1,9 @@
-import { auxColorParamTrackGradient } from '../../shared/dmxColors'
-import { DefaultParam, paramDisplayName } from '../../shared/params'
+﻿import { auxColorParamTrackGradient } from '../../shared/dmxColors'
+import {
+  DefaultParam,
+  MOVER_PHASE_MAX_DEG,
+  paramDisplayName,
+} from '../../shared/params'
 import SliderBase from '../base/SliderBase'
 import { useBaseParam } from '../redux/store'
 import { useDispatch } from 'react-redux'
@@ -21,6 +25,22 @@ interface Props {
   manualCursorColor?: string
   liveCursorColor?: string
 }
+
+const DEGREE_TICK_PARAMS = new Set(['moverPhasePan', 'moverPhaseTilt'])
+
+function phaseDegreeTicks(maxDeg: number): number[] {
+  const step = 15
+  const ticks: number[] = []
+  for (let d = 0; d <= maxDeg + 0.001; d += step) {
+    ticks.push(Math.round(d))
+  }
+  if (ticks[ticks.length - 1] !== maxDeg) {
+    ticks.push(maxDeg)
+  }
+  return ticks
+}
+
+const PHASE_DEGREE_TICKS = phaseDegreeTicks(MOVER_PHASE_MAX_DEG)
 
 export default function ParamSlider({
   param,
@@ -54,9 +74,12 @@ export default function ParamSlider({
     )
   }
 
+  const showDegreeTicks = DEGREE_TICK_PARAMS.has(param)
+
   if (value === undefined) return null
   const sliderLabel = label ?? paramDisplayName(param)
   const trackBackground = auxColorParamTrackGradient(param)
+  const degreeTicks = showDegreeTicks ? PHASE_DEGREE_TICKS : []
 
   const content = (
     <>
@@ -70,7 +93,24 @@ export default function ParamSlider({
           x
         </CornerRemoveButton>
       ) : null}
-      <VerticalSplitLabel text={sliderLabel} />
+      {showDegreeTicks ? (
+        <DegreeTickColumn aria-hidden title={sliderLabel}>
+          {degreeTicks.map((deg) => {
+            const t = MOVER_PHASE_MAX_DEG <= 0 ? 0 : deg / MOVER_PHASE_MAX_DEG
+            return (
+              <DegreeTick
+                key={deg}
+                style={{ bottom: `${t * 100}%` }}
+                title={`${deg}°`}
+              >
+                {`${deg}°`}
+              </DegreeTick>
+            )
+          })}
+        </DegreeTickColumn>
+      ) : (
+        <VerticalSplitLabel text={sliderLabel} />
+      )}
       <div
         style={{
           flex: '1 1 auto',
@@ -108,7 +148,7 @@ export default function ParamSlider({
     </>
   )
 
-const defaultWrapperStyle: CSSProperties = {
+  const defaultWrapperStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -116,7 +156,7 @@ const defaultWrapperStyle: CSSProperties = {
     minHeight: '12rem',
     marginRight: '1rem',
     position: 'relative',
-    paddingLeft: '1.25rem',
+    paddingLeft: showDegreeTicks ? '1.65rem' : '1.25rem',
     boxSizing: 'border-box',
   }
 
@@ -156,6 +196,28 @@ const CornerRemoveButton = styled.button`
     color: #fff;
     border-color: #ffffff77;
   }
+`
+
+const DegreeTickColumn = styled.div`
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 1.5rem;
+  pointer-events: none;
+`
+
+const DegreeTick = styled.span`
+  position: absolute;
+  left: 0;
+  transform: translateY(50%);
+  font-size: 0.52rem;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #9aa3b8;
+  white-space: nowrap;
+  user-select: none;
 `
 
 function VerticalSplitLabel({ text }: { text: string }) {
@@ -255,4 +317,3 @@ function VerticalSplitLabel({ text }: { text: string }) {
     </div>
   )
 }
-

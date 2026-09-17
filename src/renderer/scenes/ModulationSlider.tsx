@@ -284,7 +284,6 @@ function ParamsGroup({
   )
   const excludedLfoParams = new Set<string>([
     'xMirror',
-    'moverFloorLock',
     'moverSpread',
     'moverMirrorX',
     'moverMirrorY',

@@ -98,15 +98,6 @@ interface ToggleAutoScene {
 interface ToggleBlackout {
   type: 'toggleBlackout'
 }
-interface ToggleMoverFollowOverride {
-  type: 'toggleMoverFollowOverride'
-}
-interface SetMoverFollowOverridePan {
-  type: 'setMoverFollowOverridePan'
-}
-interface SetMoverFollowOverrideTilt {
-  type: 'setMoverFollowOverrideTilt'
-}
 interface TriggerAtmosFixture {
   type: 'triggerAtmosFixture'
   fixtureId: string
@@ -148,7 +139,6 @@ export const buttonMidiActionTypes: Set<MidiAction['type']> = new Set([
   'tapTempo',
   'toggleAutoScene',
   'toggleBlackout',
-  'toggleMoverFollowOverride',
   'triggerAtmosFixture',
   'setActivePage',
   'laserTool',
@@ -163,9 +153,6 @@ export type MidiAction =
   | TapTempo
   | ToggleAutoScene
   | ToggleBlackout
-  | ToggleMoverFollowOverride
-  | SetMoverFollowOverridePan
-  | SetMoverFollowOverrideTilt
   | TriggerAtmosFixture
   | SetActivePageAction
   | LaserToolAction

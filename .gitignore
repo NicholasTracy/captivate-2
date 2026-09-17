@@ -66,3 +66,7 @@ tools/screenshots/fixtures/*.cap
 tools/screenshots/fixtures/*.cfx
 !tools/screenshots/fixtures/demo.cap
 !tools/screenshots/fixtures/demo.cfx
+
+# Local-only mover virtual test harness (not production; keep on disk, never commit)
+src/shared/*.selftest.ts
+src/shared/moverVirtualRig*.ts
