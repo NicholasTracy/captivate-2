@@ -25,7 +25,7 @@ Captivate 2 builds on the original [Captivate](https://github.com/spensbot/capti
 ## Highlights
 
 - **DMX lighting** — fixture library, community online fixtures (QLC+, Open Fixture Library, Captivate library), import/export, multi-universe USB and Art-Net, spatial fixture layout
-- **Synth-style control** — LFOs, modulation, pads, randomizers, MIDI and keyboard mapping
+- **Synth-style control** — LFOs, modulation, pads, randomizers, [MIDI and keyboard mapping](docs/midi-mapping.md)
 - **Visuals** — built-in visualizers and effects, synced to the active light scene
 - **Multi-window UI** — detached pages for mixer, laser, 3D lighting preview, and more
 - **Ableton Link** — BPM and phase sync with [supported apps](https://www.ableton.com/en/link/products/)
@@ -68,6 +68,8 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 **[DMX output and movers](docs/dmx-movers.md)** — universe composition, USB / Art-Net routing, and mover fine-channel pathing.
 
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
+
+**[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, slider/encoder modes, keyboard chords, and MIDI clock vs mapped BPM.
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
@@ -163,6 +165,7 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [WLED fixtures](docs/wled-fixtures.md)
 - [DMX output and movers](docs/dmx-movers.md)
 - [Atmospherics](docs/atmospherics.md)
+- [MIDI and keyboard mapping](docs/midi-mapping.md)
 - [Scene generation](docs/scene-generation.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
