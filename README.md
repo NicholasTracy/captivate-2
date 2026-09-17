@@ -71,6 +71,8 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
+**[Laser DAC output](docs/laser-dac.md)** — Helios USB, Ether Dream TCP, generic UDP bridge, arming, and projection zones.
+
 ## Download
 
 Installers for Windows, macOS, and Linux are on the [Releases](https://github.com/NicholasTracy/captivate-2/releases/latest) page.
@@ -158,6 +160,7 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Community fixture library](docs/CAPTIVATE-FIXTURE-LIBRARY.md)
 - [Remote control (LAN)](docs/remote-control.md)
 - [Audio input, beat clock, and music energy](docs/audio-input-sync.md)
+- [Laser DAC output (Helios / Ether Dream / generic)](docs/laser-dac.md)
 - [Laser FB4 / Pangolin BEYOND](docs/laser-fb4-beyond.md)
 - [Visualizer streaming (RTSP / NDI)](docs/visualizer-streaming.md)
 - [WLED fixtures](docs/wled-fixtures.md)

@@ -2,6 +2,8 @@
 
 Captivate drives **Pangolin FB4** hardware through the official **BEYOND** application and **`BEYONDIO.dll`** (Windows only). There is no public direct FB4 wire protocol; BEYOND must be running and configured for your FB4 units.
 
+For Helios USB, Ether Dream TCP, generic UDP, arming, and projection-zone merge, see **[Laser DAC output](laser-dac.md)**.
+
 ## Requirements
 
 1. **Windows** (same platform as Captivate’s main process).
@@ -22,7 +24,8 @@ Captivate drives **Pangolin FB4** hardware through the official **BEYOND** appli
 
 - On connect: `ldbCreate` → wait for `ldbBeyondExeReady` → `ldbEnableLaserOutput`.
 - Each Captivate zone gets a BEYOND zone image (`Captivate_<session>_Z<n>`) and frames are sent with `ldbSendFrameToImage` (no merged composite for FB4).
-- Helios / Ether Dream profiles still merge overlapping zones into one ILDA stream.
+- Helios / Ether Dream / generic UDP profiles still merge overlapping zones into one ILDA stream ([laser-dac.md](laser-dac.md)).
+- FB4 `Fb4Transport` has no `stopOutput`; **PUSH TO STOP** only stops Captivate from sending frames. Disconnect to `ldbDisableLaserOutput`.
 
 ## Environment
 
