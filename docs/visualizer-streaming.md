@@ -88,3 +88,8 @@ Relays are reused per source URL and are stopped when the visualizer layer no lo
 - Incoming RTSP / NDI relay: `src/main/engine/VisualizerInputRelayManager.ts`
 - Main-process IPC wiring: `src/main/engine/ipcHandler.ts`
 - Renderer controls: `src/renderer/visualizer/StreamOutputControls.tsx`
+
+## Related
+
+- [Multi-window UI](multi-window.md) — which detached pages count as the visualizer window
+- [projectM visuals](projectm.md) — Milkdrop layer running inside that window

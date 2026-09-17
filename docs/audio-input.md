@@ -94,3 +94,7 @@ tempo, beat pulse, and build/drop trends, then smooths the result into
 - Modulation audio energy source: `src/shared/modulation.ts`
 - Visualizer audio inputs: `src/visualizer/threejs/layers/BuiltinVisualizer.ts`
   and `src/visualizer/threejs/layers/ProjectM.ts`
+
+## Related
+
+- [projectM visuals](projectm.md) — how live audio is pushed into the native Milkdrop bridge

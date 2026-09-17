@@ -81,6 +81,9 @@ Some data is application preference or runtime state instead of project content:
   `.cap` file.
 - Transient UI state such as open dialogs, status messages, and temporary
   calibration overrides is cleared during load.
+- Main and detached window bounds live in
+  `userData/window-state/captivate-window-layout.json`, not in the project. See
+  [Multi-window UI](multi-window.md).
 - The short-lived BPM tap hint used by audio beat detection is cleared when
   device state is normalized on load.
 

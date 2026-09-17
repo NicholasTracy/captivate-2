@@ -71,6 +71,10 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
+**[projectM visuals](docs/projectm.md)** — Milkdrop-style layer, native bridge vs fallback, runtime install, and preset scan limits.
+
+**[Multi-window UI](docs/multi-window.md)** — detached pages, close confirmation, and window-layout persistence.
+
 ## Download
 
 Installers for Windows, macOS, and Linux are on the [Releases](https://github.com/NicholasTracy/captivate-2/releases/latest) page.
@@ -165,6 +169,8 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Atmospherics](docs/atmospherics.md)
 - [Scene generation](docs/scene-generation.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
+- [projectM visuals](docs/projectm.md)
+- [Multi-window UI](docs/multi-window.md)
 
 ---
 

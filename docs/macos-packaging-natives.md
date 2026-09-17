@@ -124,3 +124,4 @@ On darwin (or CI) it especially asserts:
 - [RELEASE-NOTES-1.1.3](RELEASE-NOTES-1.1.3.md) — packaging fix summary
 - [Visualizer streaming](visualizer-streaming.md) — NDI path that uses koffi
 - [Laser FB4 / Pangolin BEYOND](laser-fb4-beyond.md) — BEYOND SDK also loads via koffi
+- [projectM visuals](projectm.md) — runtime install, bridge workers, and prepare flags

@@ -45,7 +45,8 @@ ready, and use E-Stop first if anything misfires.
    - On-page **Trigger** control
    - MIDI `triggerAtmosFixture` (manual nonce)
 
-The Atmospherics page stays on the main window (it is not a detachable page).
+The Atmospherics page stays on the main window (it is not a detachable page). See
+[Multi-window UI](multi-window.md).
 
 ## Trigger actions
 
@@ -107,3 +108,4 @@ the realtime store.
 
 - [DMX output and movers](dmx-movers.md) — universe composition and blackout
 - [Project files and autosave](PROJECTS.md) — atmos settings travel with Serial Device Settings
+- [Multi-window UI](multi-window.md) — Atmospherics cannot be popped out

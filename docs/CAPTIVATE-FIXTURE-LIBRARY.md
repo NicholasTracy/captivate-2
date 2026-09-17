@@ -54,6 +54,13 @@ Use the [fixture submission form](https://github.com/NicholasTracy/captivate-fix
 | Save all project fixtures to disk | **Save DB** |
 | Load a saved database file | **Load DB** |
 | Export one fixture to a file | Edit fixture → **Export Fixture** |
+| Map DMX channel types | Edit fixture → channel popup (Type) |
+
+When you change a channel **Type**, if the **next** channel is still an untouched
+default Master (`min` 0, `max` 255, On/Off off), Captivate seeds that next
+channel: Color walks Red → Green → Blue → White → Amber → UV; Split stays Split;
+other types copy the current type. Channels you already customized are left
+alone.
 
 Project saves also write a sibling `.cfx` fixture database next to the `.cap`
 file. See [Project files and autosave](PROJECTS.md) for how that paired file is
