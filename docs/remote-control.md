@@ -27,4 +27,4 @@ Optional **web UI** for phones and tablets on the same network. The show compute
 
 ## Not available on remote
 
-Visualizer, fixture editor, Laser ILDA, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs. Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host.
+Visualizer, fixture editor, Laser ILDA, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs. Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host. Lighting 3D always runs in a detached host window — see [lighting-3d.md](lighting-3d.md).

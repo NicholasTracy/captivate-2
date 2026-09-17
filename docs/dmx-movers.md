@@ -27,6 +27,9 @@ Entry points:
 | Kinematics IK + joint motion | `src/shared/moverKinematics.ts` |
 | Movers page / pad | `src/renderer/pages/Movers.tsx`, `src/renderer/controls/XYAxisPad.tsx` |
 
+Live 3D placement / color preview is a separate renderer, not an output path:
+[Lighting 3D](lighting-3d.md).
+
 ## Universes and rates
 
 | Constraint | Value |

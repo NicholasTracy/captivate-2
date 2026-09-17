@@ -2,6 +2,8 @@
 
 The [Captivate Community Fixture Library](https://github.com/NicholasTracy/captivate-fixture-library) is a shared collection of **Captivate-native** fixture definitions—channel maps, emitter layouts, mover calibration, and 3D preview settings. You can browse by **manufacturer** and **model** inside Captivate, the same way you use the QLC+ or Open Fixture Library sources.
 
+Live placement and color preview of patched fixtures: [Lighting 3D](lighting-3d.md).
+
 You do **not** need git or GitHub experience to share a fixture you built.
 
 ## Download a fixture

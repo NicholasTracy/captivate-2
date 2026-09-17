@@ -28,7 +28,7 @@ Captivate 2 builds on the original [Captivate](https://github.com/spensbot/capti
 - **Synth-style control** — LFOs, modulation, pads, randomizers, MIDI and keyboard mapping
 - **Visuals** — built-in visualizers and effects, synced to the active light scene
 - **Multi-window UI** — detached pages for mixer, laser, 3D lighting preview, and more
-- **Ableton Link** — BPM and phase sync with [supported apps](https://www.ableton.com/en/link/products/)
+- **Ableton Link** — BPM and phase sync with [supported apps](https://www.ableton.com/en/link/products/) ([docs](docs/ableton-link.md))
 - **LAN remote** — optional browser UI for scenes, modulation, and mixer ([docs](docs/remote-control.md))
 
 Configure fixtures once; scenes stay portable when you add gear or change venues.
@@ -70,6 +70,10 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
+
+**[Lighting 3D preview](docs/lighting-3d.md)** — detached alpha WebGL preview, live DMX colors, placement gizmos, and essentials-mode limits.
+
+**[Ableton Link](docs/ableton-link.md)** — join a Link session, start/stop sync, and how Link relates to MIDI / audio clocks.
 
 ## Download
 
@@ -164,6 +168,8 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [DMX output and movers](docs/dmx-movers.md)
 - [Atmospherics](docs/atmospherics.md)
 - [Scene generation](docs/scene-generation.md)
+- [Lighting 3D preview](docs/lighting-3d.md)
+- [Ableton Link](docs/ableton-link.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
 ---

@@ -45,6 +45,8 @@ Only one external source should drive master BPM at a time:
 - **Ableton Link** joins or leaves the Link session and can share Captivate's
   current tempo with other Link-enabled apps. When Link is on, **Start/stop
   sync** can follow remote Link transport when the peer supports it.
+  Enabling Link does not turn off MIDI clock or audio beat clock — see
+  [Ableton Link](ableton-link.md).
 
 Manual tap tempo has two behaviors:
 
@@ -114,7 +116,8 @@ used for energy timing.
   `_latestAudioMetrics`, and applies MIDI/audio beat following in
   `src/main/engine/engine.ts`.
 - Link UI commands are `SetLinkEnabled` and `EnableStartStopSync`; the engine
-  updates both control state and the node-link runtime immediately.
+  updates both control state and the node-link runtime immediately. Operator
+  runbook: [Ableton Link](ableton-link.md).
 - Realtime UI extrapolates beats for smooth display, but Link/session fields are
   merged from engine updates via `src/shared/timeExtrapolation.ts`.
 - `tools/audio_beat_calibrate.ts` can compare beat settings against an audio
