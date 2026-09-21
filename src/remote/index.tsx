@@ -2,7 +2,6 @@ import { createRoot } from 'react-dom/client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ThemeProvider } from 'styled-components'
 import GlobalStyle from '../renderer/GlobalStyle'
-import { resolveThemePack } from '../renderer/theme'
 import { Provider } from 'react-redux'
 import {
   store,
@@ -18,7 +17,7 @@ import {
   update as updateRealtimeStore,
 } from '../renderer/redux/realtimeStore'
 import { ThemeProvider as MuiThemeProvider } from '@emotion/react'
-import { createMuiTheme } from '../renderer/muiTheme'
+import { createMuiThemeFromResolved } from '../renderer/muiTheme'
 import {
   clearHostTransport,
   registerHostTransport,
@@ -32,14 +31,22 @@ import RemoteMobileGlobalStyle from './RemoteMobileGlobalStyle'
 import { isRemoteDispatchAllowed } from '../shared/remoteControl'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { useTypedSelector } from '../renderer/redux/store'
-import type { ThemePackId } from '../shared/appSettings'
+import {
+  activeThemeMuiOverrides,
+  resolveActiveTheme,
+} from '../renderer/theme'
 
 function RemoteThemeProviders({ children }: { children: React.ReactNode }) {
-  const themePackId = useTypedSelector(
-    (state) => state.gui.appSettings?.themePackId ?? 'dark'
-  ) as ThemePackId
-  const theme = useMemo(() => resolveThemePack(themePackId), [themePackId])
-  const muiTheme = useMemo(() => createMuiTheme(themePackId), [themePackId])
+  const appSettings = useTypedSelector((state) => state.gui.appSettings)
+  const theme = useMemo(
+    () => resolveActiveTheme(appSettings),
+    [appSettings]
+  )
+  const muiTheme = useMemo(
+    () =>
+      createMuiThemeFromResolved(theme, activeThemeMuiOverrides(appSettings)),
+    [theme, appSettings]
+  )
 
   return (
     <ThemeProvider theme={theme}>

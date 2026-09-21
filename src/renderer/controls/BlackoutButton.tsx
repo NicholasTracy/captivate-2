@@ -44,12 +44,17 @@ const Root = styled.button<{ $active: boolean }>`
   border-bottom: 1px solid ${(props) => (props.$active ? '#ffaaaa' : '#c9b06a')};
   border-left: none;
   border-right: none;
-  color: #f4f4f4;
-  cursor: pointer;
   background: ${(props) =>
     props.$active
       ? 'linear-gradient(180deg, #9a1818 0%, #5c0c0c 100%)'
-      : 'linear-gradient(180deg, #3d4554 0%, #252b36 100%)'};
+      : props.theme.mode === 'light'
+        ? 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)'
+        : 'linear-gradient(180deg, #3d4554 0%, #252b36 100%)'};
+  color: ${(props) =>
+    props.$active || props.theme.mode !== 'light'
+      ? '#f4f4f4'
+      : props.theme.colors.text.primary};
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -80,7 +85,7 @@ const MainText = styled.div`
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #ffffff;
+  color: inherit;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   transform: rotate(180deg);

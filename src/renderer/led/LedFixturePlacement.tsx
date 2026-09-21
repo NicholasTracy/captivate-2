@@ -217,14 +217,18 @@ export default function LedFixturePlacement({}: Props) {
         splitScenes[primaryLayer.splitIndex],
         dmx.led.ledFixtures,
         flatten_fixtures(dmx.universe, dmx.fixtureTypesByID),
-        fixture.id
+        fixture.id,
+        dmx.universe
       )
       if (randomizerContext !== null) {
         colors = applyLedRandomizerToColors(
           colors,
           randomizerContext.state,
-          randomizerContext.baseIndex,
-          randomizerContext.randomize
+          randomizerContext.slotIndex,
+          randomizerContext.randomize,
+          randomizerContext.chaseState,
+          randomizerContext.chase,
+          randomizerContext.chaseSlotIndex
         )
       }
     }

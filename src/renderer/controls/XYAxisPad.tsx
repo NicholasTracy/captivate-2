@@ -19,7 +19,7 @@ import {
   MOVER_TANDEM_MAX_SPREAD,
 } from '../../shared/moverPadTargets'
 import { baseMoverGroupName } from '../../shared/moverOrdering'
-import { evaluateSceneGroups } from '../../shared/sceneGroups'
+import { dmxFixtureMatchesSceneGroups } from '../../shared/sceneGroups'
 
 interface Props {
   splitIndex: number
@@ -83,11 +83,10 @@ export default function XYAxispad({ splitIndex }: Props) {
         fixtureType !== undefined && isMoverFixtureType(fixtureType)
       if (!isMover) return false
       const fixtureGroups = fixture.groups ?? []
-      const inSplit = evaluateSceneGroups(splitGroups, (group) => {
-        const normalized = group.trim()
-        if (normalized.length <= 0) return false
-        if (normalized === 'Movers') return true
-        return fixtureGroups.some((g) => g.trim() === normalized)
+      const inSplit = dmxFixtureMatchesSceneGroups(splitGroups, {
+        fixtureGroups: fixtureGroups,
+        fixtureTypeName: fixtureType?.name,
+        isMover: true,
       })
       if (!inSplit) return false
       const fixtureId =
@@ -488,7 +487,7 @@ const ControlLabelRow = styled.div`
 
 const ControlLabel = styled.div`
   font-size: 0.62rem;
-  color: ${(props) => props.theme.colors.text.secondary};
+  color: #cfd8e8;
   margin-bottom: 0.16rem;
   margin-top: 0.22rem;
 `
@@ -566,7 +565,7 @@ const DisabledHint = styled.div`
 
 const MirrorOnlyHint = styled.div`
   font-size: 0.58rem;
-  color: ${(props) => props.theme.colors.text.secondary};
+  color: #b8c4d4;
   line-height: 1.3;
   margin-bottom: 0.25rem;
 `

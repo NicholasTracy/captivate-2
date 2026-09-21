@@ -13,12 +13,14 @@ import { useDispatch } from 'react-redux'
 import { setActivePage, Page } from '../redux/guiSlice'
 import MasterSlider from '../controls/MasterSlider'
 import BlackoutButton from '../controls/BlackoutButton'
+import GroupIntensityButton from '../controls/GroupIntensityButton'
 import { send_open_page_window } from '../ipcHandler'
 import { universeHasAtmospherics } from '../../shared/atmosphericsMapping'
 import { universeHasMovers } from '../../shared/dmxFixtures'
 import { ButtonMidiOverlay } from '../base/MidiOverlay'
 import Tooltip from '@mui/material/Tooltip'
 import { SIDEBAR_STRIP_WIDTH } from './sidebarUi'
+import { TOUR_IDS } from '../tutorial/tourIds'
 
 const selectedBorder = 0.2 //rem
 type SidebarAccent =
@@ -100,12 +102,14 @@ export default function MenuBar() {
     paddingRem = 0.8,
     children,
     accent,
+    tourId,
   }: {
     page: Page
     tooltipText: string
     paddingRem?: number
     children: React.ReactNode
     accent: SidebarAccent
+    tourId?: string
   }) {
     const isActive = activePage === page
     const p = paddingRem
@@ -114,7 +118,7 @@ export default function MenuBar() {
       : `${p}rem`
     return (
       <Tooltip title={tooltipText} placement="right">
-        <span>
+        <span data-tour={tourId}>
           <ButtonMidiOverlay action={{ type: 'setActivePage', page }}>
             <Item
               selected={activePage === page}
@@ -131,8 +135,13 @@ export default function MenuBar() {
   }
 
   return (
-    <Root>
-      <MenuItem page="Universe" tooltipText="Patch fixtures, groups & DMX addresses" accent="universe">
+    <Root data-tour-layer="sidebar">
+      <MenuItem
+        page="Universe"
+        tooltipText="Patch fixtures, groups & DMX addresses"
+        accent="universe"
+        tourId={TOUR_IDS.navUniverse}
+      >
         <UniverseIcon fontSize="inherit" />
       </MenuItem>
       {hasMoverFixtures && (
@@ -145,7 +154,12 @@ export default function MenuBar() {
           <WbIncandescentIcon fontSize="inherit" />
         </MenuItem>
       )}
-      <MenuItem page="Modulation" tooltipText="Scenes, LFOs & modulation" accent="modulation">
+      <MenuItem
+        page="Modulation"
+        tooltipText="Scenes, LFOs & modulation"
+        accent="modulation"
+        tourId={TOUR_IDS.navScenes}
+      >
         <LightingIcon fontSize="inherit" />
       </MenuItem>
       <Tooltip title="Open visualizer in a separate window" placement="right">
@@ -172,11 +186,14 @@ export default function MenuBar() {
         </MenuItem>
       )}
       <ControlArea>
-        <ControlCluster>
+        <ControlCluster data-tour={TOUR_IDS.master}>
+          <GroupIntensityRow>
+            <GroupIntensityButton />
+          </GroupIntensityRow>
           <MasterSlot>
             <MasterSlider />
           </MasterSlot>
-          <BlackoutRow>
+          <BlackoutRow data-tour={TOUR_IDS.blackout}>
             <BlackoutButton />
           </BlackoutRow>
         </ControlCluster>
@@ -218,15 +235,16 @@ const Item = styled.div<{ selected: boolean; accent: SidebarAccent }>`
   justify-content: center;
   cursor: pointer;
   opacity: ${(props) => (props.selected ? 1 : 0.88)};
-  color: #fff;
+  color: ${(props) => props.theme.colors.icon.primary};
   background: ${(props) =>
     props.selected
       ? accentColors(props.accent).active
       : accentColors(props.accent).base};
   border-left: ${(props) =>
     props.selected ? `0.2rem solid ${accentColors(props.accent).border}` : '0.2rem solid #0000'};
-  border-top: 1px solid #ffffff14;
-  border-bottom: 1px solid #00000055;
+  border-top: 1px solid ${(props) => props.theme.colors.divider}55;
+  border-bottom: 1px solid ${(props) =>
+    props.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.55)'};
   box-shadow:
     ${(props) => props.theme.elevation.insetHighlight},
     ${(props) => props.theme.elevation.shadowSm};
@@ -289,6 +307,12 @@ const MasterSlot = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
+`
+
+const GroupIntensityRow = styled.div`
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 0;
 `
 
 const BlackoutRow = styled.div`

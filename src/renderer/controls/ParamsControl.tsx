@@ -6,6 +6,7 @@ import styled from 'styled-components'
 import type { CSSProperties } from 'react'
 import { useMemo } from 'react'
 import Randomizer from './Randomizer'
+import Chase from './Chase'
 import XYAxispad from './XYAxisPad'
 import ParamAddButton from './ParamAddButton'
 import {
@@ -39,7 +40,10 @@ import {
 import { sumVisSliders } from '../visualizer/visualSliderAssignments'
 import { listAtmosFxtrs } from '../../shared/atmosphericsMapping'
 import { sumAtmosSliders } from '../atmospherics/atmosSliderAssignments'
-import { evaluateSceneGroups } from '../../shared/sceneGroups'
+import {
+  dmxFixtureMatchesSceneGroups,
+  ledFixtureMatchesSceneGroups,
+} from '../../shared/sceneGroups'
 import { isDedicatedGroupSplit, visSplitIdx } from '../scenes/splitUiVisibility'
 import { LASER_SPLIT_PARAM_KEYS } from '../laser/laserSplitLink'
 import { getSplitAuxColorGates, type AuxColorGates } from '../../shared/splitAuxColorGates'
@@ -48,7 +52,7 @@ import {
   splitSupportsColorWheel,
   type SplitColorControlMode,
 } from '../../shared/splitColorCapabilities'
-import { getColorChannelDistance } from '../../shared/dmxColors'
+import { colorWheelValueFromHueSat } from '../../shared/dmxColors'
 import StageLightMapSplitPreview from '../scenes/StageLightMapSplitPreview'
 
 const moverBundleParams = [
@@ -84,6 +88,20 @@ const colorWheelHybridCoreParams = [
   'brightness',
 ] as const
 const colorControlDefaultValues = initBaseParams()
+
+function resolveAutoColorWheelValue(
+  slots: Array<{ hue: number; saturation: number }>,
+  baseParams: { hue?: number; saturation?: number; colorWheel?: number }
+): number {
+  if (
+    baseParams.hue !== undefined &&
+    baseParams.saturation !== undefined &&
+    slots.length > 0
+  ) {
+    return colorWheelValueFromHueSat(slots, baseParams.hue, baseParams.saturation)
+  }
+  return 0
+}
 
 function colorParamsForMode(
   mode: SplitColorControlMode,
@@ -170,31 +188,25 @@ export default function ParamsControl({ splitIndex }: Params) {
         continue
       }
 
-      const groupedFixture = new Set(
-        fixture.groups
-          .map((group) => group.trim())
-          .filter((group) => group.length > 0)
-      )
       const isAtmosFixture =
         typeof fixture.id === 'string' &&
         fixture.id.trim().length > 0 &&
         atmosFixtureIdSet.has(fixture.id)
       const isMoverFixture = isMoverFixtureType(fixtureType)
 
-      const matchesGroups = (groups: Record<string, boolean | undefined>) =>
-        evaluateSceneGroups(groups, (group) => {
-          const normalized = group.trim()
-          if (normalized.length <= 0) return false
-          if (normalized === 'Visualizer') return false
-          if (normalized === 'Movers') return isMoverFixture
-          if (normalized === 'Atmosphere') return isAtmosFixture
-          return groupedFixture.has(normalized)
-        })
-
-      const matchesSplit = matchesGroups(splitGroups)
+      const matchOpts = {
+        fixtureGroups: fixture.groups,
+        fixtureTypeName: fixtureType.name,
+        isMover: isMoverFixture,
+        isAtmosphere: isAtmosFixture,
+      }
+      const matchesSplit = dmxFixtureMatchesSceneGroups(splitGroups, matchOpts)
       if (!matchesSplit) continue
 
-      const matchesAllSplit = matchesGroups(allSplitGroups)
+      const matchesAllSplit = dmxFixtureMatchesSceneGroups(
+        allSplitGroups,
+        matchOpts
+      )
       const hasLightingChannels = fixtureType.channels
         .flatMap((channel) => fixtureChannelLeafChannels(channel))
         .some((channel) => {
@@ -229,26 +241,12 @@ export default function ParamsControl({ splitIndex }: Params) {
     }
 
     for (const ledFixture of dmx.led.ledFixtures) {
-      const groupedFixture = new Set(
-        ledFixture.groups
-          .map((group) => group.trim())
-          .filter((group) => group.length > 0)
-      )
-      const matchesGroups = (groups: Record<string, boolean | undefined>) =>
-        evaluateSceneGroups(groups, (group) => {
-          const normalized = group.trim()
-          if (normalized.length <= 0) return false
-          if (normalized === 'Visualizer') return false
-          if (normalized === 'LEDs' || normalized === 'Pixels') {
-            return groupedFixture.has('LEDs') || groupedFixture.has('Pixels')
-          }
-          return groupedFixture.has(normalized)
-        })
-
-      if (!matchesGroups(splitGroups)) continue
+      if (!ledFixtureMatchesSceneGroups(ledFixture.groups ?? [], splitGroups)) {
+        continue
+      }
       supportsLed = true
       matchedLedFixtures += 1
-      if (matchesGroups(allSplitGroups)) {
+      if (ledFixtureMatchesSceneGroups(ledFixture.groups ?? [], allSplitGroups)) {
         matchedLedFixturesByAllSplit += 1
       }
     }
@@ -476,28 +474,7 @@ export default function ParamsControl({ splitIndex }: Params) {
     const slots = splitColorCapabilities.slots
     const paramsToAdd: Record<string, number> = {}
     if (baseParams.colorWheel === undefined && slots.length > 0) {
-      let bestIndex = 0
-      if (
-        baseParams.hue !== undefined &&
-        baseParams.saturation !== undefined &&
-        slots.length > 1
-      ) {
-        let bestScore = Number.POSITIVE_INFINITY
-        for (let i = 0; i < slots.length; i += 1) {
-          const slot = slots[i]!
-          const score = getColorChannelDistance(
-            baseParams.hue,
-            baseParams.saturation,
-            slot
-          )
-          if (score < bestScore) {
-            bestScore = score
-            bestIndex = i
-          }
-        }
-      }
-      paramsToAdd.colorWheel =
-        slots.length <= 1 ? 0 : bestIndex / (slots.length - 1)
+      paramsToAdd.colorWheel = resolveAutoColorWheelValue(slots, baseParams)
     }
 
     const toRemove = ['hue', 'saturation', ...whiteAuxColorParams].filter(
@@ -523,6 +500,49 @@ export default function ParamsControl({ splitIndex }: Params) {
     baseParams,
     dispatch,
     isColorWheelOnly,
+    isVisualizerSplit,
+    splitColorCapabilities.slots,
+    splitIndex,
+  ])
+
+  // Hybrid color-wheel + HSB: never leave a stamped open/white wheel over scene-gen hue.
+  // Discrete colorWheel wins in the engine, so slot 0 (usually open/white) locks fixtures white.
+  useEffect(() => {
+    if (isVisualizerSplit) return
+    if (colorControlMode !== 'colorWheelAndRgb') return
+    if (baseParams.colorWheel === undefined) return
+    if (baseParams.hue === undefined || baseParams.saturation === undefined) return
+    if (baseParams.saturation <= 0.05) return
+
+    const slots = splitColorCapabilities.slots
+    if (slots.length === 0) return
+    const selectedIndex = Math.max(
+      0,
+      Math.min(
+        slots.length - 1,
+        Math.round(baseParams.colorWheel * (slots.length - 1))
+      )
+    )
+    const selected = slots[selectedIndex]
+    if (selected === undefined) return
+    const selectedIsWhite =
+      selected.saturation <= 0.02 ||
+      selected.label.toLowerCase() === 'white' ||
+      selected.label.toLowerCase() === 'open'
+    if (!selectedIsWhite) return
+
+    dispatch(
+      deleteBaseParams({
+        splitIndex,
+        params: ['colorWheel'],
+      })
+    )
+  }, [
+    baseParams.colorWheel,
+    baseParams.hue,
+    baseParams.saturation,
+    colorControlMode,
+    dispatch,
     isVisualizerSplit,
     splitColorCapabilities.slots,
     splitIndex,
@@ -581,9 +601,25 @@ export default function ParamsControl({ splitIndex }: Params) {
       if (param === 'warmWhite' && !auxColorGates.warmWhite) return
       if (param === 'amber' && !auxColorGates.amber) return
       if (param === 'uv' && !auxColorGates.uv) return
+      // Hybrid: leave colorWheel unset when hue/sat already drive the look so the
+      // engine uses nearest-slot matching (scene-gen LFOs keep working).
+      if (
+        param === 'colorWheel' &&
+        colorControlMode === 'colorWheelAndRgb' &&
+        baseParams.hue !== undefined &&
+        baseParams.saturation !== undefined
+      ) {
+        return
+      }
+      if (param === 'colorWheel') {
+        paramsToAdd.colorWheel = resolveAutoColorWheelValue(
+          splitColorCapabilities.slots,
+          baseParams
+        )
+        return
+      }
       paramsToAdd[param] =
-        colorControlDefaultValues[param as DefaultParam] ??
-        (param === 'colorWheel' ? 0 : 0)
+        colorControlDefaultValues[param as DefaultParam] ?? 0
     })
     if (Object.keys(paramsToAdd).length === 0) return
     dispatch(
@@ -599,7 +635,9 @@ export default function ParamsControl({ splitIndex }: Params) {
     auxColorGates.warmWhite,
     auxColorGates.white,
     baseParams,
+    colorControlMode,
     dispatch,
+    splitColorCapabilities.slots,
     splitIndex,
     splitUsesColorWheelPanel,
     splitUsesHsvPanel,
@@ -615,9 +653,23 @@ export default function ParamsControl({ splitIndex }: Params) {
         if (param === 'warmWhite' && !auxColorGates.warmWhite) return
         if (param === 'amber' && !auxColorGates.amber) return
         if (param === 'uv' && !auxColorGates.uv) return
+        if (
+          param === 'colorWheel' &&
+          colorControlMode === 'colorWheelAndRgb' &&
+          baseParams.hue !== undefined &&
+          baseParams.saturation !== undefined
+        ) {
+          return
+        }
+        if (param === 'colorWheel') {
+          paramsToAdd.colorWheel = resolveAutoColorWheelValue(
+            splitColorCapabilities.slots,
+            baseParams
+          )
+          return
+        }
         paramsToAdd[param] =
-          colorControlDefaultValues[param as DefaultParam] ??
-          (param === 'colorWheel' ? 0 : 0)
+          colorControlDefaultValues[param as DefaultParam] ?? 0
       })
       if (Object.keys(paramsToAdd).length > 0) {
         dispatch(
@@ -673,9 +725,23 @@ export default function ParamsControl({ splitIndex }: Params) {
         if (param === 'warmWhite' && !auxColorGates.warmWhite) return
         if (param === 'amber' && !auxColorGates.amber) return
         if (param === 'uv' && !auxColorGates.uv) return
+        if (
+          param === 'colorWheel' &&
+          colorControlMode === 'colorWheelAndRgb' &&
+          baseParams.hue !== undefined &&
+          baseParams.saturation !== undefined
+        ) {
+          return
+        }
+        if (param === 'colorWheel') {
+          paramsToAdd.colorWheel = resolveAutoColorWheelValue(
+            splitColorCapabilities.slots,
+            baseParams
+          )
+          return
+        }
         paramsToAdd[param] =
-          colorControlDefaultValues[param as DefaultParam] ??
-          (param === 'colorWheel' ? 0 : 0)
+          colorControlDefaultValues[param as DefaultParam] ?? 0
       })
       if (Object.keys(paramsToAdd).length > 0) {
         dispatch(
@@ -699,6 +765,7 @@ export default function ParamsControl({ splitIndex }: Params) {
     )
   }, [
     baseParams,
+    colorControlMode,
     colorControlsAreDefault,
     dispatch,
     hasAnyColorControls,
@@ -718,6 +785,7 @@ export default function ParamsControl({ splitIndex }: Params) {
     auxColorGates.uv,
     auxColorGates.warmWhite,
     auxColorGates.white,
+    splitColorCapabilities.slots,
     splitUsesColorWheelPanel,
     splitUsesHsvPanel,
   ])
@@ -763,7 +831,7 @@ export default function ParamsControl({ splitIndex }: Params) {
         auxColorGates.uv))
 
   return (
-    <Root>
+    <Root data-tour="tour-params">
       {showColorWheelControl && (
         <ColorWheelControl
           splitIndex={splitIndex}
@@ -837,6 +905,7 @@ export default function ParamsControl({ splitIndex }: Params) {
       ) : null}
       {showMoverControls && <XYAxispad splitIndex={splitIndex} />}
       <Randomizer splitIndex={splitIndex} />
+      <Chase splitIndex={splitIndex} />
       <StrobeControl splitIndex={splitIndex} />
       <GoboControl splitIndex={splitIndex} />
       <FocusControl splitIndex={splitIndex} />

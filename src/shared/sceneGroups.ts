@@ -1,3 +1,9 @@
+import {
+  fixtureBelongsToNamedGroup,
+  isAllGroupName,
+  normalizeFixtureGroupName,
+} from './fixtureGroups'
+
 export type SceneGroups = { [key: string]: boolean | undefined }
 
 export function evaluateSceneGroups(
@@ -25,16 +31,49 @@ export function evaluateSceneGroups(
 
 export function fixtureGroupsMatchSceneGroups(
   fixtureGroups: readonly string[],
-  sceneGroups: SceneGroups
+  sceneGroups: SceneGroups,
+  context?: { fixtureTypeName?: string | null }
 ): boolean {
-  const normalizedFixtureGroups = new Set(
-    fixtureGroups
-      .map((group) => group.trim())
-      .filter((group) => group.length > 0)
+  return evaluateSceneGroups(sceneGroups, (group) =>
+    fixtureBelongsToNamedGroup(fixtureGroups, group, context)
   )
-  return evaluateSceneGroups(
-    sceneGroups,
-    (group) => normalizedFixtureGroups.has(group.trim())
+}
+
+/**
+ * Match a DMX fixture against one scene-group name.
+ * Handles virtual All, auto type-label groups, Movers / Atmosphere, and stored groups.
+ */
+export function dmxFixtureMatchesSceneGroup(
+  sceneGroup: string,
+  opts: {
+    fixtureGroups: readonly string[]
+    fixtureTypeName?: string | null
+    isMover?: boolean
+    isAtmosphere?: boolean
+  }
+): boolean {
+  const normalized = sceneGroup.trim()
+  if (normalized.length <= 0) return false
+  if (normalized === 'Visualizer') return false
+  if (isAllGroupName(normalized)) return true
+  if (normalized === 'Movers') return opts.isMover === true
+  if (normalized === 'Atmosphere') return opts.isAtmosphere === true
+  return fixtureBelongsToNamedGroup(opts.fixtureGroups, normalized, {
+    fixtureTypeName: opts.fixtureTypeName,
+  })
+}
+
+export function dmxFixtureMatchesSceneGroups(
+  sceneGroups: SceneGroups,
+  opts: {
+    fixtureGroups: readonly string[]
+    fixtureTypeName?: string | null
+    isMover?: boolean
+    isAtmosphere?: boolean
+  }
+): boolean {
+  return evaluateSceneGroups(sceneGroups, (group) =>
+    dmxFixtureMatchesSceneGroup(group, opts)
   )
 }
 
@@ -46,6 +85,10 @@ export function ledFixtureMatchesSceneGroup(
   const normalizedSceneGroup = sceneGroup.trim()
   if (normalizedSceneGroup.length <= 0) {
     return false
+  }
+
+  if (isAllGroupName(normalizedSceneGroup)) {
+    return true
   }
 
   const normalizedFixtureGroups = new Set(
@@ -69,7 +112,9 @@ export function ledFixtureMatchesSceneGroup(
     )
   }
 
-  return normalizedFixtureGroups.has(normalizedSceneGroup)
+  const exact = normalizeFixtureGroupName(normalizedSceneGroup)
+  if (exact === null) return false
+  return normalizedFixtureGroups.has(exact)
 }
 
 export function ledFixtureMatchesSceneGroups(

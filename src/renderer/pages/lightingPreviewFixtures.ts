@@ -431,6 +431,7 @@ export function mapRowsToPreviewFixtures(
       isMover: row.isMover,
       isLedFixture: false,
       groups: row.groups,
+      fixtureTypeName: row.fixtureType.name,
       groupName: `${row.groupName} (${row.moverMountOrientation === 'inverted' ? 'Hung' : 'Upright'})`,
       xPos: row.fixture.window?.x?.pos ?? 0.5,
       yPos: row.fixture.window?.y?.pos ?? 0.5,

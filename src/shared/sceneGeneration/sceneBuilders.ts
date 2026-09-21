@@ -1,6 +1,7 @@
 import { Modulator } from '../modulation'
 import { Modulation, Params } from '../params'
 import { RandomizerOptions } from '../randomizer'
+import { ChaseOptions, initChaseOptions } from '../chase'
 import { LightScene_t, SplitScene_t } from '../Scenes'
 import { LfoShape } from '../oscillator'
 import {
@@ -10,7 +11,12 @@ import {
   snapLfoPeriodToUi,
 } from '../lfoPeriod'
 import { SeededRng } from './rng'
-import type { RigProfile } from './rigProfile'
+import {
+  buildSpatialZonesFromRig,
+  type RigProfile,
+  type SpatialZone,
+} from './rigProfile'
+import { ALL_GROUP_NAME } from '../fixtureGroups'
 
 export const defaultRandomizer: RandomizerOptions = {
   triggerPeriod: 1,
@@ -24,21 +30,70 @@ export const RAND = {
     triggerPeriod: 1.5,
     triggerDensity: 0.22,
     envelopeRatio: 0.12,
-    envelopeDuration: 0.85,
+    envelopeDuration: 1.2,
   },
   spark: {
-    triggerPeriod: 0.75,
+    triggerPeriod: 1,
     triggerDensity: 0.38,
-    envelopeRatio: 0.07,
-    envelopeDuration: 0.55,
+    envelopeRatio: 0.08,
+    envelopeDuration: 0.85,
   },
-  rare: {
-    triggerPeriod: 2.25,
-    triggerDensity: 0.14,
+  soft: {
+    triggerPeriod: 2,
+    triggerDensity: 0.18,
     envelopeRatio: 0.14,
-    envelopeDuration: 1.1,
+    envelopeDuration: 1.4,
   },
 } satisfies Record<string, RandomizerOptions>
+
+/** Slot chase presets — pair with `baseParams.chase` > 0 or they stay inert. */
+export const CHASE = {
+  step: {
+    stepPeriod: 1,
+    stepsOn: 1,
+    direction: 'forward' as const,
+    slotAxis: 'horizontal' as const,
+    envelopeRatio: 0.12,
+    envelopeDuration: 1,
+  },
+  soft: {
+    stepPeriod: 2,
+    stepsOn: 2,
+    direction: 'forward' as const,
+    slotAxis: 'horizontal' as const,
+    envelopeRatio: 0.18,
+    envelopeDuration: 1.5,
+  },
+  bounce: {
+    stepPeriod: 1,
+    stepsOn: 1,
+    direction: 'bounce' as const,
+    slotAxis: 'horizontal' as const,
+    envelopeRatio: 0.1,
+    envelopeDuration: 0.9,
+  },
+} as const
+
+/** Virtual All — prefer over empty `{}` so UI matches `initSplitScene`. */
+export const ALL_GROUPS: SplitScene_t['groups'] = { [ALL_GROUP_NAME]: true }
+
+/**
+ * Arm randomize / chase mix amounts on base params.
+ * Options alone do nothing while these stay at 0.
+ */
+export function withSlotEnvelopes(
+  base: Params,
+  amounts: { randomize?: number; chase?: number } = {}
+): Params {
+  const next = { ...base }
+  if (amounts.randomize !== undefined) {
+    next.randomize = Math.max(0, Math.min(1, amounts.randomize))
+  }
+  if (amounts.chase !== undefined) {
+    next.chase = Math.max(0, Math.min(1, amounts.chase))
+  }
+  return next
+}
 
 const BAND = {
   kick: {
@@ -170,15 +225,17 @@ export function mkLfo(
 export function mkSplit(
   baseParams: Params,
   randomizer: RandomizerOptions = defaultRandomizer,
-  groups: SplitScene_t['groups'] = {},
+  groups: SplitScene_t['groups'] = { [ALL_GROUP_NAME]: true },
   options: {
     modManualAnchors?: SplitScene_t['modManualAnchors']
     splitModShaping?: SplitScene_t['splitModShaping']
+    chase?: ChaseOptions
   } = {}
 ): SplitScene_t {
   const split: SplitScene_t = {
     baseParams,
     randomizer,
+    chase: options.chase ?? initChaseOptions(),
     groups,
   }
   if (options.modManualAnchors) {
@@ -208,6 +265,7 @@ export function pulseSplit(
   patch: Params = {},
   options: {
     randomizer?: RandomizerOptions
+    chase?: ChaseOptions
     modManualAnchors?: SplitScene_t['modManualAnchors']
     splitModShaping?: SplitScene_t['splitModShaping']
   } = {}
@@ -215,8 +273,9 @@ export function pulseSplit(
   return mkSplit(
     centeredLook(hue, patch),
     options.randomizer ?? defaultRandomizer,
-    {},
+    ALL_GROUPS,
     {
+      chase: options.chase,
       modManualAnchors: {
         brightness: 'bottom',
         width: 'bottom',
@@ -265,6 +324,98 @@ export function directorLfo(
     Object.assign(lfoInterModulation, mkIm(target, prop, amount))
   }
   return mkLfo(shape, period, [{}], { lfoInterModulation, ...extra })
+}
+
+/**
+ * Intermod amount for period directors. Engine maps amount around 0.5 so that
+ * `1` = ±1 octave on the target LFO’s period; `0.5` = no effect.
+ *
+ * Keep these *close* to 0.5 — full-octave swings on look LFOs read as “wigging out.”
+ */
+export type PeriodSpeedDepth = 'subtle' | 'medium' | 'full'
+
+export function periodSpeedAmount(depth: PeriodSpeedDepth = 'medium'): number {
+  switch (depth) {
+    case 'subtle':
+      return 0.58 // ~±16% period
+    case 'full':
+      return 0.7 // ~±41% period
+    case 'medium':
+    default:
+      return 0.63 // ~±25% period
+  }
+}
+
+/** Director cycle in beats for a multi-bar speed arc (4/4 → bars × 4). */
+export function periodSpeedDirectorBeats(bars: 4 | 8 | 16 = 8): number {
+  return snapLfoPeriodToUi(bars * 4)
+}
+
+/** Only modulate LFOs slow enough that a mild shrink still stays musical. */
+const MIN_PERIOD_BEATS_FOR_SPEED_MOD = 8
+
+export type PeriodSpeedDirectorOptions = {
+  /** Indices in `modulators` *before* the director is appended. */
+  targets: number[]
+  /** How many bars the speed arc spans. Default 16 (64→32 UI beats). */
+  bars?: 4 | 8 | 16
+  depth?: PeriodSpeedDepth
+  /** Sin = breathe, Ramp = accelerate/reset. Square is coerced to Sin (too jumpy). */
+  shape?: LfoShape.Sin | LfoShape.Ramp | LfoShape.Square
+  rng?: SeededRng
+  extra?: LfoExtra
+}
+
+/**
+ * Append a dedicated director LFO that modulates `period` on the given targets.
+ * Use for multi-bar dynamic scene speed; omit for constant-speed looks.
+ *
+ * Skips beat-locked / short-period / audio LFOs so intermod cannot push them
+ * into sub-beat chaos (e.g. 1 → 0.5 beats).
+ */
+export function withPeriodSpeedDirector(
+  modulators: Modulator[],
+  options: PeriodSpeedDirectorOptions
+): Modulator[] {
+  const targets = options.targets.filter((index) => {
+    if (!Number.isInteger(index) || index < 0 || index >= modulators.length) {
+      return false
+    }
+    const lfo = modulators[index]?.lfo
+    if (!lfo) return false
+    if (
+      lfo.shape === LfoShape.AudioBand ||
+      lfo.shape === LfoShape.AudioEnergy
+    ) {
+      return false
+    }
+    const period = Number(lfo.period)
+    if (!Number.isFinite(period) || period < MIN_PERIOD_BEATS_FOR_SPEED_MOD) {
+      return false
+    }
+    return true
+  })
+  if (targets.length === 0) return modulators
+
+  const bars = options.bars ?? 16
+  const preferred = Math.max(16, periodSpeedDirectorBeats(bars))
+  const period = options.rng
+    ? Math.max(16, pickLfoPeriod(options.rng, preferred))
+    : preferred
+  const amount = periodSpeedAmount(options.depth ?? 'medium')
+  // Stepped (Square) period jumps look broken — always breathe or ramp.
+  const shape =
+    options.shape === LfoShape.Ramp ? LfoShape.Ramp : LfoShape.Sin
+  const routes: Array<[number, string, number]> = targets.map((index) => [
+    index,
+    'period',
+    amount,
+  ])
+
+  return [
+    ...modulators,
+    directorLfo(shape, period, routes, options.extra),
+  ]
 }
 
 export function splitModsForCount(
@@ -338,20 +489,22 @@ export function moverSplit(
   })
 }
 
+/** Mover pan/tilt periods — keep slow enough that heads can track smoothly. */
 function moverTiming(epicness: number) {
   if (epicness < 0.22) {
     return { motionPeriod: 32, gatePeriod: 32, audio: false }
   }
   if (epicness < 0.38) {
-    return { motionPeriod: 16, gatePeriod: 16, audio: false }
+    return { motionPeriod: 32, gatePeriod: 16, audio: false }
   }
   if (epicness < 0.55) {
-    return { motionPeriod: 16, gatePeriod: 8, audio: false }
+    return { motionPeriod: 16, gatePeriod: 16, audio: false }
   }
   if (epicness < 0.72) {
-    return { motionPeriod: 8, gatePeriod: 8, audio: false }
+    return { motionPeriod: 16, gatePeriod: 8, audio: false }
   }
-  return { motionPeriod: 8, gatePeriod: 4, audio: true }
+  // Peak movers still ≥8 beats for pan/tilt; gate can be faster.
+  return { motionPeriod: 8, gatePeriod: 8, audio: true }
 }
 
 function moverBeamGate(
@@ -657,6 +810,8 @@ export function attachMoverAwareness(
     moverSplitScene.baseParams.moverMirrorX = 1
   }
 
+  // Modulators must target the new Movers split index (after append).
+  const moverSplitIndex = splitCount
   return {
     ...scene,
     modulators: [
@@ -664,7 +819,12 @@ export function attachMoverAwareness(
         ...modulator,
         splitModulations: [...modulator.splitModulations, {}],
       })),
-      ...buildMoverPatternMods(pattern, scene.epicness, splitCount, phaseSeed),
+      ...buildMoverPatternMods(
+        pattern,
+        scene.epicness,
+        moverSplitIndex + 1,
+        phaseSeed
+      ),
     ],
     splitScenes: [...scene.splitScenes, moverSplitScene],
   }
@@ -696,13 +856,144 @@ export function wigWagFlashMod(
   )
 }
 
+export type ChaseAxis = 'columns' | 'rows'
+export type ChaseDirection = 'forward' | 'reverse' | 'mirrorOut' | 'mirrorIn'
+
+/** Stage strips for L↔R columns or T↔B rows (placement-aware when fixtures exist). */
+export function buildChaseZones(
+  profile: RigProfile,
+  axis: ChaseAxis,
+  count: number
+): SpatialZone[] {
+  const strips = Math.max(2, Math.min(6, Math.round(count)))
+  if (axis === 'columns') {
+    return buildSpatialZonesFromRig(profile, strips, 1)
+  }
+  return buildSpatialZonesFromRig(profile, 1, strips)
+}
+
+/**
+ * Tight non-overlapping chase cells. `positionFeather: 0` so fixtures don't smear
+ * across adjacent strips under HTP.
+ */
+export function chaseZoneSplit(
+  zone: { x: number; y: number; width: number; height: number },
+  hue: number,
+  patch: Params = {},
+  groupName?: string
+): SplitScene_t {
+  const groups = groupName ? { [groupName]: true } : ALL_GROUPS
+  return mkSplit(
+    centeredLook(hue, {
+      x: zone.x,
+      y: zone.y,
+      width: Math.max(0.08, zone.width * 0.92),
+      height: Math.max(0.12, zone.height * 0.92),
+      brightness: 0.02,
+      saturation: 0.95,
+      positionFeather: 0,
+      ...patch,
+    }),
+    defaultRandomizer,
+    groups,
+    { modManualAnchors: { brightness: 'bottom', hue: 'center' } }
+  )
+}
+
+/**
+ * Square duty (0–1 UI) that yields ~`onFraction` of the cycle high.
+ * Engine maps: duty = 0.02 + squareDuty * 0.96.
+ */
+export function squareDutyForOnFraction(onFraction: number): number {
+  const target = Math.max(0.04, Math.min(0.9, onFraction))
+  return Math.max(0, Math.min(1, (target - 0.02) / 0.96))
+}
+
+/** Lock chase period to strip count × beats-per-step (snapped to UI options). */
+export function chasePeriodBeats(stripCount: number, beatsPerStep = 1): number {
+  const raw = Math.max(2, stripCount) * Math.max(0.25, beatsPerStep)
+  return snapLfoPeriodToUi(raw)
+}
+
+/**
+ * Stagger split LFO phase so a shared modulator reads as a chase across splits.
+ * `beatsPerStep` is usually `period / splitCount` for one full sweep per cycle.
+ */
+export function withStaggeredPhase(
+  splits: SplitScene_t[],
+  options: {
+    beatsPerStep: number
+    direction?: ChaseDirection
+  }
+): SplitScene_t[] {
+  const n = splits.length
+  if (n <= 0) return splits
+  const direction = options.direction ?? 'forward'
+  const mid = (n - 1) / 2
+
+  return splits.map((split, index) => {
+    let step = index
+    if (direction === 'reverse') {
+      step = n - 1 - index
+    } else if (direction === 'mirrorOut') {
+      step = Math.abs(index - mid)
+    } else if (direction === 'mirrorIn') {
+      step = mid - Math.abs(index - mid)
+    }
+    return {
+      ...split,
+      splitModShaping: {
+        ...split.splitModShaping,
+        phaseOffsetBeats: step * options.beatsPerStep,
+      },
+    }
+  })
+}
+
+/** Left half runs forward; right half runs reverse — opposing split chase. */
+export function withOpposingHalvesPhase(
+  splits: SplitScene_t[],
+  beatsPerStep: number
+): SplitScene_t[] {
+  const n = splits.length
+  if (n <= 0) return splits
+  const mid = Math.ceil(n / 2)
+  return splits.map((split, index) => {
+    const step = index < mid ? index : n - 1 - index
+    return {
+      ...split,
+      splitModShaping: {
+        ...split.splitModShaping,
+        phaseOffsetBeats: step * beatsPerStep,
+      },
+    }
+  })
+}
+
+/**
+ * One-hot brightness chase modulator: low-duty square so only ~one strip is hot
+ * at a time (HTP-friendly).
+ */
+export function chaseBrightnessMod(
+  splitCount: number,
+  period: number,
+  amount: number
+) {
+  return mkLfo(
+    LfoShape.Square,
+    period,
+    splitModsForCount(splitCount, () => ({ brightness: amount })),
+    { squareDuty: squareDutyForOnFraction(1 / Math.max(2, splitCount)) }
+  )
+}
+
 export function zoneSplit(
   zone: { x: number; y: number; width: number; height: number },
   hue: number,
   patch: Params = {},
   groupName?: string
 ): SplitScene_t {
-  const groups = groupName ? { [groupName]: true } : {}
+  const groups = groupName ? { [groupName]: true } : ALL_GROUPS
   return mkSplit(
     centeredLook(hue, {
       x: zone.x,

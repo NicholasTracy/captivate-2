@@ -62,9 +62,14 @@ const Card = styled.div`
   min-height: 8rem;
   max-height: 36rem;
   border-radius: 0;
-  border-top: 1px solid #d6ebff66;
-  border-bottom: 1px solid #d6ebff66;
-  background: linear-gradient(180deg, #1a2433 0%, #0c121c 55%, #070b12 100%);
+  border-top: 1px solid ${(p) => p.theme.colors.divider};
+  border-bottom: 1px solid ${(p) => p.theme.colors.divider};
+  background: linear-gradient(
+    180deg,
+    ${(p) => p.theme.colors.bg.raised} 0%,
+    ${(p) => p.theme.colors.bg.panel} 45%,
+    ${(p) => p.theme.colors.bg.darker} 100%
+  );
   box-shadow:
     ${(props) => props.theme.elevation.insetHighlight},
     ${(props) => props.theme.elevation.shadowMd};
@@ -80,7 +85,7 @@ const Label = styled.div`
   font-size: 0.52rem;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: #e8f3ff;
+  color: ${(p) => p.theme.colors.text.primary};
   text-align: center;
   user-select: none;
   flex: 0 0 auto;
@@ -92,18 +97,22 @@ const Track = styled.div`
   width: 100%;
   margin: 0.18rem 0;
   border-radius: 0.28rem;
-  border: 1px solid #d3e7ff44;
-  background: #050a11;
+  border: 1px solid ${(p) => p.theme.colors.divider};
+  background: ${(p) => p.theme.colors.bg.darker};
   overflow: hidden;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55);
+  box-shadow: ${(p) => p.theme.elevation.insetDepth};
 `
 
 const TrackGradient = styled.div`
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, #ffffff 0%, #0b0b0b 100%);
-  box-shadow: 0 0 0.5rem #ffffff33;
+  background: linear-gradient(
+    180deg,
+    ${(p) => (p.theme.mode === 'light' ? '#f5f5f5' : '#ffffff')} 0%,
+    ${(p) => (p.theme.mode === 'light' ? '#2a2a2a' : '#0b0b0b')} 100%
+  );
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
   pointer-events: none;
 `
 
@@ -112,7 +121,7 @@ const TrackMask = styled.div`
   left: 0;
   right: 0;
   top: 0;
-  background: #050a11;
+  background: ${(p) => p.theme.colors.bg.darker};
   pointer-events: none;
 `
 
@@ -177,8 +186,11 @@ const Value = styled.div`
   font-size: 0.56rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #f1f1f1;
-  text-shadow: 0 0 0.3rem #ffffff44;
+  color: ${(p) => p.theme.colors.text.primary};
+  text-shadow: ${(p) =>
+    p.theme.mode === 'light'
+      ? '0 1px 1px rgba(255, 255, 255, 0.7)'
+      : '0 1px 2px rgba(0, 0, 0, 0.55)'};
   text-align: center;
   user-select: none;
   flex: 0 0 auto;

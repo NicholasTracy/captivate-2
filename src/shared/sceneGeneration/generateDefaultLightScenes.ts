@@ -12,6 +12,10 @@ import {
 } from './generateLightScenesInternals'
 import { defaultSaveRigProfile } from './rigProfile'
 import { createSeededRng } from './rng'
+import {
+  resolveSceneGenerationCapabilities,
+  resolveSceneGenerationPrefs,
+} from './sceneGenerationOptions'
 
 export { DEFAULT_SAVE_LIGHT_SEED }
 
@@ -19,8 +23,10 @@ export { DEFAULT_SAVE_LIGHT_SEED }
 export function generateDefaultLightScenes(): LightScenes_t {
   const rng = createSeededRng(DEFAULT_SAVE_LIGHT_SEED)
   const profile = defaultSaveRigProfile()
-  const coreScenes = buildCoreScenes(rng, profile)
-  const moverScenes = buildMoverScenes(rng, profile)
+  const prefs = resolveSceneGenerationPrefs({})
+  const capabilities = resolveSceneGenerationCapabilities(profile, prefs.look)
+  const coreScenes = buildCoreScenes(rng, profile, prefs, capabilities)
+  const moverScenes = buildMoverScenes(rng, profile, capabilities)
 
   if (coreScenes.length !== DEFAULT_LIGHT_SCENE_CORE_CATALOG.length) {
     throw new Error(
@@ -36,11 +42,20 @@ export function generateDefaultLightScenes(): LightScenes_t {
   const labeled = [
     ...coreScenes.map((scene, index) => {
       const catalog = DEFAULT_LIGHT_SCENE_CORE_CATALOG[index]!
-      return { id: catalog.id, name: catalog.name, scene }
+      return {
+        id: catalog.id,
+        // Prefer the recipe title so names always match behavior.
+        name: scene.name?.trim() || catalog.name,
+        scene,
+      }
     }),
     ...moverScenes.map((scene, index) => {
       const catalog = DEFAULT_LIGHT_SCENE_MOVER_CATALOG[index]!
-      return { id: catalog.id, name: catalog.name, scene }
+      return {
+        id: catalog.id,
+        name: scene.name?.trim() || catalog.name,
+        scene,
+      }
     }),
   ].sort((a, b) => a.scene.epicness - b.scene.epicness)
 

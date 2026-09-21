@@ -1,8 +1,9 @@
 import styled from 'styled-components'
 import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
-import zIndexes from '../zIndexes'
+import zIndexes, { overlayZIndex } from '../zIndexes'
 import OverlayPortal from '../overlays/OverlayPortal'
+import { useTypedSelector } from '../redux/store'
 
 interface Props {
   title: React.ReactNode
@@ -11,6 +12,8 @@ interface Props {
   cardWidth?: string
   cardMaxWidth?: string
   cardMaxHeight?: string
+  /** Optional `data-tour` on the card for interactive tutorial spotlights. */
+  dataTour?: string
 }
 
 export default function Popup({
@@ -20,44 +23,50 @@ export default function Popup({
   cardWidth,
   cardMaxWidth,
   cardMaxHeight,
+  dataTour,
 }: Props) {
+  const tourActive = useTypedSelector((s) => s.gui.interactiveTourActive)
+
   return (
     <OverlayPortal>
       <Root
+        $tourActive={tourActive}
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) {
             onClose()
           }
         }}
       >
-      <Card
-        $cardWidth={cardWidth}
-        $cardMaxWidth={cardMaxWidth}
-        $cardMaxHeight={cardMaxHeight}
-      >
-        <Title>
-          {title}
-          <IconButton
-            onClick={(e) => {
-              e.preventDefault()
-              onClose()
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </Title>
-        {children}
-      </Card>
+        <Card
+          data-tour={dataTour}
+          $cardWidth={cardWidth}
+          $cardMaxWidth={cardMaxWidth}
+          $cardMaxHeight={cardMaxHeight}
+        >
+          <Title>
+            {title}
+            <IconButton
+              onClick={(e) => {
+                e.preventDefault()
+                onClose()
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Title>
+          {children}
+        </Card>
       </Root>
     </OverlayPortal>
   )
 }
 
-const Root = styled.div`
+const Root = styled.div<{ $tourActive: boolean }>`
   position: fixed;
   inset: 0;
-  z-index: ${zIndexes.overlay.popup};
-  background-color: #000a;
+  z-index: ${(p) =>
+    p.$tourActive ? overlayZIndex.tourPopup : zIndexes.overlay.popup};
+  background-color: ${(p) => (p.$tourActive ? '#0006' : '#000a')};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -77,9 +86,9 @@ const Card = styled.div<{
   overflow: auto;
   padding: 1rem;
   box-sizing: border-box;
-  border: 1px solid #ffffff24;
+  border: 1px solid ${(props) => props.theme.colors.divider};
   border-radius: 0.45rem;
-  box-shadow: 0 0.5rem 2rem #0009;
+  box-shadow: ${(props) => props.theme.elevation.shadowMd};
 `
 
 const Title = styled.div`

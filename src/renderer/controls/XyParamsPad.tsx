@@ -23,13 +23,7 @@ interface Props {
 const XY_CENTER_DETENT_RADIUS = 0.04
 
 /** Match XY pad height; same spacing as white / amber / UV sliders. */
-const positionDimSliderStyle: CSSProperties = {
-  height: '180px',
-  minHeight: '180px',
-  marginRight: '0.35rem',
-}
-
-const positionDimSliderLastStyle: CSSProperties = {
+const featherSliderStyle: CSSProperties = {
   height: '180px',
   minHeight: '180px',
   marginRight: '0.85rem',
@@ -105,7 +99,7 @@ export default function XyParamsPad({ splitIndex }: Props) {
     return null
   }
 
-  const content = (
+  return (
     <Root>
       <ParamToolbar>
         <ParamXButton
@@ -143,32 +137,17 @@ export default function XyParamsPad({ splitIndex }: Props) {
             />
           </PlotArea>
         </MidiOverlay_xy>
-        <ParamSlider
-          param="width"
-          splitIndex={splitIndex}
-          hideRemoveButton
-          label="Width"
-          wrapperStyle={positionDimSliderStyle}
-        />
-        <ParamSlider
-          param="height"
-          splitIndex={splitIndex}
-          hideRemoveButton
-          label="Height"
-          wrapperStyle={positionDimSliderStyle}
-        />
+        {/* Size (width/height) is edited on the pad via secondary-drag — no duplicate side sliders. */}
         <ParamSlider
           param="positionFeather"
           splitIndex={splitIndex}
           hideRemoveButton
           label="Feather"
-          wrapperStyle={positionDimSliderLastStyle}
+          wrapperStyle={featherSliderStyle}
         />
       </PadRow>
     </Root>
   )
-
-  return content
 }
 
 const Root = styled.div`

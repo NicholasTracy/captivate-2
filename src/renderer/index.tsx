@@ -24,6 +24,7 @@ import {
   setConnectionsMenu,
   setStatusLogOpen,
   setLedSidebarEnabled,
+  setInteractiveTourActive,
 } from './redux/guiSlice'
 import type { Page } from '../shared/pages'
 import type { Lighting3dRealtimeTick } from '../shared/lighting3dPreviewTransport'
@@ -494,6 +495,12 @@ ipc_setup({
     } else if (command.type === 'generate-scenes') {
       if (typeof document === 'undefined' || document.hasFocus()) {
         void runGenerateScenesFromMenu()
+      }
+    } else if (command.type === 'start-interactive-tutorial') {
+      if (typeof document === 'undefined' || document.hasFocus()) {
+        store.dispatch(setConnectionsMenu(false))
+        store.dispatch(setActivePage('Universe'))
+        store.dispatch(setInteractiveTourActive(true))
       }
     } else if (command.type === 'load-recent-project') {
       if (typeof command.path !== 'string' || command.path.length === 0) {

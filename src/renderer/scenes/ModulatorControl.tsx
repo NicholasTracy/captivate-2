@@ -703,7 +703,7 @@ const VerticalLabel = styled.div`
   text-orientation: mixed;
   font-size: var(--remote-mod-vertical-label-font, 0.56rem);
   font-weight: 700;
-  color: #d7dff0;
+  color: ${(props) => props.theme.colors.text.secondary};
   letter-spacing: 0.01rem;
   user-select: none;
   line-height: 1;
@@ -738,5 +738,5 @@ const ControlHint = styled.div`
   margin-top: 0.28rem;
   text-align: center;
   font-size: 0.64rem;
-  color: #c5cedf;
+  color: ${(props) => props.theme.colors.text.secondary};
 `

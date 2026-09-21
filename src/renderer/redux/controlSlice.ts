@@ -14,7 +14,11 @@ import {
   normSplitShapingForStore,
 } from '../../shared/modulation'
 import { nanoid } from 'nanoid'
-import { RandomizerOptions } from '../../shared/randomizer'
+import { RandomizerOptions, normalizeRandomizerOptions } from '../../shared/randomizer'
+import {
+  ChaseOptions,
+  normalizeChaseOptions,
+} from '../../shared/chase'
 import cloneDeep from 'lodash.clonedeep'
 import { LayerConfig } from '../../visualizer/threejs/layers/LayerConfig'
 import { DeviceState, initDeviceState, midiActions } from './deviceState'
@@ -40,10 +44,19 @@ import {
 } from '../../shared/Scenes'
 import { reorderArray } from '../../shared/util'
 import { normalizeAudioBandConfig } from '../../shared/audioEngine'
+import {
+  normalizeGroupIntensityMap,
+  type GroupIntensityMap,
+} from '../../shared/groupIntensity'
 
 export interface ControlState extends ScenesStateBundle {
   device: DeviceState
   master: number
+  /**
+   * Per named fixture-group max brightness (0–1). Missing = 1.
+   * Multiplies under global master on DMX/LED output.
+   */
+  groupIntensity: GroupIntensityMap
 }
 export function initControlState(): ControlState {
   return {
@@ -51,6 +64,7 @@ export function initControlState(): ControlState {
     visual: initVisualScenesState(),
     device: initDeviceState(),
     master: 1,
+    groupIntensity: {},
   }
 }
 
@@ -103,6 +117,57 @@ interface SetModulatorWaveConfigPayload {
   sawFlatten?: number
   noiseSeed?: number
   noiseSmoothing?: number
+}
+
+function ensureGroupSplitOnScene(
+  scene: LightScene_t,
+  group: string,
+  defaultParams?: Params,
+  removeParams?: string[]
+) {
+  const trimmed = group.trim()
+  if (trimmed.length <= 0) return
+
+  let splitIndex = scene.splitScenes.findIndex(
+    (split) => split.groups[trimmed] === true
+  )
+  if (splitIndex < 0) {
+    scene.splitScenes.push(initSplitScene())
+    scene.modulators.forEach((modulator) => {
+      modulator.splitModulations.push({})
+    })
+    splitIndex = scene.splitScenes.length - 1
+    scene.splitScenes[splitIndex].groups[trimmed] = true
+  }
+
+  const split = scene.splitScenes[splitIndex]
+  split.groups[trimmed] = true
+  if (defaultParams !== undefined) {
+    for (const [param, value] of Object.entries(defaultParams)) {
+      if (split.baseParams[param] === undefined) {
+        split.baseParams[param] = value
+      }
+    }
+  }
+
+  if (Array.isArray(removeParams)) {
+    for (const param of removeParams) {
+      if (typeof param !== 'string' || param.trim().length <= 0) continue
+      delete split.baseParams[param]
+      if (split.modManualAnchors) {
+        delete split.modManualAnchors[param]
+        if (Object.keys(split.modManualAnchors).length === 0) {
+          delete split.modManualAnchors
+        }
+      }
+      for (const modulator of scene.modulators) {
+        const modulation = modulator.splitModulations[splitIndex]
+        if (modulation !== undefined) {
+          delete modulation[param]
+        }
+      }
+    }
+  }
 }
 
 function modifyActiveLightScene(
@@ -189,6 +254,41 @@ const scenesSlice = createSlice({
   reducers: {
     setMaster: (state, { payload }: PayloadAction<number>) => {
       state.master = payload
+    },
+    setGroupIntensity: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ group: string; intensity: number }>
+    ) => {
+      const name = payload.group.trim()
+      if (name.length === 0) return
+      const next = clampNormalized(payload.intensity)
+      if (next >= 0.999) {
+        delete state.groupIntensity[name]
+        // Also clear any case-variant keys
+        for (const key of Object.keys(state.groupIntensity)) {
+          if (key.toLowerCase() === name.toLowerCase()) {
+            delete state.groupIntensity[key]
+          }
+        }
+        return
+      }
+      for (const key of Object.keys(state.groupIntensity)) {
+        if (key.toLowerCase() === name.toLowerCase() && key !== name) {
+          delete state.groupIntensity[key]
+        }
+      }
+      state.groupIntensity[name] = next
+    },
+    setGroupIntensityMap: (
+      state,
+      { payload }: PayloadAction<GroupIntensityMap>
+    ) => {
+      state.groupIntensity = normalizeGroupIntensityMap(payload)
+    },
+    resetGroupIntensities: (state) => {
+      state.groupIntensity = {}
     },
     // =====================   LIGHT & VISUAL SCENES   ===========================
     setAutoSceneEnabled: (
@@ -726,7 +826,42 @@ const scenesSlice = createSlice({
         if (splitScene === undefined) {
           return
         }
-        splitScene.randomizer[key] = value
+        const next = normalizeRandomizerOptions({
+          ...splitScene.randomizer,
+          [key]: value,
+        })
+        splitScene.randomizer[key] = next[key]
+      })
+    },
+    setChase: (
+      state,
+      {
+        payload: { key, value, splitIndex },
+      }: PayloadAction<{
+        key: keyof ChaseOptions
+        value: ChaseOptions[keyof ChaseOptions]
+        splitIndex: number
+      }>
+    ) => {
+      modifyActiveLightScene(state, (scene) => {
+        const splitScene = getSplitSceneSafe(scene, splitIndex)
+        if (splitScene === undefined) {
+          return
+        }
+        if (splitScene.chase === undefined) {
+          splitScene.chase = normalizeChaseOptions({})
+        }
+        const next = normalizeChaseOptions({
+          ...splitScene.chase,
+          [key]: value,
+        })
+        if (key === 'direction') {
+          splitScene.chase.direction = next.direction
+        } else if (key === 'slotAxis') {
+          splitScene.chase.slotAxis = next.slotAxis
+        } else {
+          splitScene.chase[key] = next[key] as number
+        }
       })
     },
     addSplitScene: (state, {}: PayloadAction<undefined>) => {
@@ -748,52 +883,47 @@ const scenesSlice = createSlice({
       }>
     ) => {
       modifyActiveLightScene(state, (scene) => {
-        const group = payload.group.trim()
-        if (group.length <= 0) return
-
-        let splitIndex = scene.splitScenes.findIndex(
-          (split) => split.groups[group] === true
+        ensureGroupSplitOnScene(
+          scene,
+          payload.group,
+          payload.defaultParams,
+          payload.removeParams
         )
-        if (splitIndex < 0) {
-          scene.splitScenes.push(initSplitScene())
-          scene.modulators.forEach((modulator) => {
-            modulator.splitModulations.push({})
-          })
-          splitIndex = scene.splitScenes.length - 1
-          scene.splitScenes[splitIndex].groups[group] = true
-        }
-
-        const split = scene.splitScenes[splitIndex]
-        split.groups[group] = true
-        if (payload.defaultParams === undefined) {
-          // still allow param removals on existing splits
-        } else {
-          for (const [param, value] of Object.entries(payload.defaultParams)) {
-            if (split.baseParams[param] === undefined) {
-              split.baseParams[param] = value
-            }
-          }
-        }
-
-        if (Array.isArray(payload.removeParams)) {
-          for (const param of payload.removeParams) {
-            if (typeof param !== 'string' || param.trim().length <= 0) continue
-            delete split.baseParams[param]
-            if (split.modManualAnchors) {
-              delete split.modManualAnchors[param]
-              if (Object.keys(split.modManualAnchors).length === 0) {
-                delete split.modManualAnchors
-              }
-            }
-            for (const modulator of scene.modulators) {
-              const modulation = modulator.splitModulations[splitIndex]
-              if (modulation !== undefined) {
-                delete modulation[param]
-              }
-            }
-          }
-        }
       })
+    },
+    ensureSplitScenesForGroups: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{
+        groups: string[]
+        target: 'active' | 'all'
+      }>
+    ) => {
+      const groups = payload.groups
+        .map((group) => group.trim())
+        .filter((group) => group.length > 0)
+      if (groups.length === 0) {
+        return
+      }
+
+      const applyToScene = (scene: LightScene_t | undefined) => {
+        if (scene === undefined) {
+          return
+        }
+        for (const group of groups) {
+          ensureGroupSplitOnScene(scene, group)
+        }
+      }
+
+      if (payload.target === 'active') {
+        applyToScene(state.light.byId[state.light.active])
+        return
+      }
+
+      for (const sceneId of state.light.ids) {
+        applyToScene(state.light.byId[sceneId])
+      }
     },
     removeSplitSceneByIndex: (state, { payload }: PayloadAction<number>) => {
       modifyActiveLightScene(state, (scene) => {
@@ -846,6 +976,9 @@ const scenesSlice = createSlice({
         const restoredSplit: SplitScene_t = {
           baseParams: { ...payload.splitScene.baseParams },
           randomizer: { ...payload.splitScene.randomizer },
+          chase: {
+            ...(payload.splitScene.chase ?? normalizeChaseOptions({})),
+          },
           groups: { ...payload.splitScene.groups, [group]: true },
           ...(payload.splitScene.modManualAnchors
             ? { modManualAnchors: { ...payload.splitScene.modManualAnchors } }
@@ -1065,6 +1198,9 @@ const scenesSlice = createSlice({
 
 export const {
   setMaster,
+  setGroupIntensity,
+  setGroupIntensityMap,
+  resetGroupIntensities,
 
   // LIGHT & VISUAL SCENES
   setAutoSceneEnabled,
@@ -1102,8 +1238,10 @@ export const {
   setSplitModShaping,
   resetModulator,
   setRandomizer,
+  setChase,
   addSplitScene,
   ensureSplitSceneForGroup,
+  ensureSplitScenesForGroups,
   removeSplitSceneByIndex,
   removeDedicatedSplitSceneForGroup,
   restoreSplitSceneForGroup,

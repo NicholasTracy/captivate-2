@@ -52,8 +52,8 @@ const Root = styled.button<{ $toolbar: boolean }>`
   padding: 0;
   font: inherit;
   border-radius: 999px;
-  border: 1px solid #ffffff44;
-  background-color: #101521f0;
+  border: 1px solid ${(props) => props.theme.colors.divider};
+  background-color: ${(props) => props.theme.colors.bg.raised};
   cursor: pointer;
   color: ${(props) => props.theme.colors.button.text};
   font-size: 0.62rem;
@@ -62,9 +62,13 @@ const Root = styled.button<{ $toolbar: boolean }>`
   z-index: 10;
   pointer-events: auto;
   flex-shrink: 0;
+  box-shadow: ${(props) => props.theme.elevation.shadowSm};
   :hover {
     color: ${(props) => props.theme.colors.text.primary};
-    border-color: #ffffff77;
+    border-color: ${(props) =>
+      props.theme.mode === 'light'
+        ? 'rgba(0, 0, 0, 0.4)'
+        : '#ffffff77'};
   }
 
   ${(p) =>

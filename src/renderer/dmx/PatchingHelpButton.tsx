@@ -26,7 +26,10 @@ export default function PatchingHelpButton() {
         </li>
         <li>
           To assign scene groups, select the fixture and use{' '}
-          <strong>Groups…</strong> in the panel below the map.
+          <strong>Groups…</strong> in the panel below the map. For large rigs,
+          use <strong>Smart groupings…</strong> above the map to auto-split by
+          quadrants, even/odd order, or axis strips — optionally creating scene
+          splits for those groups.
         </li>
         <li>
           To set where a fixture sits on stage, use the placement map below —

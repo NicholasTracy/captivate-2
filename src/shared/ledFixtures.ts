@@ -146,7 +146,10 @@ export interface LedStringPlacementStats {
 
 export type LedRandomizerContext = {
   state: RandomizerState
-  baseIndex: number
+  /** Absolute mapped-bank index for this LED fixture (all pixels share it). */
+  slotIndex: number
+  chaseState?: RandomizerState
+  chaseSlotIndex?: number
 }
 
 export function getLedValues(
@@ -165,15 +168,24 @@ export function getLedValues(
   const saturation = getParam(params, 'saturation')
   const brightness = getParam(params, 'brightness')
   const movingWindow = getMovingWindow(params, placementDepth2DOnly)
+  const randomizerLevel =
+    randomizer !== undefined && randomizer.slotIndex >= 0
+      ? randomizer.state[randomizer.slotIndex]?.level ?? 1
+      : 1
+  const chaseSlot =
+    randomizer?.chaseSlotIndex ?? randomizer?.slotIndex ?? -1
+  const chaseLevel =
+    randomizer?.chaseState !== undefined && chaseSlot >= 0
+      ? randomizer.chaseState[chaseSlot]?.level ?? 1
+      : 1
 
-  return ledWindows.map((ledWindow, pixelIndex) => {
-    const randomizerLevel =
-      randomizer?.state[randomizer.baseIndex + pixelIndex]?.level ?? 1
+  return ledWindows.map((ledWindow) => {
     const windowMultiplier = getWindowRandomizerLevel(
       params,
       randomizerLevel,
       ledWindow,
-      movingWindow
+      movingWindow,
+      chaseLevel
     )
 
     return getBaseColorsFromHsv(

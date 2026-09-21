@@ -7,6 +7,7 @@ import AppModal from './AppModal'
 import { resolveActiveAppDialog } from './appDialogService'
 import AboutModal from './AboutModal'
 import SettingsModal from './SettingsModal'
+import SceneGenerationWizard from '../sceneGeneration/SceneGenerationWizard'
 import { useDispatch } from 'react-redux'
 import { setAboutOpen, setConnectionsMenu } from '../redux/guiSlice'
 
@@ -22,64 +23,68 @@ export default function FullscreenOverlay({}: Props) {
   const aboutOpen = useTypedSelector((state) => state.gui.aboutOpen)
   const settingsOpen = useTypedSelector((state) => state.gui.settingsOpen)
 
-  if (
-    !connectionsMenu &&
-    !newProjectDialog &&
-    appDialog === null &&
-    !aboutOpen &&
-    !settingsOpen
-  ) {
-    return null
-  }
+  const showFullscreenChrome =
+    connectionsMenu ||
+    newProjectDialog ||
+    appDialog !== null ||
+    aboutOpen ||
+    settingsOpen
 
   return (
-    <Root>
-      {connectionsMenu && (
-        <AppModal
-          open={true}
-          title="Connections"
-          maxWidth="72rem"
-          onClose={() => dispatch(setConnectionsMenu(false))}
-          actions={[
-            {
-              label: 'Close',
-              onClick: () => dispatch(setConnectionsMenu(false)),
-            },
-          ]}
-        >
-          <Devices embedded={true} />
-        </AppModal>
+    <>
+      <SceneGenerationWizard />
+      {showFullscreenChrome && (
+        <Root>
+          {connectionsMenu && (
+            <AppModal
+              open={true}
+              title="Connections"
+              maxWidth="72rem"
+              onClose={() => dispatch(setConnectionsMenu(false))}
+              actions={[
+                {
+                  label: 'Close',
+                  onClick: () => dispatch(setConnectionsMenu(false)),
+                  dataTour: 'tour-connections-close',
+                },
+              ]}
+            >
+              <Devices embedded={true} />
+            </AppModal>
+          )}
+          {newProjectDialog && <NewProjectDialog />}
+          {appDialog !== null && (
+            <AppModal
+              open={true}
+              stack={appDialog.critical === true ? 'critical' : 'appModal'}
+              title={appDialog.title}
+              message={appDialog.message}
+              actions={[
+                ...(appDialog.cancelLabel !== undefined &&
+                appDialog.cancelLabel.length > 0
+                  ? [
+                      {
+                        label: appDialog.cancelLabel,
+                        onClick: () => resolveActiveAppDialog(false),
+                      },
+                    ]
+                  : []),
+                {
+                  label: appDialog.confirmLabel ?? 'OK',
+                  tone: appDialog.danger === true ? 'danger' : 'default',
+                  onClick: () => resolveActiveAppDialog(true),
+                },
+              ]}
+            />
+          )}
+          <AboutModal
+            open={aboutOpen}
+            onClose={() => dispatch(setAboutOpen(false))}
+          />
+          <SettingsModal />
+        </Root>
       )}
-      {newProjectDialog && <NewProjectDialog />}
-      {appDialog !== null && (
-        <AppModal
-          open={true}
-          stack={appDialog.critical === true ? 'critical' : 'appModal'}
-          title={appDialog.title}
-          message={appDialog.message}
-          actions={[
-            ...(appDialog.cancelLabel !== undefined && appDialog.cancelLabel.length > 0
-              ? [
-                  {
-                    label: appDialog.cancelLabel,
-                    onClick: () => resolveActiveAppDialog(false),
-                  },
-                ]
-              : []),
-            {
-              label: appDialog.confirmLabel ?? 'OK',
-              tone: appDialog.danger === true ? 'danger' : 'default',
-              onClick: () => resolveActiveAppDialog(true),
-            },
-          ]}
-        />
-      )}
-      <AboutModal
-        open={aboutOpen}
-        onClose={() => dispatch(setAboutOpen(false))}
-      />
-      <SettingsModal />
-    </Root>
+    </>
   )
 }
 

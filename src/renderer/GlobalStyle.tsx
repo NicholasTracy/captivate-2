@@ -64,6 +64,11 @@ export default createGlobalStyle`
     color: ${(props) => props.theme.colors.button.icon};
   }
 
+  :focus-visible {
+    outline: 2px solid ${(props) => props.theme.colors.accent};
+    outline-offset: 2px;
+  }
+
   *::-webkit-scrollbar {
     display: none;
   }

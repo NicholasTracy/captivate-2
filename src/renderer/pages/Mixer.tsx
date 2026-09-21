@@ -631,11 +631,12 @@ const LabelledSlider = React.memo(function LabelledSlider({
             ...statusStyles[status],
             backgroundColor: getColor(fixtureIndex),
           }}
-        />
-        {showRowFixtureLabel ? (
-          <MixerFixtureRowLabel text={fixtureName} rowSpan={rowSpan} />
-        ) : null}
-        <ChannelLabel>{ch.toString()}</ChannelLabel>
+        >
+          {showRowFixtureLabel ? (
+            <MixerFixtureRowLabel text={fixtureName} rowSpan={rowSpan} />
+          ) : null}
+          <ChannelLabel>{ch.toString()}</ChannelLabel>
+        </Status>
       </Div>
       {isHover && (
         <InfoCursor
@@ -759,17 +760,19 @@ const Div = styled.div`
 const FixtureGroupLabel = styled.div`
   position: absolute;
   left: 0.2rem;
-  top: 0.14rem;
-  height: 0.62rem;
+  top: 0.2rem;
+  height: 0.7rem;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: #ddd;
+  color: ${(props) => props.theme.colors.text.primary};
   font-size: 0.52rem;
   line-height: 1;
   z-index: 1;
   pointer-events: none;
+  background: transparent;
+  box-sizing: border-box;
 `
 
 /** One row of a wrapped fixture group: fixture name across merged column width (scroll if long). */
@@ -786,20 +789,25 @@ function MixerFixtureRowLabel({ text, rowSpan }: { text: string; rowSpan: number
 }
 
 const ChannelLabel = styled.div`
-  color: #ddd;
+  position: relative;
+  z-index: 1;
+  color: ${(props) => props.theme.colors.text.primary};
   font-size: 0.72rem;
   line-height: 1;
-  z-index: 1;
+  background: transparent;
 `
 
 const Status = styled.div`
   position: absolute;
-
-  height: 100%;
-
-  left: 0;
-  right: 0;
-  border: 1px solid #fff7;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.18rem 0.1rem 0.12rem;
+  box-sizing: border-box;
+  overflow: visible;
+  border: 1px solid ${(props) => props.theme.colors.divider};
 `
 
 const statusStyles: { [key in Status_t]: React.CSSProperties } = {

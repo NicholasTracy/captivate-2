@@ -31,7 +31,7 @@ export default function Scenes() {
         </Pane>
         <Pane>
           <Column>
-            <ModulatorsHeader>
+            <ModulatorsHeader data-tour="tour-modulators">
               <ModulatorsTitle>LFO Modulators</ModulatorsTitle>
               <LfoModulatorsHelpButton />
             </ModulatorsHeader>

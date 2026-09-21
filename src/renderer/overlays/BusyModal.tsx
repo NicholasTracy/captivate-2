@@ -64,30 +64,30 @@ const Root = styled.div`
 
 const Card = styled.div`
   width: min(28rem, calc(100vw - 2rem));
-  border: 1px solid #ffffff26;
-  background: #111723;
+  border: 1px solid ${(p) => p.theme.colors.divider};
+  background: ${(p) => p.theme.colors.bg.primary};
   border-radius: 0.5rem;
   padding: 0.9rem 1rem;
-  box-shadow: 0 0.5rem 2rem #0008;
+  box-shadow: ${(p) => p.theme.elevation.shadowMd};
 `
 
 const Title = styled.div`
   font-size: 0.95rem;
   font-weight: 700;
-  color: #e8eefc;
+  color: ${(p) => p.theme.colors.text.primary};
 `
 
 const Message = styled.div`
   margin-top: 0.2rem;
   font-size: 0.8rem;
-  color: #b8c6de;
+  color: ${(p) => p.theme.colors.text.secondary};
 `
 
 const ProgressTrack = styled.div`
   margin-top: 0.6rem;
   height: 0.45rem;
   border-radius: 999px;
-  background: #22314a;
+  background: ${(p) => p.theme.colors.bg.darker};
   overflow: hidden;
   position: relative;
 `
@@ -114,5 +114,5 @@ const Percent = styled.div`
   margin-top: 0.35rem;
   text-align: right;
   font-size: 0.72rem;
-  color: #b8c6de;
+  color: ${(p) => p.theme.colors.text.secondary};
 `

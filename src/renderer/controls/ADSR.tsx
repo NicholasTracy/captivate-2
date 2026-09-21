@@ -73,6 +73,11 @@ export default function ADSR({ width, height, ratio, duration }: Props) {
           position: 'absolute',
           bottom: padding_string,
           right: padding_string,
+          // Dark plot island — keep light-on-dark text.
+          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+          color: '#eef4ff',
+          border: '1px solid rgba(255, 255, 255, 0.28)',
+          boxShadow: 'none',
         }}
         value={duration.val}
         min={duration.min}

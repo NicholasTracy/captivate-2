@@ -4,6 +4,7 @@ import {
   normalizeAppSettings,
   type AppSettings,
 } from '../shared/appSettings'
+import { parseCaptivateThemeFile } from '../shared/themeFile'
 import type { RecentProjectEntry } from '../shared/recentProjects'
 
 type FileIpcRenderer = {
@@ -28,9 +29,44 @@ function getFileIpcRenderer(): FileIpcRenderer {
 export async function fetchAppSettings(): Promise<AppSettings> {
   try {
     const raw = await getFileIpcRenderer().invoke(ipcChannels.get_app_settings)
-    return normalizeAppSettings(raw)
+    const settings = normalizeAppSettings(raw)
+    return refreshCustomThemeFromDisk(settings)
   } catch {
     return { ...DEFAULT_APP_SETTINGS }
+  }
+}
+
+/**
+ * Re-read the custom theme file from disk when a path is known so edits
+ * outside Captivate apply on next launch. Falls back to the cached document.
+ */
+export async function refreshCustomThemeFromDisk(
+  settings: AppSettings
+): Promise<AppSettings> {
+  const path = settings.customTheme?.path
+  if (!path) {
+    return settings
+  }
+  try {
+    const content = (await getFileIpcRenderer().invoke(
+      ipcChannels.read_text_file,
+      path
+    )) as string
+    const parsed = parseCaptivateThemeFile(content)
+    if (!parsed.ok) {
+      return settings
+    }
+    return {
+      ...settings,
+      customTheme: {
+        path,
+        document: parsed.document,
+      },
+      useCustomTheme:
+        settings.useCustomTheme === true ? true : settings.useCustomTheme,
+    }
+  } catch {
+    return settings
   }
 }
 

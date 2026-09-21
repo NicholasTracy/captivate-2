@@ -16,6 +16,7 @@ import {
   Params,
 } from '../../shared/params'
 import { RandomizerState } from '../../shared/randomizer'
+import { ChaseState } from '../../shared/chase'
 import {
   AudioEngineMetrics,
   initAudioEngineMetrics,
@@ -32,6 +33,7 @@ function initDmxOut(): number[] {
 export interface SplitState {
   outputParams: Params
   randomizer: RandomizerState
+  chase: ChaseState
 }
 
 export interface RealtimeState {

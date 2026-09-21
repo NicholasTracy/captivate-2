@@ -18,7 +18,9 @@ import {
   setAutoSceneBombacity,
   setMaster,
   setBaseParams,
+  setGroupIntensity,
 } from '../../renderer/redux/controlSlice'
+import { getGroupIntensityLevel } from '../../shared/groupIntensity'
 import NodeLink from 'node-link'
 import { PayloadAction } from '@reduxjs/toolkit'
 
@@ -173,6 +175,8 @@ export function handleMessage(
       )
     } else if (action.type === 'setMaster') {
       return state.control.master
+    } else if (action.type === 'setGroupIntensity') {
+      return getGroupIntensityLevel(state.control.groupIntensity, action.group)
     }
 
     return 0
@@ -199,6 +203,8 @@ export function handleMessage(
           },
         })
       )
+    } else if (action.type === 'setGroupIntensity') {
+      dispatch(setGroupIntensity({ group: action.group, intensity: bounded }))
     } else if (action.type === 'setBpm') {
       nodeLink.setTempo(bounded)
     } else if (action.type === 'tapTempo') {

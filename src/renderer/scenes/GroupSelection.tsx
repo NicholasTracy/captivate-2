@@ -18,6 +18,7 @@ import {
 } from 'renderer/redux/controlSlice'
 import { universeHasMovers } from 'shared/dmxFixtures'
 import { getSortedGroupsFromPlacedFixtures } from 'shared/dmxUtil'
+import { ALL_GROUP_NAME } from 'shared/fixtureGroups'
 import { universeHasAtmospherics } from 'shared/atmosphericsMapping'
 import { showVisGroupUi, splitDisplayName } from './splitUiVisibility'
 import SplitModShapingModal from './SplitModShapingModal'
@@ -59,6 +60,7 @@ export default function GroupSelection({ splitIndex }: Props) {
   const entries = Object.entries(activeGroups)
 
   let allAvailableGroups = new Set(availableGroups)
+  allAvailableGroups.add(ALL_GROUP_NAME)
   for (const group of ledGroups) {
     allAvailableGroups.add(group)
   }
@@ -77,6 +79,10 @@ export default function GroupSelection({ splitIndex }: Props) {
     }
     allAvailableGroups.add(group)
   }
+
+  // Include auto fixture-type groups so users can opt them onto a split.
+  // They are never selected by default (new splits use All). Group intensity
+  // hides unused type groups until a split references them.
   availableGroups = Array.from(allAvailableGroups)
     .filter(
       (group) =>
@@ -85,7 +91,11 @@ export default function GroupSelection({ splitIndex }: Props) {
           group !== 'Movers' ||
           activeGroups.Movers !== undefined)
     )
-    .sort((a, b) => (a > b ? 1 : -1))
+    .sort((a, b) => {
+      if (a === ALL_GROUP_NAME) return -1
+      if (b === ALL_GROUP_NAME) return 1
+      return a.localeCompare(b, undefined, { sensitivity: 'base' })
+    })
 
   const universeFixtureCount = dmx.universe.length
   const noGroupsAvailable = availableGroups.length === 0

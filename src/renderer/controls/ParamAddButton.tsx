@@ -25,11 +25,15 @@ import { initParams } from 'shared/params'
 import IntensityIcon from '@mui/icons-material/LocalFireDepartment'
 import StrobeIcon from '@mui/icons-material/LightMode'
 import RandomizeIcon from '@mui/icons-material/Shuffle'
+import ChaseIcon from '@mui/icons-material/DoubleArrow'
 import PositionIcon from '@mui/icons-material/PictureInPicture'
 import axisIconSrc from '../../../assets/axis.svg'
 import { getAllParamKeys, getCustomChannels } from 'renderer/redux/dmxSlice'
 import { sumVisSliders } from '../visualizer/visualSliderAssignments'
-import { evaluateSceneGroups } from 'shared/sceneGroups'
+import {
+  dmxFixtureMatchesSceneGroups,
+  ledFixtureMatchesSceneGroups,
+} from 'shared/sceneGroups'
 import {
   fixtureChannelLeafChannels,
   universeHasMovers,
@@ -102,6 +106,7 @@ const icons: {
 } = {
   strobe: () => <StrobeIcon />,
   randomize: () => <RandomizeIcon />,
+  chase: () => <ChaseIcon />,
   position: () => <PositionIcon />,
   depth: () => <PositionIcon />,
   intensity: () => <IntensityIcon />,
@@ -360,18 +365,16 @@ export default function ParamAddButton({ splitIndex }: Props) {
         continue
       }
 
-      const groupedFixture = new Set(
-        fixture.groups
-          .map((group) => group.trim())
-          .filter((group) => group.length > 0)
-      )
+      const isAtmosFixture =
+        typeof fixture.id === 'string' &&
+        fixture.id.trim().length > 0 &&
+        atmosFixtureIdSet.has(fixture.id)
 
-      const matchesSplit = evaluateSceneGroups(splitGroups, (group) => {
-        const normalized = group.trim()
-        if (normalized.length <= 0) return false
-        if (normalized === 'Visualizer') return false
-        if (normalized === 'Movers') return isMoverFixtureType(fixtureType)
-        return groupedFixture.has(normalized)
+      const matchesSplit = dmxFixtureMatchesSceneGroups(splitGroups, {
+        fixtureGroups: fixture.groups,
+        fixtureTypeName: fixtureType.name,
+        isMover: isMoverFixtureType(fixtureType),
+        isAtmosphere: isAtmosFixture,
       })
 
       if (!matchesSplit) {
@@ -408,11 +411,7 @@ export default function ParamAddButton({ splitIndex }: Props) {
       ) {
         supportsDmxColorChannels = true
       }
-      if (
-        typeof fixture.id === 'string' &&
-        fixture.id.trim().length > 0 &&
-        atmosFixtureIdSet.has(fixture.id)
-      ) {
+      if (isAtmosFixture) {
         supportsAtmosphere = true
       }
 
@@ -429,19 +428,9 @@ export default function ParamAddButton({ splitIndex }: Props) {
     }
 
     for (const ledFixture of dmx.led.ledFixtures) {
-      const groupedFixture = new Set(
-        ledFixture.groups.map((group) => group.trim()).filter((group) => group.length > 0)
-      )
-      const matchesSplit = evaluateSceneGroups(splitGroups, (group) => {
-        const normalized = group.trim()
-        if (normalized.length <= 0) return false
-        if (normalized === 'Visualizer') return false
-        if (normalized === 'LEDs' || normalized === 'Pixels') {
-          return groupedFixture.has('LEDs') || groupedFixture.has('Pixels')
-        }
-        return groupedFixture.has(normalized)
-      })
-      if (!matchesSplit) continue
+      if (!ledFixtureMatchesSceneGroups(ledFixture.groups ?? [], splitGroups)) {
+        continue
+      }
       supportsLedColorChannels = true
     }
 
@@ -492,6 +481,7 @@ export default function ParamAddButton({ splitIndex }: Props) {
   return (
     <Root>
       <IconButton
+        data-tour="tour-add-param"
         size="small"
         title="Add base parameters to this split"
         onClick={(e) => {
@@ -503,6 +493,7 @@ export default function ParamAddButton({ splitIndex }: Props) {
       </IconButton>
       {isOpen && (
         <Popup
+          dataTour="tour-add-param-popup"
           title={
             <PopupTitleRow>
               <span>Add Params</span>

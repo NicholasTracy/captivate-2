@@ -14,6 +14,7 @@ import mixerReducer, { initMixerState } from './mixerSlice'
 import undoable, { StateWithHistory } from 'redux-undo'
 import { DeviceState, initDeviceState } from './deviceState'
 import fixState, { fixDeviceState } from '../../shared/fixState'
+import { normalizeGroupIntensityMap } from '../../shared/groupIntensity'
 import { DefaultParam, initBaseParams, Params } from '../../shared/params'
 import { SaveInfo } from 'shared/save'
 import { normalizeAppSettings } from '../../shared/appSettings'
@@ -106,6 +107,8 @@ export function mergeProjectSave(
           appDialog: null,
           aboutOpen: false,
           settingsOpen: false,
+          sceneGenerationWizardOpen: false,
+          interactiveTourActive: false,
         }
       : state.gui
   const loadedGui =
@@ -138,6 +141,10 @@ export function mergeProjectSave(
         info.config.visual && info.state.visual
           ? cloneDeep(info.state.visual)
           : cloneDeep(control.visual),
+      groupIntensity:
+        info.config.gui && info.state.gui?.groupIntensity !== undefined
+          ? normalizeGroupIntensityMap(info.state.gui.groupIntensity)
+          : normalizeGroupIntensityMap(control.groupIntensity),
     },
     gui: sanitizeGuiTransientState(loadedGui),
     mixer:
@@ -201,6 +208,8 @@ function sanitizeGuiTransientState(gui: GuiState): GuiState {
     appDialog: null,
     aboutOpen: false,
     settingsOpen: false,
+    sceneGenerationWizardOpen: false,
+    interactiveTourActive: false,
     atmosManualTriggerNonceByFixtureId: {},
   }
 }
@@ -268,6 +277,9 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         appDialog: localGui.appDialog,
         aboutOpen: localGui.aboutOpen,
         settingsOpen: localGui.settingsOpen,
+        sceneGenerationWizardOpen: false,
+        interactiveTourActive: false,
+        appSettingsLoaded: localGui.appSettingsLoaded === true,
         appSettings: normalizeAppSettings(
           localGui.appSettings ?? cleanState.gui?.appSettings
         ),

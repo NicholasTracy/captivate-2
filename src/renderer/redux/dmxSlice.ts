@@ -956,6 +956,29 @@ export const dmxSlice = createSlice({
       syncFixtureGroupCatalogState(state)
       syncMoverState(state)
     },
+    applyFixtureGroupAssignments: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{
+        assignments: Array<{ index: number; groups: string[] }>
+      }>
+    ) => {
+      let changed = false
+      for (const assignment of payload.assignments) {
+        const fixture = state.universe[assignment.index]
+        if (fixture === undefined) {
+          continue
+        }
+        fixture.groups = normalizeFixtureGroupList(assignment.groups)
+        changed = true
+      }
+      if (!changed) {
+        return
+      }
+      syncFixtureGroupCatalogState(state)
+      syncMoverState(state)
+    },
     setEditedFixture: (state, { payload }: PayloadAction<null | string>) => {
       state.activeFixtureType = payload
       state.activeSubFixture = null
@@ -1477,6 +1500,7 @@ export const {
   addActiveFixtureTypeGroup,
   removeActiveFixtureTypeGroup,
   setFixtureGroups,
+  applyFixtureGroupAssignments,
   addFixtureChannel,
   editFixtureChannel,
   removeFixtureChannel,

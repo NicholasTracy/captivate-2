@@ -14,9 +14,12 @@ import {
   setFixtureWindow,
   setFixtureWindowEnabled,
   setFixtureGroups,
+  applyFixtureGroupAssignments,
 } from '../redux/dmxSlice'
+import { ensureSplitScenesForGroups } from '../redux/controlSlice'
 import { getFixtureGroupPickerOptions } from '../../shared/fixtureGroups'
 import FixtureGroupsModal from './FixtureGroupsModal'
+import SmartFixtureGroupingsModal from './SmartFixtureGroupingsModal'
 import { setFxtrDepthOn } from '../redux/guiSlice'
 import { secondaryEnabled } from 'renderer/base/keyUtil'
 import {
@@ -169,6 +172,12 @@ function MappingHelpButton({
         <li>
           To type an exact position, enter values in the fields below the map.
           Typed values are not snapped to the grid.
+        </li>
+        <li>
+          To assign scene groups one fixture at a time, use{' '}
+          <strong>Groups…</strong> below the map. To bulk-assign from placement
+          (quadrants, even/odd, X/Y/Z strips), use{' '}
+          <strong>Smart groupings…</strong> in the mapping toolbar.
         </li>
         <li>
           To change how much room a fixture has to move, resize its outline
@@ -353,6 +362,8 @@ export default function FixturePlacement() {
   } | null>(null)
   const [snapGridFeet, setSnapGridFeet] = useState(STAGE_SNAP_GRID_FEET)
   const [fixtureGroupsModalOpen, setFixtureGroupsModalOpen] = useState(false)
+  const [smartGroupingsOpen, setSmartGroupingsOpen] = useState(false)
+  const universe = useDmxSelector((state) => state.universe)
   const groupsModalFixture = useDmxSelector((state) => {
     if (state.activeFixture === null) {
       return null
@@ -375,6 +386,7 @@ export default function FixturePlacement() {
   const availableFixtureGroups = useDmxSelector((state) =>
     getFixtureGroupPickerOptions(state.universe, state.fixtureTypesByID)
   )
+  const fixtureTypesByID = useDmxSelector((state) => state.fixtureTypesByID)
 
   function ensureAxisEnabled(index: number, axis: Axis) {
     const fixtureWindow = fixtureWindowByIndex.get(index)
@@ -727,9 +739,46 @@ export default function FixturePlacement() {
               ))}
             </SnapGridSelect>
           </SnapGridControl>
+          <Button
+            size="small"
+            variant="outlined"
+            data-tour="tour-smart-groupings"
+            onClick={() => setSmartGroupingsOpen(true)}
+            disabled={universe.length === 0}
+            title="Automatically assign fixtures to groups from their map positions"
+          >
+            Smart groupings…
+          </Button>
           <StageScaleControls compact showDepth={zDepthEnabled} />
         </TopControls>
       </TopRow>
+
+      <SmartFixtureGroupingsModal
+        open={smartGroupingsOpen}
+        universe={universe}
+        fixtureTypesById={fixtureTypesByID}
+        zDepthEnabled={zDepthEnabled}
+        onClose={() => setSmartGroupingsOpen(false)}
+        onApply={({ plan, addSplits, splitTarget }) => {
+          dispatch(
+            applyFixtureGroupAssignments({
+              assignments: plan.assignments.map((assignment) => ({
+                index: assignment.index,
+                groups: assignment.groups,
+              })),
+            })
+          )
+          if (addSplits && plan.createdGroups.length > 0) {
+            dispatch(
+              ensureSplitScenesForGroups({
+                groups: plan.createdGroups,
+                target: splitTarget,
+              })
+            )
+          }
+          setSmartGroupingsOpen(false)
+        }}
+      />
 
       <MappingScrollRegion>
         <MappingWidthFloor>
@@ -873,6 +922,8 @@ export default function FixturePlacement() {
                 fixtureLabel={groupsModalFixture.label}
                 selectedGroups={groupsModalFixture.groups}
                 availableGroups={availableFixtureGroups}
+                universe={universe}
+                fixtureTypesById={fixtureTypesByID}
                 onClose={() => setFixtureGroupsModalOpen(false)}
                 onSave={(groups) => {
                   dispatch(
@@ -1152,7 +1203,7 @@ const PadRoot = styled.div<{ $aspectRatio: number }>`
   min-height: 11rem;
   flex: 0 0 auto;
   background: #000a;
-  border: 1px solid #ffffff22;
+  border: 1px solid ${(props) => props.theme.colors.divider};
   border-radius: 0.2rem;
   overflow: hidden;
 `
@@ -1261,5 +1312,13 @@ const inspectorCompactFieldSx = {
   },
   '& .MuiInputLabel-root': {
     fontSize: '0.7rem',
+  },
+  '& .MuiInputLabel-root.MuiInputLabel-shrink': {
+    // Match theme floating-label fill so compact outlined labels never sit on the stroke.
+    paddingInline: '0.28rem',
+    marginInline: '-0.14rem',
+  },
+  '& .MuiOutlinedInput-notchedOutline legend': {
+    maxWidth: '100%',
   },
 } as const

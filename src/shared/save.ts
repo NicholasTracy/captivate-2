@@ -15,6 +15,8 @@ export interface ProfileGuiState {
   videoEnabled?: boolean
   fxtrDepthOn?: boolean
   ledSidebarEnabled?: boolean
+  /** Per named fixture-group max brightness (0–1). Missing = 1. */
+  groupIntensity?: { [groupName: string]: number }
 }
 
 export interface SaveState {

@@ -101,11 +101,22 @@ const MaskButton = styled.button<{ enabled: boolean }>`
   width: 2rem;
   height: 2rem;
   border-radius: 1rem;
-  border: 1px solid ${(props) => (props.enabled ? '#fff' : '#666')};
-  background: ${(props) => (props.enabled ? '#ffffff22' : '#00000055')};
-  color: ${(props) => (props.enabled ? '#fff' : '#aaa')};
+  border: 1px solid
+    ${(props) =>
+      props.enabled ? props.theme.colors.accent : props.theme.colors.divider};
+  background: ${(props) =>
+    props.enabled
+      ? props.theme.colors.accentMuted
+      : props.theme.colors.bg.panel};
+  color: ${(props) =>
+    props.enabled
+      ? props.theme.mode === 'light'
+        ? props.theme.colors.accent
+        : props.theme.colors.accent
+      : props.theme.colors.text.secondary};
   cursor: pointer;
   font-size: 0.65rem;
   line-height: 1;
   padding: 0;
+  box-shadow: ${(props) => props.theme.elevation.shadowSm};
 `

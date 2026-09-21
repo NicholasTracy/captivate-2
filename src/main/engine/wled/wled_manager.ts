@@ -9,6 +9,7 @@ import {
   pickPrimarySplitLayerForLed,
 } from '../../../shared/splitRandomizer'
 import { flatten_fixtures } from '../../../shared/dmxUtil'
+import { effectiveMasterForFixture } from '../../../shared/groupIntensity'
 import { EngineContext } from '../engineContext'
 import WledDevice from './wled_device'
 import { WledPixelTransportFormat } from './udp_buffer'
@@ -126,11 +127,16 @@ export default class WledManager {
 
           if (splitLayers.length > 0) {
             const placementDepth2DOnly = state.gui.fxtrDepthOn !== true
+            const ledMaster = effectiveMasterForFixture(
+              state.control.master,
+              fixture.groups,
+              state.control.groupIntensity
+            )
             const layers = splitLayers.map(({ params }) =>
               getLedValues(
                 params,
                 fixture,
-                state.control.master,
+                ledMaster,
                 placementDepth2DOnly
               )
             )
@@ -145,14 +151,18 @@ export default class WledManager {
                 splitScenes[primaryLayer.splitIndex],
                 ledFixtures,
                 flattenedFixtures,
-                fixture.id
+                fixture.id,
+                state.dmx.universe
               )
               if (randomizerContext !== null) {
                 combinedColors = applyLedRandomizerToColors(
                   combinedColors,
                   randomizerContext.state,
-                  randomizerContext.baseIndex,
-                  randomizerContext.randomize
+                  randomizerContext.slotIndex,
+                  randomizerContext.randomize,
+                  randomizerContext.chaseState,
+                  randomizerContext.chase,
+                  randomizerContext.chaseSlotIndex
                 )
               }
             }
@@ -189,8 +199,13 @@ export default class WledManager {
         }
 
         const placementDepth2DOnly = state.gui.fxtrDepthOn !== true
+        const ledMaster = effectiveMasterForFixture(
+          state.control.master,
+          fixture.groups,
+          state.control.groupIntensity
+        )
         const layers = splitLayers.map(({ params }) =>
-          getLedValues(params, fixture, state.control.master, placementDepth2DOnly)
+          getLedValues(params, fixture, ledMaster, placementDepth2DOnly)
         )
         const combinedColors = combineLedLayers(layers)
         if (combinedColors.length <= 0) {

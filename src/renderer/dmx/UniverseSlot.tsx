@@ -371,16 +371,22 @@ const Slot = styled.div`
   min-width: ${width}rem;
   margin-right: 0.3rem;
   margin-bottom: 0.3rem;
-  color: #fff8;
-  background-color: #2f2f2f;
+  color: ${(props) =>
+    props.theme.mode === 'light'
+      ? props.theme.colors.text.secondary
+      : 'rgba(255, 255, 255, 0.72)'};
+  background-color: ${(props) => props.theme.colors.bg.panel};
   display: flex;
   flex-direction: column;
   gap: 0.18rem;
-  border: 1px solid #fff8;
+  border: 1px solid ${(props) => props.theme.colors.divider};
   :hover {
-    border: 1px solid #fffc;
+    border-color: ${(props) =>
+      props.theme.mode === 'light'
+        ? 'rgba(0, 0, 0, 0.45)'
+        : 'rgba(255, 255, 255, 0.72)'};
     cursor: pointer;
-    color: #fffc;
+    color: ${(props) => props.theme.colors.text.primary};
   }
   box-sizing: border-box;
   position: relative;
@@ -398,7 +404,7 @@ const HeaderRow = styled.div`
 
 const AddressLabel = styled.div`
   font-size: 0.72rem;
-  color: #ffffffd8;
+  color: ${(props) => props.theme.colors.text.secondary};
   line-height: 1.1;
   min-width: 0;
 `
@@ -413,12 +419,13 @@ const RemoveButton = styled.button`
   border: 0;
   border-radius: 0.2rem;
   background: transparent;
-  color: #ffffffcc;
+  color: ${(props) => props.theme.colors.text.secondary};
   cursor: pointer;
 
   &:hover {
-    color: #fff;
-    background: #0006;
+    color: ${(props) => props.theme.colors.text.primary};
+    background: ${(props) =>
+      props.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.06)' : '#0006'};
   }
 `
 
@@ -436,7 +443,7 @@ const FixtureName = styled.div`
   font-weight: 600;
   line-height: 1.15;
   text-align: center;
-  color: #fffef2;
+  color: ${(props) => props.theme.colors.text.primary};
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -447,9 +454,9 @@ const NameInput = styled.input`
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: #090f1fdd;
-  color: #eef4ff;
-  border: 1px solid #ffffff55;
+  background: ${(props) => props.theme.colors.bg.raised};
+  color: ${(props) => props.theme.colors.text.primary};
+  border: 1px solid ${(props) => props.theme.colors.divider};
   border-radius: 0.2rem;
   padding: 0.08rem 0.22rem;
   font-size: 0.74rem;

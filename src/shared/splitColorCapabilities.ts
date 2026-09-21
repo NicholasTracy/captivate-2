@@ -13,7 +13,9 @@ import {
 } from './dmxFixtures'
 import { listColorMapSlots } from './dmxUtil'
 import type { SceneGroups } from './sceneGroups'
-import { evaluateSceneGroups } from './sceneGroups'
+import {
+  dmxFixtureMatchesSceneGroups,
+} from './sceneGroups'
 
 export type SplitColorControlMode = 'hsb' | 'colorWheelOnly' | 'colorWheelAndRgb'
 
@@ -120,24 +122,17 @@ export function getSplitColorCapabilities(
     const fixtureType = dmx.fixtureTypesByID[fixture.type]
     if (fixtureType === undefined) continue
 
-    const groupedFixture = new Set(
-      fixture.groups
-        .map((group) => group.trim())
-        .filter((group) => group.length > 0)
-    )
     const isAtmosFixture =
       typeof fixture.id === 'string' &&
       fixture.id.trim().length > 0 &&
       atmosFixtureIdSet.has(fixture.id)
     const isMoverFixture = isMoverFixtureType(fixtureType)
 
-    const matchesSplit = evaluateSceneGroups(splitGroups, (group) => {
-      const normalized = group.trim()
-      if (normalized.length <= 0) return false
-      if (normalized === 'Visualizer') return false
-      if (normalized === 'Movers') return isMoverFixture
-      if (normalized === 'Atmosphere') return isAtmosFixture
-      return groupedFixture.has(normalized)
+    const matchesSplit = dmxFixtureMatchesSceneGroups(splitGroups, {
+      fixtureGroups: fixture.groups,
+      fixtureTypeName: fixtureType.name,
+      isMover: isMoverFixture,
+      isAtmosphere: isAtmosFixture,
     })
     if (!matchesSplit) continue
 

@@ -361,7 +361,8 @@ export const StatusBarMeterTrack = styled.div`
   border: 1px solid ${(p) => p.theme.colors.divider};
   border-radius: 0.35rem;
   overflow: hidden;
-  background: ${(p) => p.theme.colors.bg.darker};
+  background: ${(p) =>
+    p.theme.mode === 'light' ? '#2a2a2a' : p.theme.colors.bg.darker};
   box-shadow: ${(p) => p.theme.elevation.insetDepth};
   flex: 0 0 auto;
 `
@@ -369,15 +370,16 @@ export const StatusBarMeterTrack = styled.div`
 export const StatusBarMeterSegment = styled.div<{ $active: number }>`
   flex: 1 0 0;
   align-self: stretch;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.98),
-    rgba(210, 210, 210, 0.9)
-  );
+  background: ${(p) =>
+    p.theme.mode === 'light'
+      ? 'linear-gradient(180deg, #f5f5f5 0%, #d0d0d0 100%)'
+      : 'linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(210, 210, 210, 0.9))'};
   opacity: ${(p) => Math.min(1, Math.max(0, p.$active))};
 
   & + & {
-    border-left: 1px solid ${(p) => p.theme.colors.bg.darker};
+    border-left: 1px solid
+      ${(p) =>
+        p.theme.mode === 'light' ? '#1a1a1a' : p.theme.colors.bg.darker};
   }
 `
 

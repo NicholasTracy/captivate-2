@@ -25,6 +25,7 @@ import {
   STATUS_BAR_CONTROL_HEIGHT,
   statusBarMuiIconButtonSx,
 } from './statusBarUi'
+import { TOUR_IDS } from '../tutorial/tourIds'
 
 export default function StatusBar() {
   const isEditing = useDeviceSelector((state) => state.isEditing)
@@ -50,15 +51,15 @@ export default function StatusBar() {
   )
 
   return (
-    <Root>
+    <Root data-tour-layer="statusbar">
       <LeftSection>
-        <StatusBarCluster>
+        <StatusBarCluster data-tour={TOUR_IDS.saveLoad}>
           <SaveLoad />
           <UndoRedo />
         </StatusBarCluster>
       </LeftSection>
       <CenterSection>
-        <StatusBarTransportCluster>
+        <StatusBarTransportCluster data-tour={TOUR_IDS.transport}>
           <StartStopButton />
           <TapTempo />
           <Bpm />
@@ -99,6 +100,7 @@ export default function StatusBar() {
           </IconButton>
           <AudioInputMenu />
           <IconButton
+            data-tour={TOUR_IDS.connections}
             title="Devices & output settings (DMX, Art-Net, MIDI, audio)"
             onClick={() => dispatch(setConnectionsMenu(!connectionMenu))}
             size="small"

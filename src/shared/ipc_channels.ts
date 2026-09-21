@@ -183,6 +183,9 @@ interface OpenSettings {
 interface GenerateScenes {
   type: 'generate-scenes'
 }
+interface StartInteractiveTutorial {
+  type: 'start-interactive-tutorial'
+}
 export type MainCommand =
   | Undo
   | Redo
@@ -200,3 +203,4 @@ export type MainCommand =
   | ClearRecentProjects
   | OpenSettings
   | GenerateScenes
+  | StartInteractiveTutorial

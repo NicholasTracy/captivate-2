@@ -97,7 +97,7 @@ const VerticalLabel = styled.div`
   text-orientation: mixed;
   font-size: 0.56rem;
   font-weight: 700;
-  color: #d7dff0;
+  color: ${(props) => props.theme.colors.text.secondary};
   letter-spacing: 0.01rem;
   user-select: none;
   line-height: 1;

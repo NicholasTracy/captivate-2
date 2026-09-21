@@ -113,25 +113,50 @@ const Root = styled.button<{ $active: boolean; $layout: 'default' | 'connections
   padding: 0.32rem 0.55rem 0.34rem 0.48rem;
   cursor: pointer;
   border-radius: 0.28rem;
-  border: 1px solid ${(p) => (p.$active ? '#ffffff55' : '#ffffff28')};
-  background: ${(p) => (p.$active ? '#2a4a66cc' : '#ffffff12')};
-  color: ${(p) => (p.$active ? '#f0f6ff' : '#ffffffcc')};
+  border: 1px solid
+    ${(p) =>
+      p.$active
+        ? p.theme.mode === 'light'
+          ? '#3a6ea8'
+          : '#ffffff55'
+        : p.theme.colors.divider};
+  background: ${(p) =>
+    p.$active
+      ? p.theme.mode === 'light'
+        ? 'rgba(58, 110, 168, 0.18)'
+        : '#2a4a66cc'
+      : p.theme.colors.bg.panel};
+  color: ${(p) =>
+    p.$active
+      ? p.theme.mode === 'light'
+        ? '#14365c'
+        : '#f0f6ff'
+      : p.theme.colors.text.primary};
   font: inherit;
   text-align: left;
   min-width: ${(p) => (p.$layout === 'connections' ? '0' : '4.6rem')};
   justify-content: ${(p) => (p.$layout === 'connections' ? 'center' : 'flex-start')};
   box-sizing: border-box;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
   transition:
     border-color 0.12s ease,
-    background 0.12s ease;
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 
   &:hover {
-    border-color: #ffffff66;
-    background: ${(p) => (p.$active ? '#335578cc' : '#ffffff1c')};
+    border-color: ${(p) =>
+      p.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.35)' : '#ffffff66'};
+    background: ${(p) =>
+      p.$active
+        ? p.theme.mode === 'light'
+          ? 'rgba(58, 110, 168, 0.28)'
+          : '#335578cc'
+        : p.theme.colors.bg.raised};
+    box-shadow: ${(p) => p.theme.elevation.shadowMd};
   }
 
   &:focus-visible {
-    outline: 2px solid #6fb0ff;
+    outline: 2px solid ${(p) => p.theme.colors.accent};
     outline-offset: 1px;
   }
 `
@@ -141,7 +166,12 @@ const StatusDot = styled.span<{ $active: boolean }>`
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 999rem;
-  background: ${(p) => (p.$active ? '#5cdb95' : '#ffffff35')};
+  background: ${(p) =>
+    p.$active
+      ? '#5cdb95'
+      : p.theme.mode === 'light'
+        ? 'rgba(0, 0, 0, 0.28)'
+        : '#ffffff35'};
   box-shadow: ${(p) =>
     p.$active ? '0 0 0 1px #00000055, 0 0 6px #5cdb9588' : 'none'};
 `

@@ -94,6 +94,11 @@ export interface GuiState {
   appDialog: AppDialogState | null
   aboutOpen: boolean
   settingsOpen: boolean
+  sceneGenerationWizardOpen: boolean
+  /** Spotlight / coach-mark interactive tutorial. */
+  interactiveTourActive: boolean
+  /** True after app settings have been loaded from disk at least once. */
+  appSettingsLoaded: boolean
   appSettings: AppSettings
   atmosManualTriggerNonceByFixtureId: { [fixtureId: string]: number | undefined }
   /** Laser editor (detached window) applies tool when this nonce bumps. */
@@ -129,6 +134,9 @@ export function initGuiState(): GuiState {
     appDialog: null,
     aboutOpen: false,
     settingsOpen: false,
+    sceneGenerationWizardOpen: false,
+    interactiveTourActive: false,
+    appSettingsLoaded: false,
     appSettings: { ...DEFAULT_APP_SETTINGS },
     atmosManualTriggerNonceByFixtureId: {},
     laserToolMidiRequest: null,
@@ -305,8 +313,21 @@ const guiSlice = createSlice({
     setSettingsOpen: (state, { payload }: PayloadAction<boolean>) => {
       state.settingsOpen = payload === true
     },
+    setSceneGenerationWizardOpen: (
+      state,
+      { payload }: PayloadAction<boolean>
+    ) => {
+      state.sceneGenerationWizardOpen = payload === true
+    },
+    setInteractiveTourActive: (state, { payload }: PayloadAction<boolean>) => {
+      state.interactiveTourActive = payload === true
+    },
+    setAppSettingsLoaded: (state, { payload }: PayloadAction<boolean>) => {
+      state.appSettingsLoaded = payload === true
+    },
     setAppSettings: (state, { payload }: PayloadAction<AppSettings>) => {
       state.appSettings = normalizeAppSettings(payload)
+      state.appSettingsLoaded = true
     },
     fireAtmosManualTrigger: (state, { payload }: PayloadAction<string>) => {
       const fixtureId = typeof payload === 'string' ? payload.trim() : ''
@@ -365,6 +386,9 @@ export const {
   hideAppDialog,
   setAboutOpen,
   setSettingsOpen,
+  setSceneGenerationWizardOpen,
+  setInteractiveTourActive,
+  setAppSettingsLoaded,
   setAppSettings,
   fireAtmosManualTrigger,
   clearAtmosManualTriggers,

@@ -246,7 +246,7 @@ const RootCritical = css`
 const Root = styled.div<{ $critical: boolean }>`
   position: relative;
   color: ${(props) => props.theme.colors.text.secondary};
-  border-top: 1px solid #383838;
+  border-top: 1px solid ${(props) => props.theme.colors.divider};
   padding: 0.3rem 0.6rem;
   user-select: text;
   background-color: ${(props) => props.theme.colors.bg.primary};

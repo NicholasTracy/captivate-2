@@ -30,6 +30,8 @@ import KeyboardMappingFocus from './base/KeyboardMappingFocus'
 import DetachedKeyboardMappingBar from './menu/DetachedKeyboardMappingBar'
 import AutoManagedSplitSync from './sync/AutoManagedSplitSync'
 import ProjectSaveLoadDialogs from './menu/ProjectSaveLoadDialogs'
+import InteractiveTour from './tutorial/InteractiveTour'
+import FirstRunTutorialPrompt from './tutorial/FirstRunTutorialPrompt'
 
 export default function App() {
   useGlobalControlTooltips()
@@ -173,6 +175,8 @@ export default function App() {
         </Col>
         <FullscreenOverlay />
         <ProjectSaveLoadDialogs />
+        <InteractiveTour />
+        <FirstRunTutorialPrompt />
       </ErrorBoundary>
     </Root>
   )

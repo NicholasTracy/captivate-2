@@ -77,6 +77,8 @@ export interface MoverPreviewFixture {
   isLedFixture?: boolean
   ledFixtureIndex?: number
   groups: string[]
+  /** Fixture-type label from the fixture manager (virtual type-group match). */
+  fixtureTypeName?: string
   groupName: string
   xPos: number
   yPos: number

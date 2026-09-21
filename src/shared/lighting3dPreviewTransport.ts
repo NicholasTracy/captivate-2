@@ -1,6 +1,7 @@
 import type { TimeState } from './TimeState'
 import type { Params } from './params'
 import type { RandomizerState } from './randomizer'
+import type { ChaseState } from './chase'
 
 /** Slim realtime payload for the Lighting 3D preview window (no atmospherics/audio bulk). */
 export type Lighting3dRealtimeTick = {
@@ -11,6 +12,7 @@ export type Lighting3dRealtimeTick = {
     | {
         outputParams: Params
         randomizer: RandomizerState
+        chase: ChaseState
       }
     | undefined
   >
@@ -22,7 +24,7 @@ export type Lighting3dRealtimeSlice = {
   time: TimeState
   dmxOutByUniverse: number[][]
   splitStates: Array<
-    | { outputParams: Params; randomizer: RandomizerState }
+    | { outputParams: Params; randomizer: RandomizerState; chase: ChaseState }
     | undefined
   >
 }

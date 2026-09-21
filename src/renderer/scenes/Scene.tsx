@@ -103,7 +103,14 @@ export function Scene({ sceneType, index, id }: Props) {
 
   const rootStyle: React.CSSProperties = {
     backgroundColor: sceneType === 'light' ? getColor(epicness) : undefined,
-    color: isActive ? '#fffc' : undefined,
+    // Colored light-scene bars keep high-contrast light text; visual scenes
+    // inherit theme text so White theme stays readable.
+    color:
+      sceneType === 'light'
+        ? isActive
+          ? 'rgba(255, 255, 255, 0.94)'
+          : undefined
+        : undefined,
   }
 
   return (
@@ -171,9 +178,9 @@ export function Scene({ sceneType, index, id }: Props) {
                 </Column>
               ) : (
                 <>
-                  <div style={{ color: autoEnabled ? '#fff' : 'fff7' }}>
+                  <SceneName $lightBar={sceneType === 'light'} $muted={!autoEnabled}>
                     {name}
-                  </div>
+                  </SceneName>
                   <div style={{ flex: '1 0 0' }} />
                   {!autoEnabled && <DisableIcon fontSize="small" />}
                   <IconButton
@@ -213,7 +220,7 @@ export function NewScene({ sceneType }: { sceneType: SceneType }) {
   }
 
   return (
-    <NewSceneRoot>
+    <NewSceneRoot data-tour={sceneType === 'light' ? 'tour-add-scene' : undefined}>
       <IconButton onClick={onNew} title="Add a new blank light scene">
         <AddIcon />
       </IconButton>
@@ -259,12 +266,14 @@ const Root = styled.div<{ $isActive?: boolean; $isCued?: boolean }>`
   box-sizing: border-box;
   border: 1px solid ${(props) => props.theme.colors.divider};
   background-color: ${(props) => props.theme.colors.bg.lighter};
+  box-shadow: ${(props) => props.theme.elevation.shadowSm};
   height: 3.4rem;
 
   ${(p) =>
     p.$isActive &&
     css`
-      border: 2px solid ${p.theme.colors.text.primary};
+      border: 2px solid ${p.theme.colors.accent};
+      box-shadow: ${p.theme.elevation.shadowMd};
     `}
 
   ${(p) =>
@@ -277,6 +286,7 @@ const Root = styled.div<{ $isActive?: boolean; $isCued?: boolean }>`
   :hover {
     border: 1px solid;
     cursor: pointer;
+    box-shadow: ${(props) => props.theme.elevation.shadowMd};
   }
 `
 
@@ -286,6 +296,18 @@ const Number = styled.div`
   margin-left: -0.3rem;
   margin-right: 1rem;
   text-align: right;
+`
+
+const SceneName = styled.div<{ $lightBar: boolean; $muted: boolean }>`
+  color: ${(p) =>
+    p.$lightBar
+      ? p.$muted
+        ? 'rgba(255, 255, 255, 0.47)'
+        : '#ffffff'
+      : p.$muted
+        ? p.theme.colors.text.secondary
+        : p.theme.colors.text.primary};
+  opacity: ${(p) => (p.$lightBar ? 1 : p.$muted ? 0.55 : 1)};
 `
 
 const Column = styled.div`

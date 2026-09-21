@@ -20,7 +20,6 @@ export default function LedFixtureList({}: Props) {
         <LedFixtureDefinition key={i} index={i} />
       ))}
       <IconButton
-        style={{ color: '#fff' }}
         onClick={() => {
           dispatch(addLedFixture())
         }}

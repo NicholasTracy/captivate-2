@@ -31,8 +31,39 @@ export function isNewPeriod(
   beatsNow: Beats,
   period: Beats
 ) {
-  const beatDelta = beatsNow - beatsLast
-  return beatsNow % period < beatDelta
+  if (!Number.isFinite(period) || period <= 0) {
+    return false
+  }
+  if (!Number.isFinite(beatsNow) || !Number.isFinite(beatsLast)) {
+    return false
+  }
+  if (!(beatsNow - beatsLast > 0)) {
+    return false
+  }
+  // Floor division (not `%`) so a negative phase-shifted clock still
+  // crosses period boundaries once, in the right direction.
+  return Math.floor(beatsNow / period) !== Math.floor(beatsLast / period)
+}
+
+/**
+ * Shift a beat clock by a split phase offset. Same sign as LFO
+ * `effectiveBeats` (`beats + phaseOffsetBeats`).
+ */
+export function beatsWithPhaseOffset(
+  beats: Beats,
+  phaseOffsetBeats: number | undefined
+): Beats {
+  if (!Number.isFinite(beats)) {
+    return beats
+  }
+  if (
+    phaseOffsetBeats === undefined ||
+    !Number.isFinite(phaseOffsetBeats) ||
+    phaseOffsetBeats === 0
+  ) {
+    return beats
+  }
+  return beats + phaseOffsetBeats
 }
 
 export function beatsIn(
@@ -55,8 +86,8 @@ export class PeriodTracker {
     this.beatsLast = Date.now()
   }
   isNewPeriod(beats: Beats, targetPeriod: Beats) {
-    const beatDelta = beats - this.beatsLast
+    const previous = this.beatsLast
     this.beatsLast = beats
-    return beats % targetPeriod < beatDelta
+    return isNewPeriod(previous, beats, targetPeriod)
   }
 }

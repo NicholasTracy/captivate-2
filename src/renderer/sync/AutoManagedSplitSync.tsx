@@ -17,6 +17,7 @@ import {
 import { universeHasMovers } from '../../shared/dmxFixtures'
 import { listAtmosFxtrs, universeHasAtmospherics } from '../../shared/atmosphericsMapping'
 import { LightScene_t, SplitScene_t } from '../../shared/Scenes'
+import { normalizeChaseOptions } from '../../shared/chase'
 import { isDedicatedGroupSplit } from '../scenes/splitUiVisibility'
 import { collectLaserLightingGroupNames } from '../laser/laserSplitLink'
 
@@ -52,6 +53,7 @@ function createSplitSnapshot(
     splitScene: {
       baseParams: { ...splitScene.baseParams },
       randomizer: { ...splitScene.randomizer },
+      chase: { ...(splitScene.chase ?? normalizeChaseOptions({})) },
       groups: { ...splitScene.groups },
       ...(splitScene.splitModShaping !== undefined
         ? { splitModShaping: { ...splitScene.splitModShaping } }

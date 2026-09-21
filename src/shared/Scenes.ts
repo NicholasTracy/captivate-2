@@ -6,11 +6,13 @@ import {
   type SplitModShaping,
 } from './modulation'
 import { RandomizerOptions, initRandomizerOptions } from './randomizer'
+import { ChaseOptions, initChaseOptions } from './chase'
 import { nanoid } from 'nanoid'
 import {
   LayerConfig,
   initLayerConfig,
 } from '../visualizer/threejs/layers/LayerConfig'
+import { ALL_GROUP_NAME } from './fixtureGroups'
 
 export interface SceneBase {
   name: string
@@ -30,6 +32,8 @@ export interface SplitScene_t {
    */
   splitModShaping?: SplitModShaping
   randomizer: RandomizerOptions
+  /** Sequential fixture/pixel chase (same slot bank as randomizer). */
+  chase: ChaseOptions
   // true = include group | false = include not group
   groups: { [key: string]: boolean | undefined }
 }
@@ -38,7 +42,9 @@ export function initSplitScene(): SplitScene_t {
   return {
     baseParams: initBaseParams(),
     randomizer: initRandomizerOptions(),
-    groups: {},
+    chase: initChaseOptions(),
+    // First / new splits target every fixture via virtual All.
+    groups: { [ALL_GROUP_NAME]: true },
   }
 }
 

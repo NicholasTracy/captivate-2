@@ -67,6 +67,14 @@ export function formatSplitGroupsLabel(
       entry[0].trim().length > 0
   )
   if (entries.length === 0) return 'all'
+  // Sole include of virtual All → same friendly label as empty filter.
+  if (
+    entries.length === 1 &&
+    entries[0]![1] === true &&
+    entries[0]![0].trim().toLowerCase() === 'all'
+  ) {
+    return 'all'
+  }
   return entries
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([group, include]) => `${include === false ? 'not ' : ''}${group}`)

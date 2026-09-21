@@ -14,7 +14,7 @@ import { SliderMidiOverlay } from '../base/MidiOverlay'
 import { makeSetBaseParamAction } from '../redux/deviceState'
 import type { CSSProperties } from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import styled from 'styled-components'
+import styled, { useTheme } from 'styled-components'
 
 interface Props {
   param: DefaultParam | string
@@ -184,17 +184,19 @@ const CornerRemoveButton = styled.button`
   height: 1rem;
   line-height: 0.86rem;
   border-radius: 999px;
-  border: 1px solid #ffffff44;
-  background: #101521f0;
-  color: #cfd5e4;
+  border: 1px solid ${(p) => p.theme.colors.divider};
+  background: ${(p) => p.theme.colors.bg.raised};
+  color: ${(p) => p.theme.colors.text.secondary};
   font-size: 0.62rem;
   cursor: pointer;
   padding: 0;
   margin: 0;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 
   :hover {
-    color: #fff;
-    border-color: #ffffff77;
+    color: ${(p) => p.theme.colors.text.primary};
+    border-color: ${(p) =>
+      p.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.4)' : '#ffffff77'};
   }
 `
 
@@ -215,12 +217,13 @@ const DegreeTick = styled.span`
   line-height: 1;
   font-weight: 500;
   letter-spacing: 0.01em;
-  color: #9aa3b8;
+  color: ${(p) => p.theme.colors.text.secondary};
   white-space: nowrap;
   user-select: none;
 `
 
 function VerticalSplitLabel({ text }: { text: string }) {
+  const theme = useTheme()
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const tickerRef = useRef<HTMLDivElement | null>(null)
   const [overflowPx, setOverflowPx] = useState(0)
@@ -306,8 +309,9 @@ function VerticalSplitLabel({ text }: { text: string }) {
             fontWeight: 600,
             lineHeight: 1,
             letterSpacing: '0.015em',
-            color: '#eef4ff',
-            textShadow: '0 0 0.3rem #000b',
+            color: theme.colors.text.primary,
+            textShadow:
+              theme.mode === 'light' ? 'none' : '0 0 0.3rem rgba(0, 0, 0, 0.7)',
             willChange: overflowPx > 1 ? 'transform' : 'auto',
           }}
         >

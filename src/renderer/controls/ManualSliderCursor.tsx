@@ -206,7 +206,8 @@ const MenuButton = styled.button<{ $active: boolean }>`
   font: inherit;
 
   &:hover {
-    background: #ffffff12;
+    background: ${(p) =>
+      p.theme.mode === 'light' ? 'rgba(0, 0, 0, 0.06)' : '#ffffff12'};
   }
 `
 

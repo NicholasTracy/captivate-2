@@ -23,7 +23,10 @@ export default function SceneSelection({
   const canReweightScenes = sceneCount > 1
 
   return (
-    <Root $flatten={flattenScroll}>
+    <Root
+      $flatten={flattenScroll}
+      data-tour={sceneType === 'light' ? 'tour-light-scenes' : undefined}
+    >
       <Header>
         <TitleCluster>
           {`${sceneType === 'light' ? 'Light' : 'Visual'} Scenes`}

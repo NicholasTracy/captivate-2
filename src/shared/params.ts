@@ -21,6 +21,7 @@ export type DefaultParam =
   | 'strobeAmber'
   | 'strobeUv'
   | 'randomize'
+  | 'chase'
   | 'xAxis'
   | 'yAxis'
   | 'xMirror'
@@ -98,6 +99,7 @@ export function initParams(): { [key in DefaultParam]: number } {
     strobeAmber: 1.0,
     strobeUv: 1.0,
     randomize: 1.0,
+    chase: 1.0,
     xAxis: 0.5,
     yAxis: 0.5,
     xMirror: 0.0,
@@ -145,6 +147,7 @@ const defaultParams: { [key in DefaultParam]: number } = {
   strobeAmber: 1.0,
   strobeUv: 1.0,
   randomize: 0.0,
+  chase: 0.0,
   xAxis: 0.5,
   yAxis: 0.5,
   xMirror: 0.0,
@@ -252,6 +255,7 @@ export const defaultParamsList: DefaultParam[] = [
   'intensity',
   'strobe',
   'randomize',
+  'chase',
   'xAxis',
   'yAxis',
   'moverSpread',
@@ -285,6 +289,8 @@ const paramDisplayNames: { [key: string]: string } = {
   z: 'Z',
   depth: 'Depth',
   positionFeather: 'Feather',
+  randomize: 'Randomize',
+  chase: 'Chase',
   xAxis: 'Pan',
   yAxis: 'Tilt',
   xMirror: 'Pan Mirror',

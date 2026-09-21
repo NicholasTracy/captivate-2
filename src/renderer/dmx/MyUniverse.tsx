@@ -100,7 +100,7 @@ export default function MyUniverse() {
   })
 
   return (
-    <Root>
+    <Root data-tour="tour-universe-map">
       <HeaderRow>
         <TitleCluster>
           <Header>Patching</Header>

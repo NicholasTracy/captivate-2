@@ -1,5 +1,5 @@
 import Slider from '../base/Slider'
-import styled from 'styled-components'
+import styled, { useTheme } from 'styled-components'
 import { useDispatch } from 'react-redux'
 import { useControlSelector, useDeviceSelector } from '../redux/store'
 import { useRealtimeSelector } from '../redux/realtimeStore'
@@ -17,6 +17,7 @@ import { normalizeAudioInputSettings } from '../../shared/audioEngine'
 import { AutoSceneHelpButton, EnergyMatchHelpButton } from './sceneHelpButtons'
 
 export default function AutoScene({ sceneType }: { sceneType: SceneType }) {
+  const theme = useTheme()
   const dispatch = useDispatch()
   const { enabled, epicness, period, energyMatchEnabled, matchAudioEnergy } =
     useControlSelector((control) => control[sceneType].auto)
@@ -86,8 +87,14 @@ export default function AutoScene({ sceneType }: { sceneType: SceneType }) {
         onChange={onPeriodChange}
         title="Beats to wait before switching to the next scene"
         style={{
-          backgroundColor: '#0005',
-          color: enabled ? '#fff' : '#fff5',
+          backgroundColor: theme.colors.bg.panel,
+          color: enabled
+            ? theme.colors.text.primary
+            : theme.colors.text.secondary,
+          border: `1px solid ${theme.colors.divider}`,
+          borderRadius: '0.3rem',
+          boxShadow: theme.elevation.shadowSm,
+          opacity: enabled ? 1 : 0.65,
         }}
       />
       {showEnergyMode && (
@@ -177,8 +184,19 @@ const Button = styled.div<{ $enabled: boolean }>`
   font-size: 0.9rem;
   flex-shrink: 0;
   border: 1px solid ${(p) => p.theme.colors.divider};
-  background-color: ${(p) => (p.$enabled ? '#3d5a3d' : p.theme.colors.bg.panel)};
-  color: ${(p) => (p.$enabled ? '#ececec' : p.theme.colors.button.text)};
+  background-color: ${(p) =>
+    p.$enabled
+      ? p.theme.mode === 'light'
+        ? '#c8e6c8'
+        : '#3d5a3d'
+      : p.theme.colors.bg.panel};
+  color: ${(p) =>
+    p.$enabled
+      ? p.theme.mode === 'light'
+        ? '#143214'
+        : '#ececec'
+      : p.theme.colors.button.text};
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `
 
 const EnergyModeToggle = styled.button<{ $active: boolean }>`
@@ -191,9 +209,19 @@ const EnergyModeToggle = styled.button<{ $active: boolean }>`
   border: 1px solid
     ${(p) => (p.$active ? '#7dff9d' : p.theme.colors.divider)};
   background: ${(p) =>
-    p.$active ? '#7dff9d40' : p.theme.colors.bg.panel};
-  color: ${(p) => (p.$active ? '#dfffec' : p.theme.colors.button.text)};
+    p.$active
+      ? p.theme.mode === 'light'
+        ? '#d8ffe4'
+        : '#7dff9d40'
+      : p.theme.colors.bg.panel};
+  color: ${(p) =>
+    p.$active
+      ? p.theme.mode === 'light'
+        ? '#0f3d1c'
+        : '#dfffec'
+      : p.theme.colors.button.text};
   white-space: nowrap;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `
 
 const AudioMatchToggle = styled.button<{ $active: boolean }>`
@@ -205,9 +233,20 @@ const AudioMatchToggle = styled.button<{ $active: boolean }>`
   cursor: pointer;
   border: 1px solid
     ${(p) => (p.$active ? '#ffd36f' : p.theme.colors.divider)};
-  background: ${(p) => (p.$active ? '#ffd36f45' : p.theme.colors.bg.panel)};
-  color: ${(p) => (p.$active ? '#fff3d0' : p.theme.colors.button.text)};
+  background: ${(p) =>
+    p.$active
+      ? p.theme.mode === 'light'
+        ? '#fff0c8'
+        : '#ffd36f45'
+      : p.theme.colors.bg.panel};
+  color: ${(p) =>
+    p.$active
+      ? p.theme.mode === 'light'
+        ? '#5a4200'
+        : '#fff3d0'
+      : p.theme.colors.button.text};
   white-space: nowrap;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `
 
 const EnergyMeterHost = styled.div`

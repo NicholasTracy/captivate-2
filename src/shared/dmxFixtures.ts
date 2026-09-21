@@ -4080,6 +4080,13 @@ export type FlattenedFixture = {
   groups: string[]
   fixtureId?: string
   fixtureTypeId?: string
+  /** Display name of the fixture type (auto type-group matching). */
+  fixtureTypeName?: string
+  /**
+   * Index into `FixtureType.subFixtures` when this flatten row is one cell of a
+   * multi-cell bar. Omitted for whole-fixture / residual channel rows.
+   */
+  subFixtureIndex?: number
   moverGroup?: string
   moverCalibration?: MoverCalibration
   moverBounds?: MoverBounds

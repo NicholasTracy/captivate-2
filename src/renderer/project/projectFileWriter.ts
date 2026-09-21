@@ -35,6 +35,7 @@ export async function buildProjectSaveState(
     videoEnabled: state.gui.videoEnabled,
     fxtrDepthOn: state.gui.fxtrDepthOn,
     ledSidebarEnabled: state.gui.ledSidebarEnabled,
+    groupIntensity: control.groupIntensity,
   }
 
   const visualizerStreamingSettings =

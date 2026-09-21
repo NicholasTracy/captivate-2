@@ -111,7 +111,7 @@ export default function MyFixtures() {
   }
 
   return (
-    <Root>
+    <Root data-tour="tour-fixtures">
       <Header>
         <TitleRow>
           <Title>Fixtures</Title>
@@ -122,7 +122,7 @@ export default function MyFixtures() {
         {elements}
         <AddRow>
           <IconButton
-            style={{ color: '#fff' }}
+            data-tour="tour-add-fixture"
             onClick={() => {
               setIsPopup(true)
             }}
@@ -150,6 +150,7 @@ export default function MyFixtures() {
       </ListFooter>
       {isPopup && (
         <Popup
+          dataTour="tour-add-fixture-popup"
           title={
             <PopupTitleRow>
               <span>Add Fixture</span>

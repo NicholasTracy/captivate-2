@@ -796,6 +796,7 @@ function Lighting3DViewport({
           ...existing,
           outputParams: incoming.outputParams,
           randomizer: incoming.randomizer,
+          chase: incoming.chase ?? existing.chase,
         }
       }) as RealtimeState['splitStates']
       dmxOutByUniverseRef.current = tick.dmxOutByUniverse

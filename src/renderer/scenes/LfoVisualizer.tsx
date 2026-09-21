@@ -5,6 +5,7 @@ import { incrementModulator } from '../redux/controlSlice'
 import { useActiveLightScene } from '../redux/store'
 import { secondaryEnabled } from 'renderer/base/keyUtil'
 import { useLfoAudioMetrics, useLfoBeats } from '../redux/realtimeSelectors'
+import { beatsWithPhaseOffset } from '../../shared/TimeState'
 import { effectiveLfosAtSplit, getModulatorLfoValue } from '../../shared/modulation'
 import { LfoShape } from '../../shared/oscillator'
 import { useModPreviewSplit } from './useModPreviewSplit'
@@ -60,6 +61,9 @@ function LfoVisualizer({
   const splitIx = useModPreviewSplit()
   const beats = useLfoBeats()
   const audio = useLfoAudioMetrics()
+  const phaseOff =
+    lightScene.splitScenes[splitIx]?.splitModShaping?.phaseOffsetBeats
+  const clock = beatsWithPhaseOffset(beats, phaseOff)
   const effectiveLfo = useMemo(() => {
     const lfos = effectiveLfosAtSplit(
       lightScene,
@@ -72,7 +76,7 @@ function LfoVisualizer({
   const isAudioShape =
     modulator.lfo.shape === LfoShape.AudioBand ||
     modulator.lfo.shape === LfoShape.AudioEnergy
-  const audioValue = getModulatorLfoValue(effectiveLfo, beats, audio, index, {
+  const audioValue = getModulatorLfoValue(effectiveLfo, clock, audio, index, {
     splitIndex: splitIx,
   })
 
@@ -110,13 +114,13 @@ function LfoVisualizer({
       plotHeight,
       isAudioShape,
       waveSamples,
-      beats,
+      beats: clock,
       audioValue,
       audioHistory: audioHistoryRef.current,
     })
   }, [
     audioValue,
-    beats,
+    clock,
     height,
     isAudioShape,
     plotHeight,

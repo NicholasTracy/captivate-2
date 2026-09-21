@@ -567,9 +567,8 @@ export function isAudioLfoShape(shape: LfoShape): boolean {
 
 /**
  * LFO definitions after applying `intermod:lfo:*` routes for one split (same rules as the
- * DMX engine). Wave LFO source values use the split's phase-offset clock when present.
- * Audio LFO sources are peeked (no envelope advance) on the true beat clock so phase
- * offsets and a later effective-LFO sample cannot corrupt shared envelope state.
+ * DMX engine). Every beat-locked sample for this split — wave LFOs and audio
+ * envelope time — uses the split's phase-offset clock.
  */
 export function effectiveLfosAtSplit(
   scene: LightSceneLike,
@@ -582,20 +581,17 @@ export function effectiveLfosAtSplit(
   const effectiveBeats =
     beats + (Number.isFinite(phaseOff) ? Number(phaseOff) : 0)
 
-  const sourceLfoValues = scene.modulators.map((modulator, sourceIndex) => {
-    if (isAudioLfoShape(modulator.lfo.shape)) {
-      return getModulatorLfoValue(modulator.lfo, beats, audioInput, sourceIndex, {
-        advance: false,
-        splitIndex,
-      })
-    }
-    return getModulatorLfoValue(
+  const sourceLfoValues = scene.modulators.map((modulator, sourceIndex) =>
+    getModulatorLfoValue(
       modulator.lfo,
       effectiveBeats,
       audioInput,
-      sourceIndex
+      sourceIndex,
+      isAudioLfoShape(modulator.lfo.shape)
+        ? { advance: false, splitIndex }
+        : undefined
     )
-  })
+  )
   const effectiveLfos = scene.modulators.map((modulator) => cloneLfo(modulator.lfo))
   const bandBounds = getAudioBandCutoffSliderBounds(audioInput.nyquistHz)
 
@@ -681,14 +677,11 @@ export function getOutputParams(
 
   const snapshots: ModSnapshot[] = scene.modulators.map((modulator, index) => {
     const lfo = effectiveLfos[index]
-    // Audio envelopes advance once per split on the true beat clock (never phase-shifted).
-    // Wave LFOs keep the split phase-offset clock.
-    let lfoVal = isAudioLfoShape(lfo.shape)
-      ? getModulatorLfoValue(lfo, beats, audioInput, index, {
-          advance: true,
-          splitIndex,
-        })
-      : getModulatorLfoValue(lfo, effectiveBeats, audioInput, index)
+    // Audio envelopes and wave LFOs share this split's phase-offset beat clock.
+    let lfoVal = getModulatorLfoValue(lfo, effectiveBeats, audioInput, index, {
+      advance: true,
+      splitIndex: isAudioLfoShape(lfo.shape) ? splitIndex : undefined,
+    })
     lfoVal = applySplitModShapingToLfoVal(lfoVal, shaping)
     return {
       modulation: modulator.splitModulations[splitIndex],

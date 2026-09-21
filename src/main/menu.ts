@@ -417,7 +417,15 @@ export default class MenuBuilder {
           },
         },
         {
-          label: 'Tutorials',
+          label: 'Interactive Tutorial',
+          click: () => {
+            this.res.ipcCallbacks.send_main_command({
+              type: 'start-interactive-tutorial',
+            })
+          },
+        },
+        {
+          label: 'Online Tutorials',
           click() {
             shell.openExternal(CAPTIVATE_WIKI_HOME)
           },
@@ -590,6 +598,20 @@ export default class MenuBuilder {
             label: 'GitHub Issues',
             click() {
               shell.openExternal(CAPTIVATE_GITHUB_ISSUES_URL)
+            },
+          },
+          {
+            label: 'Interactive Tutorial',
+            click: () => {
+              this.res.ipcCallbacks.send_main_command({
+                type: 'start-interactive-tutorial',
+              })
+            },
+          },
+          {
+            label: 'Online Tutorials',
+            click() {
+              shell.openExternal(CAPTIVATE_WIKI_HOME)
             },
           },
           {

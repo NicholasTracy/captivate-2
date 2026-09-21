@@ -1,31 +1,27 @@
 # Scene generation
 
-Extras menu command that replaces all light scenes with a fresh set tailored to
-the patched DMX rig. Visual scenes are never modified.
+Extras menu wizard that builds a rig-tailored set of light scenes (beat, audio,
+spatial, mover showcases). Visual scenes are never modified. By default scenes
+are **appended** to whatever light scenes already exist; replace is opt-in.
 
 ## Intent
 
-Use this when you want a full show-ready light-scene ladder for the current
-fixture layout (zones, groups, movers, strobe) instead of hand-building every
-scene. It is destructive for light scenes; treat it like a regenerate, not a
-merge.
+Use this to bootstrap or expand a show-ready light-scene ladder for the current
+fixture layout instead of hand-building every scene. Generation is seeded and
+pseudo-random within recipe bands, customized via `analyzeRigProfile`.
 
 ## Usage
 
 1. Patch fixtures and assign groups / window positions as needed.
 2. Choose **Extras → Generate Scenes…**.
-3. Review the confirm dialog (rig summary + danger warning).
-4. Click **Generate**. A status toast reports how many light scenes were created.
+3. Walk the wizard:
+   - **Rig** — summary of fixtures, groups, movers, strobe, gobo/prism flags
+   - **How many** — scene count + calm ↔ peak energy bias
+   - **Look & feel** — beat / audio / spatial / mover / peak-strobe toggles
+   - **Generate** — Append (default) or Replace; optional seed
+4. Confirm. A status toast reports how many scenes were added or replaced.
 
-There is no options dialog: no seed picker, scene count, or recipe UI. Cancel
-leaves the project unchanged.
-
-### Confirm summary
-
-The dialog reports patched fixture count (or “No fixtures are patched yet”), up
-to four usable group names, and whether movers / atmosphere were detected.
-Atmosphere appears in the summary only; it does **not** change generated scene
-content (atmospherics still use their own runtime path).
+Cancel leaves the project unchanged.
 
 ## Architecture
 
@@ -35,114 +31,190 @@ Extras → "Generate Scenes…"
   → IPC main_command
   → focused renderer window
   → runGenerateScenesFromMenu()
-       analyzeRigProfile(dmx.present)
-       openAppConfirm("Generate Scenes?")
-       generateLightScenesForRig(rig, { seed: Date.now(), preserveAuto })
-       dispatch resetLightScenes(generated)
+       setSceneGenerationWizardOpen(true)
+  → SceneGenerationWizard
+       analyzeRigProfile → generateLightScenesForRig(options)
+       mergeGeneratedLightScenes(existing, generated, { mode })
+       dispatch resetLightScenes(merged)
 ```
 
 | Layer | Path |
 |-------|------|
 | Menu | `src/main/menu.ts` (`Extras` → `Generate Scenes…`) |
-| IPC command | `generate-scenes` on `main_command` (`src/shared/ipc_channels.ts`) |
+| IPC command | `generate-scenes` on `main_command` |
 | Renderer handler | `src/renderer/index.tsx` |
-| UI glue | `src/renderer/sceneGeneration/runGenerateScenesFromMenu.ts` |
+| Menu glue | `src/renderer/sceneGeneration/runGenerateScenesFromMenu.ts` |
+| Wizard UI | `src/renderer/sceneGeneration/SceneGenerationWizard.tsx` |
 | Generator API | `src/shared/sceneGeneration/generateLightScenes.ts` |
+| Options / capabilities | `src/shared/sceneGeneration/sceneGenerationOptions.ts` |
+| Append / replace | `src/shared/sceneGeneration/mergeGeneratedLightScenes.ts` |
 | Recipes / ladder | `src/shared/sceneGeneration/generateLightScenesInternals.ts` |
 | Rig analysis | `src/shared/sceneGeneration/rigProfile.ts` |
-| Default save path | `src/shared/sceneGeneration/generateDefaultLightScenes.ts` |
-| Public exports | `src/shared/sceneGeneration/index.ts` |
+| Docs | this file |
+
+## Options framework
+
+`GenerateLightScenesOptions` supports:
+
+| Option | Role |
+|--------|------|
+| `seed` | Deterministic RNG |
+| `sceneCount` | Target scene count (4–48); omit for full ladder |
+| `epicnessBias` | 0 calm … 1 peak sampling when count &lt; full ladder |
+| `look` | Beat / audio / spatial / mover / strobe toggles |
+| `look.enhancements` | Opt-in flags for **future** recipes |
+| `preserveAuto` | Keep project auto-scene settings |
+
+### Capabilities (extension points)
+
+Recipes should gate features through `resolveSceneGenerationCapabilities` /
+`capabilityActive`, not ad-hoc booleans. Each capability has:
+
+- `available` — rig + wizard prefs allow it
+- `implemented` — recipe code actually uses it today
+
+| Capability | Implemented today | Notes |
+|------------|-------------------|--------|
+| movers / strobe / spatial / beat / audio | yes | Look toggles |
+| moverKinematics | **no** | Scaffold for group kinematics-aware aiming |
+| moverAiming | **no** | Scaffold for bounds / Spot Wizard awareness |
+| gobo / prism / colorMap | **partial** | Detected on rig; colorMap follows hue/sat (do not stamp open/white `colorWheel`) |
+| atmosphere / led | **no** | Separate runtime paths today |
+
+When adding kinematics or gobo/prism recipes later: flip `implemented: true` on
+the capability and teach recipes to call `capabilityActive(...)`.
 
 ## What is replaced / preserved
 
 | State | Behavior |
 |-------|----------|
-| Light scenes (`control.light`) | Fully replaced via `resetLightScenes` |
+| Light scenes | Append (default) or full replace via wizard mode |
 | Visual scenes | Untouched |
-| Auto-scene settings (`light.auto`) | Preserved from the current project |
+| Auto-scene settings | Preserved from the current project |
 | Per-scene `autoEnabled` | Set `true` on every generated scene |
-| Active scene | First id after sort by ascending `epicness` |
-| Scene ids / names | New `nanoid()` ids; random `"Adj Noun"` names |
-
-Default `auto` when `preserveAuto` is omitted (API / default-save):
-
-```ts
-{ enabled: false, epicness: 0.5, period: 8, energyMatchEnabled: true, matchAudioEnergy: true }
-```
+| Active scene | Kept on append; first id after epicness sort on replace |
+| Scene ids / names | New `nanoid()` ids; descriptive recipe titles (flavor prefix only on collisions) |
 
 ## Generated content
 
-| Set | Count | When |
-|-----|-------|------|
-| Core epicness ladder | **31** scenes (`EPICNESS_LADDER` from `0.03` … `1`) | Always |
-| Mover showcases | **6** scenes | Only if the rig has movers |
+Without a scene-count override, generation builds a **deterministic** epicness
+ladder (~31 core recipes — seed only jitters palette within look families, not
+which recipe runs), plus chase showcases when spatial is on, plus up to 6 mover
+showcases when movers + look.moverShowcases are on. With a count, the ladder is
+subsampled (bias-weighted) and a fraction of the budget is reserved for chase
+and mover showcases.
 
-Menu runs therefore produce **31** or **37** light scenes. Scenes are sorted by
-`epicness` before commit. Recipes build modulators (LFO, beat, audio band,
-energy, director, noise) and split scenes (pulse, zones, group-targeted). When
-movers exist, core scenes also get `attachMoverAwareness` (extra Movers split /
-modes); dedicated showcases cover sweep, tandem, tilt sweep, pan cascade,
-mirror, and peak styles.
+### Cue-list philosophy
+
+Looks are built like a console programmer’s song file — **one job per cue**, a
+tight color family, and few competing drivers:
+
+| Band | Role | Examples |
+|------|------|----------|
+| Open | Static / slow-breathe washes | Cool / Warm / Dim Stage Wash, Ambient Glow |
+| Groove | One rhythmic driver, fixed color | On-Beat / Offbeat / Half-Time, Kick–Vocal accents |
+| Build / motion | Energy or position-pad motion | Energy Swell, Build Ramp, Traveling Bar, Sweep, Iris |
+| Peak | Controlled intensity, not stacked chaos | Spark (randomize armed), Strobe Gate, Peak / Open Peak |
+
+Color uses **look families** (cool, warm, magenta, …) with ~±3% hue variance —
+not ±22% random walks. Dual zones use analogous partners (~+0.1 hue). Strip
+chases keep **one solid color**; timing differs across strips, not hue soup.
+
+Modulator stacks stay short: typically one brightness/beat driver, optional slow
+color or position LFO. Peak looks no longer stack noise + stairs + chase +
+randomize + five LFOs.
+
+Scene titles always come from the recipe that built them (default-save catalog
+ids stay stable; names follow the recipe).
+
+### How lighting splits actually combine
+
+Captivate merges overlapping lighting splits with **HTP** (highest channel value
+wins), not “later split overrides earlier.” Axis/mover channels are last-write.
+Generated multi-split looks therefore **partition** fixtures (smart groups or
+non-overlapping windows) so each fixture is owned by roughly one strip — that is
+what makes chases read cleanly under HTP.
+
+### Chase / motion showcases
+
+When **Different areas of the stage** is enabled, generation includes chase and
+motion scenes:
+
+| Scene title | What it does |
+|-------------|----------------|
+| Strip Chase L→R | One-hot square pulse across column strips (exclusive under HTP) |
+| Pulse Chase R→L | Dark-field brightness-only pulse (no hue thrash) |
+| Strip Cascade Top→Bottom | Row strips, top → bottom |
+| Pulse Rise Bottom→Top | Dark-field rise, bottom → top |
+| Mirror Chase Outward | Center-out mirrored stagger |
+| Split Chase Opposing Halves | Left half forward / right half reverse |
+| Traveling Bar / Position Sweep / Expanding Iris / Soft Position Drift | **Single-split** looks with LFOs linked to the **position pad** (`x` / `y` / `width` / `height`) |
+
+Strip chases use low-duty square LFOs + staggered `phaseOffsetBeats`, tight zones
+(`positionFeather: 0`), and group filters when smart groupings exist. Period is
+locked to `strips × 1 beat` so the step timing matches the strip count.
+
+Spark / peak recipes also arm the **Randomizer** and **Chase** envelope modules
+(`baseParams.randomize` / `chase` > 0) so slot envelopes actually mix — options
+alone are inert at amount 0.
+
+Full-stage splits use the virtual **All** group (same as a new manual split).
+
+### Speeds
+
+| Driver | Typical period |
+|--------|----------------|
+| Position pad motion | 16 beats (full-stage travel) |
+| Hue / color | ≥8 beats (16 preferred); beat-locked strobe brightness stays intentional |
+| Mover pan/tilt | 8–32 beats by epicness (never faster than 8 except beat-tilt) |
+
+### Scene speed (LFO inter-modulation)
+
+LFO rate is `period` (beats). Generated scenes either keep a **constant** period
+or add a slow **director** LFO whose `lfoInterModulation` routes
+`intermod:lfo:{target}:period` onto the look drivers.
+
+| Mode | Typical recipes | Director |
+|------|-----------------|----------|
+| Constant | Beat / offbeat / half-time gates, strip chases, strobe spark | No period intermod (beat grid stays locked) |
+| Breathe (Sin, ~16 bars) | Calm wash, ambient/mist, traveling bar, sweep, iris, spectrum | Gentle ±period (~12–25%) |
+| Ramp (accelerate/reset) | Build Ramp, Energy Swell hue | Mild Ramp-shaped period director |
+
+Period directors never target LFOs with period &lt; 8 beats (or audio LFOs), and
+never use Square for period (stepped octave jumps). Full intermod depth
+(`amount = 1` = ±1 octave) is **not** used by generation — depths stay near 0.5.
 
 ## Rig profiling
 
 `analyzeRigProfile` reads the patched universe + fixture types:
 
-| Detected | Affects generation? |
-|----------|---------------------|
-| Fixture count / window anchors | Zones, wig-wag columns, spectrum layout |
-| Movers (`isMoverFixtureType`) | +6 showcases and mover awareness on core scenes |
-| Strobe / `strobeRgb` channels | Optional strobe param in the peak-drive recipe |
-| Usable groups (≥ **2** fixtures, non-reserved) | Dual-zone / group-targeted splits |
-| Atmosphere fixtures | Confirm text only |
-| Gobo / prism / color maps | Detected today, unused by recipes |
+| Detected | Affects generation today? |
+|----------|---------------------------|
+| Fixture count / window anchors | Zones, wig-wag, spectrum, chase strips (fallback) |
+| Movers | Showcases + mover awareness |
+| Strobe | Peak-drive strobe param |
+| Usable groups (≥2, non-reserved) | Dual-zone / group splits |
+| Smart group families (prefix / even-odd / quadrants / strips) | Preferred chase + multi-split recipes with group filters |
+| Atmosphere | Summary only |
+| Gobo / prism / color maps | Detected; reserved for later recipes |
 
-Reserved group names (never “usable” for generation): `Movers`, `Atmosphere`,
-`Visualizer`, `All`. Fixtures whose type id is missing from `fixtureTypesByID`
-are skipped. Empty rigs fall back to generic full-stage zones.
+Reserved group names: `Movers`, `Atmosphere`, `Visualizer`, `All`, `LEDs`,
+`Pixels`.
+
+Use **Fixture Mapping → Smart groupings…** before generating scenes so chase /
+dual-zone / spectrum recipes can target real group membership.
 
 ## Undo and focus
 
-- The confirm text says Undo (Ctrl+Z) can reverse generation. Undo only targets
-  the `control` history when the active page is **Modulation** or **Video**
-  (`getUndoGroup`). On **Universe** / **Movers** the undo group is `dmx`; on
-  other pages undo is unavailable. Switch to Modulation or Video before undoing
-  a generate.
-- The `generate-scenes` command runs only when the renderer document has focus
-  (`document.hasFocus()`), matching other menu commands that open UI in the
-  focused window.
+- Undo targets the `control` history when the active page is **Modulation** or
+  **Video**. Switch there before undoing a generate.
+- The `generate-scenes` command runs only when the renderer document has focus.
 
 ## Developer: default save
 
-Shipping defaults use the same recipes with a stable seed and labeled catalog:
+Shipping defaults still use the full ladder + fixed seed (unchanged catalog
+counts):
 
 ```bash
 npm run generate:default-save
 ```
-
-- Seed: `DEFAULT_SAVE_LIGHT_SEED` = `'captivate-default-save-v1'`
-- Synthetic profile: `defaultSaveRigProfile()` (16 fixtures, movers + strobe,
-  no live patch)
-- Output: `src/renderer/redux/defaultSave.json`
-- Catalog asserts core/mover counts stay aligned with `defaultLightSceneCatalog.ts`
-
-Menu generation seeds with `Date.now()`, so successive runs differ. Prefer the
-default-save path when you need deterministic fixtures for CI or packaging.
-
-## Constraints / pitfalls
-
-1. **Destructive** — all light scenes are replaced; visuals stay.
-2. **No merge** — custom scenes are not kept unless you Undo successfully.
-3. **Groups need ≥2 fixtures** and must not use reserved names.
-4. **Atmosphere / gobo / prism / colorMap** detection does not currently drive
-   recipe content (except atmos in the confirm blurb).
-5. **No movers** → no mover showcases and no mover-awareness splits on core
-   scenes.
-6. **Focus gate** — Extras command is ignored if the renderer window is not
-   focused.
-
-## Related
-
-- [DMX output and movers](dmx-movers.md) — how generated mover splits become DMX
-- [Atmospherics](atmospherics.md) — separate FX path; not written by this generator
-- [Project files and autosave](PROJECTS.md) — light scenes travel in the `.cap` project

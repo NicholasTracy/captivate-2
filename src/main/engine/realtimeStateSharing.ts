@@ -1,6 +1,7 @@
 import type { SplitState } from '../../renderer/redux/realtimeStore'
 import type { Params } from '../../shared/params'
 import type { RandomizerState } from '../../shared/randomizer'
+import type { ChaseState } from '../../shared/chase'
 
 export function dmxUniverseBuffersEqual(a: number[], b: number[]): boolean {
   if (a === b) {
@@ -76,10 +77,19 @@ function randomizerStateEqual(a: RandomizerState, b: RandomizerState): boolean {
   return true
 }
 
+function chaseStateEqual(a: ChaseState, b: ChaseState): boolean {
+  return (
+    a.head === b.head &&
+    a.bounceDir === b.bounceDir &&
+    randomizerStateEqual(a.points, b.points)
+  )
+}
+
 function splitStateEqual(a: SplitState, b: SplitState): boolean {
   return (
     outputParamsEqual(a.outputParams, b.outputParams) &&
-    randomizerStateEqual(a.randomizer, b.randomizer)
+    randomizerStateEqual(a.randomizer, b.randomizer) &&
+    chaseStateEqual(a.chase, b.chase)
   )
 }
 

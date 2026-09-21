@@ -1,4 +1,4 @@
-import styled from 'styled-components'
+import styled, { useTheme } from 'styled-components'
 import { useDispatch } from 'react-redux'
 import { useControlSelector } from '../redux/store'
 import { setLinkStartStopSyncEnabled } from '../redux/controlSlice'
@@ -13,6 +13,7 @@ interface Props {
 }
 
 export default function StartStopSyncButton({ mode = 'toolbar' }: Props) {
+  const theme = useTheme()
   const dispatch = useDispatch()
   const linkEnabled = useControlSelector(
     (state) => state.device.connectionSettings.linkEnabled === true
@@ -31,7 +32,9 @@ export default function StartStopSyncButton({ mode = 'toolbar' }: Props) {
     })
   }
 
-  const color = startStopSyncEnabled ? '#fff7' : '#fff3'
+  const accent = startStopSyncEnabled
+    ? theme.colors.icon.primary
+    : theme.colors.icon.secondary
   const compact = mode === 'menu'
 
   if (!linkEnabled) {
@@ -56,15 +59,13 @@ export default function StartStopSyncButton({ mode = 'toolbar' }: Props) {
         }
       }}
     >
-      <Line $compact={compact} color={color} />
-      <CircleBg color={color} />
-      <Breaker color={color} />
-      <Circle enabled={startStopSyncEnabled} color={color} />
+      <Line $compact={compact} style={{ backgroundColor: accent }} />
+      <CircleBg style={{ borderColor: accent }} />
+      <Breaker />
+      <Circle $enabled={startStopSyncEnabled} style={{ backgroundColor: accent }} />
     </Root>
   )
 }
-
-const color = '#fff5'
 
 const Root = styled.div<{ $compact: boolean }>`
   position: relative;
@@ -82,7 +83,6 @@ const PlaceHolder = styled.div`
 `
 
 const Line = styled.div<{ $compact?: boolean }>`
-  background-color: ${color};
   height: 0.1rem;
   width: 2.5rem;
   margin: ${(p) => (p.$compact ? '0.28rem 0' : '1rem 0')};
@@ -96,7 +96,7 @@ transform: translate(-50%, -50%);`
 
 const CircleBg = styled.div`
   margin: auto;
-  border: 2px solid ${color};
+  border: 2px solid ${(props) => props.theme.colors.icon.secondary};
   background-color: ${(props) => props.theme.colors.bg.primary};
   border-radius: 10rem;
   height: 1.2rem;
@@ -110,13 +110,11 @@ const Breaker = styled.div`
   background-color: ${(props) => props.theme.colors.bg.primary};
   ${centerIt}
 `
-const Circle = styled.div<{ enabled: boolean }>`
+const Circle = styled.div<{ $enabled: boolean }>`
   border-radius: 10rem;
   height: 0.9rem;
   width: 0.9rem;
-  background-color: #fffa;
-  /* background-color: #3d5a; */
-  opacity: ${(props) => (props.enabled ? 1 : 0)};
+  opacity: ${(props) => (props.$enabled ? 1 : 0)};
   cursor: pointer;
   ${centerIt}
 `

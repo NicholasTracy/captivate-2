@@ -6,7 +6,7 @@ import {
   type MoverPadPlacementEntry,
   type MoverPadTarget,
 } from '../../shared/moverPadTargets'
-import { evaluateSceneGroups } from '../../shared/sceneGroups'
+import { dmxFixtureMatchesSceneGroups } from '../../shared/sceneGroups'
 import { defaultOutputParams, type Params } from '../../shared/params'
 import { useActiveLightScene, useDmxSelector, useTypedSelector } from '../redux/store'
 import { useOutputParams } from '../redux/realtimeStore'
@@ -19,17 +19,13 @@ function clamp01(value: number): number {
 function fixtureMatchesSplitGroups(
   fixtureGroups: string[],
   isMoverFixture: boolean,
-  splitGroups: Record<string, boolean | undefined>
+  splitGroups: Record<string, boolean | undefined>,
+  fixtureTypeName?: string | null
 ): boolean {
-  const groupedFixture = new Set(
-    fixtureGroups.map((group) => group.trim()).filter((group) => group.length > 0)
-  )
-
-  return evaluateSceneGroups(splitGroups, (group) => {
-    const normalized = group.trim()
-    if (normalized.length <= 0) return false
-    if (normalized === 'Movers') return isMoverFixture
-    return groupedFixture.has(normalized)
+  return dmxFixtureMatchesSceneGroups(splitGroups, {
+    fixtureGroups,
+    fixtureTypeName,
+    isMover: isMoverFixture,
   })
 }
 
@@ -53,7 +49,14 @@ function buildMoverPlacementsForSplit(
       return
     }
 
-    if (!fixtureMatchesSplitGroups(fixture.groups, true, splitGroups)) {
+    if (
+      !fixtureMatchesSplitGroups(
+        fixture.groups,
+        true,
+        splitGroups,
+        fixtureType.name
+      )
+    ) {
       return
     }
 

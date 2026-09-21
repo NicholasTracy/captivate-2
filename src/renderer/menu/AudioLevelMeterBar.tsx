@@ -57,7 +57,8 @@ const Track = styled.div`
   border: 1px solid ${(p) => p.theme.colors.divider};
   border-radius: 999px;
   overflow: hidden;
-  background: ${(p) => p.theme.colors.bg.darker};
+  background: ${(p) =>
+    p.theme.mode === 'light' ? '#2a2a2a' : p.theme.colors.bg.darker};
   box-shadow: ${(p) => p.theme.elevation.insetDepth};
 `
 

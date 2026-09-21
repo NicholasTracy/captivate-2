@@ -10,11 +10,13 @@ import { SliderMidiOverlay } from '../base/MidiOverlay'
 import { makeSetBaseParamAction } from '../redux/deviceState'
 import { indexArray } from '../../shared/util'
 import ParamSlider from './ParamSlider'
+import { colorWheelValueFromHueSat } from '../../shared/dmxColors'
 import type { ColorWheelSlot } from '../../shared/splitColorCapabilities'
 
 interface Props {
   splitIndex: number
   slots: ColorWheelSlot[]
+  /** When true, this split is color-wheel-only (no HSB pad). */
   showBrightness: boolean
 }
 
@@ -46,29 +48,72 @@ export default function ColorWheelControl({
   showBrightness,
 }: Props) {
   const dispatch = useDispatch()
+  const wheelOnly = showBrightness
   const baseColorWheel = useBaseParam('colorWheel', splitIndex)
-  const outputColorWheel = useRealtimeSelector(
-    (state) => state.splitStates[splitIndex]?.outputParams?.colorWheel
+  const baseHue = useBaseParam('hue', splitIndex)
+  const baseSaturation = useBaseParam('saturation', splitIndex)
+  const outputParams = useRealtimeSelector(
+    (state) => state.splitStates[splitIndex]?.outputParams
   )
   const slotCount = slots.length
 
-  if (slotCount === 0 || baseColorWheel === undefined) {
+  if (slotCount === 0) {
     return null
   }
 
-  const snappedBase = snapToDetent(baseColorWheel, slotCount)
-  const snappedOutput = snapToDetent(outputColorWheel ?? snappedBase, slotCount)
+  // Wheel-only splits require an explicit colorWheel param. Hybrid can show a
+  // derived position from hue/sat so scene-gen colors stay visible on the wheel.
+  if (wheelOnly && baseColorWheel === undefined) {
+    return null
+  }
+
+  const derivedFromHue =
+    baseHue !== undefined && baseSaturation !== undefined
+      ? colorWheelValueFromHueSat(slots, baseHue, baseSaturation)
+      : 0
+  const outputDerivedFromHue =
+    outputParams?.hue !== undefined && outputParams?.saturation !== undefined
+      ? colorWheelValueFromHueSat(
+          slots,
+          Number(outputParams.hue),
+          Number(outputParams.saturation)
+        )
+      : derivedFromHue
+
+  const baseWheelValue = baseColorWheel ?? derivedFromHue
+  const outputWheelValue =
+    outputParams?.colorWheel !== undefined
+      ? Number(outputParams.colorWheel)
+      : outputDerivedFromHue
+
+  const snappedBase = snapToDetent(baseWheelValue, slotCount)
+  const snappedOutput = snapToDetent(outputWheelValue, slotCount)
   // Selection/label follow the manual base slot; live cursor still uses output.
   const selectedIndex = getDetentIndex(snappedBase, slotCount)
   const selectedSlot = slots[selectedIndex] ?? slots[0]!
   const selectedLabel = selectedSlot.label
 
   const onChange = (nextValue: number) => {
+    const snapped = snapToDetent(nextValue, slotCount)
+    const index = getDetentIndex(snapped, slotCount)
+    const slot = slots[index] ?? slots[0]!
+    if (wheelOnly) {
+      dispatch(
+        setBaseParams({
+          splitIndex,
+          params: { colorWheel: snapped },
+        })
+      )
+      return
+    }
+    // Hybrid: write hue/sat so colorMap follows HSB (and scene-gen LFOs keep working).
+    // Avoid stamping colorWheel here — discrete wheel would lock out hue matching.
     dispatch(
       setBaseParams({
         splitIndex,
         params: {
-          colorWheel: snapToDetent(nextValue, slotCount),
+          hue: slot.hue,
+          saturation: Math.max(slot.saturation, 0.85),
         },
       })
     )
@@ -98,7 +143,10 @@ export default function ColorWheelControl({
         </SwatchGrid>
         <SelectedLabel>{selectedLabel}</SelectedLabel>
         <SliderMidiOverlay
-          action={makeSetBaseParamAction(splitIndex, 'colorWheel')}
+          action={makeSetBaseParamAction(
+            splitIndex,
+            wheelOnly ? 'colorWheel' : 'hue'
+          )}
           style={{ width: '100%', marginTop: '0.15rem' }}
         >
           <SliderTrackWrap>
@@ -117,7 +165,7 @@ export default function ColorWheelControl({
               />
               <ManualSliderCursor
                 orientation="horizontal"
-                param="colorWheel"
+                param={wheelOnly ? 'colorWheel' : 'hue'}
                 splitIndex={splitIndex}
                 value={snappedBase}
                 radius={sliderRadius}

@@ -23,7 +23,7 @@ import {
 import { getParam, Params } from './params'
 import { clampNormalized, lerp, Normalized } from '../math/util'
 import { rLerp } from '../math/range'
-import { applyRandomization } from './randomizer'
+import { applyEnvelopeGates } from './chase'
 import { TimeState } from './TimeState'
 import {
   ColorKind,
@@ -33,7 +33,9 @@ import {
 } from './dmxColors'
 import { evaluateSceneGroups } from './sceneGroups'
 import {
+  fixtureBelongsToNamedGroup,
   getFixtureGroupPickerOptions,
+  isAllGroupName,
   normalizeFixtureGroupList,
 } from './fixtureGroups'
 
@@ -782,7 +784,8 @@ export function getDmxValue(
   timeState: TimeState,
   syntheticStrobeFrameRateHz: number = DEFAULT_SYNTHETIC_STROBE_FRAME_RATE_HZ,
   axisOverrides?: MoverAxisOverrides,
-  placementDepth2DOnly: boolean = false
+  placementDepth2DOnly: boolean = false,
+  chaseLevel: number = 1
 ): DmxValue {
   const movingWindow = getMovingWindow(params, placementDepth2DOnly)
 
@@ -805,7 +808,8 @@ export function getDmxValue(
           timeState,
           syntheticStrobeFrameRateHz,
           axisOverrides,
-          placementDepth2DOnly
+          placementDepth2DOnly,
+          chaseLevel
         )
         const clampedValue = Math.min(
           range.max,
@@ -823,7 +827,18 @@ export function getDmxValue(
     case 'master': {
       // Fixture master dimmer follows the global master + split brightness only,
       // not spatial X/Y pad windows (those gate RGB/aux emitters per subfixture).
-      const level = master * getParam(params, 'brightness')
+      // Color-map fixtures route brightness through master, so apply randomizer
+      // / chase here or they would never affect those fixtures.
+      let level = master * getParam(params, 'brightness')
+      if (partitionBrightnessUsesMasterChannel(fixture)) {
+        level = applyEnvelopeGates(
+          level,
+          randomizerLevel,
+          getParam(params, 'randomize'),
+          chaseLevel,
+          getParam(params, 'chase')
+        )
+      }
       if (ch.isOnOff) {
         return level > 0.5 ? ch.max : ch.min
       } else {
@@ -850,7 +865,8 @@ export function getDmxValue(
             params,
             randomizerLevel,
             fixture.window,
-            movingWindow
+            movingWindow,
+            chaseLevel
           ) * master
 
       const dedicated = dedicatedColorParam(params, kind)
@@ -1069,17 +1085,20 @@ export function getWindowRandomizerLevel(
   params: Params,
   randomizerLevel: Normalized,
   fixtureWindow: Window2D_t,
-  movingWindow: Window2D_t
+  movingWindow: Window2D_t,
+  chaseLevel: Normalized = 1
 ): Normalized {
   const windowLevel = getWindowMultiplier2D(
     fixtureWindow,
     movingWindow,
     getParam(params, 'positionFeather')
   )
-  return applyRandomization(
+  return applyEnvelopeGates(
     windowLevel,
     randomizerLevel,
-    getParam(params, 'randomize')
+    getParam(params, 'randomize'),
+    chaseLevel,
+    getParam(params, 'chase')
   )
 }
 
@@ -1087,7 +1106,8 @@ export function getBrightness(
   params: Params,
   randomizerLevel: Normalized,
   fixtureWindow: Window2D_t,
-  movingWindow: Window2D_t
+  movingWindow: Window2D_t,
+  chaseLevel: Normalized = 1
 ): Normalized {
   return (
     getParam(params, 'brightness') *
@@ -1095,7 +1115,8 @@ export function getBrightness(
       params,
       randomizerLevel,
       fixtureWindow,
-      movingWindow
+      movingWindow,
+      chaseLevel
     )
   )
 }
@@ -1157,6 +1178,9 @@ export function getFixturesInGroups(
       // Visualizer is a virtual group with no physical DMX fixtures.
       return false
     }
+    if (isAllGroupName(group)) {
+      return true
+    }
     if (group === 'Atmosphere') {
       return fixture.channels.some(([, channel]) => {
         if (channel.type === 'fxtrTrigger' || channel.type === 'fxtrLevel') {
@@ -1208,7 +1232,9 @@ export function getFixturesInGroups(
         )
       })
     }
-    return fixture.groups.includes(group)
+    return fixtureBelongsToNamedGroup(fixture.groups, group, {
+      fixtureTypeName: fixture.fixtureTypeName,
+    })
   }
 
   return fixtures.filter((fixture) =>
@@ -1400,6 +1426,11 @@ export function flatten_fixture(
       ? fixture.id
       : undefined
 
+  const fixtureTypeName =
+    typeof fixture_type.name === 'string' && fixture_type.name.trim().length > 0
+      ? fixture_type.name.trim()
+      : undefined
+
   const moverGroup =
     moverGroupWithOrientation(
       moverGroupByFixtureId?.[fixtureId ?? ''] ??
@@ -1441,6 +1472,8 @@ export function flatten_fixture(
       groups: groups.concat(sub.groups),
       fixtureId,
       fixtureTypeId: fixture_type.id,
+      fixtureTypeName,
+      subFixtureIndex: subIndex,
       moverGroup,
       moverCalibration,
       moverBounds: fixture.moverBounds,
@@ -1461,6 +1494,7 @@ export function flatten_fixture(
     groups,
     fixtureId,
     fixtureTypeId: fixture_type.id,
+    fixtureTypeName,
     moverGroup,
     moverCalibration,
     moverBounds: fixture.moverBounds,

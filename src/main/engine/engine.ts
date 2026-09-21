@@ -10,13 +10,20 @@ import {
   initRealtimeState,
   SplitState,
 } from '../../renderer/redux/realtimeStore'
-import { TimeState } from '../../shared/TimeState'
+import { TimeState, beatsWithPhaseOffset } from '../../shared/TimeState'
 import { timeStatesVisuallyEqual } from '../../shared/timeExtrapolation'
 import {
   initRandomizerState,
   resizeRandomizer,
   updateIndexes,
+  normalizeRandomizerOptions,
 } from '../../shared/randomizer'
+import {
+  initChaseState,
+  resizeChase,
+  updateChaseIndexes,
+  normalizeChaseOptions,
+} from '../../shared/chase'
 import { getOutputParams } from '../../shared/modulation'
 import { handleMessage } from './handleMidi'
 import { VisualizerContainer } from './createVisualizerWindow'
@@ -38,11 +45,15 @@ import {
 import { normalizeAudioInputSettings, resolveAudioBpmRangeLock, clampBpmToAudioRange } from '../../shared/audioEngine'
 import TapTempoEngine from './TapTempoEngine'
 import { flatten_fixtures } from '../../shared/dmxUtil'
-import { countSplitRandomizerSlots } from '../../shared/splitRandomizer'
+import {
+  buildMappedTriggerIndexes,
+  countSplitMappedLedSlots,
+  countSplitMappedSlots,
+  getSplitMappedDmxSlotFixtures,
+} from '../../shared/splitRandomizer'
 import { ThrottleMap } from './midiConnection'
 import { MidiMessage, midiInputID } from '../../shared/midi'
 import { getAllParamKeys } from '../../renderer/redux/dmxSlice'
-import { indexArray } from '../../shared/util'
 import WledManager from './wled/wled_manager'
 import type { Page } from '../../shared/pages'
 import type { OpenPageWindowOptions } from '../../shared/screenDisplays'
@@ -1570,30 +1581,73 @@ function getNextRealtimeState(
         _latestAudioMetrics
       )
       const intensityCeiling = splitOutputParams.intensity ?? 1
-      const randomizerSlotCount = countSplitRandomizerSlots(
+      const slotAxis = normalizeChaseOptions(splitScene.chase ?? {}).slotAxis
+      const mappedDmxFixtures = getSplitMappedDmxSlotFixtures(
+        fixtures,
+        splitScene.groups,
+        slotAxis,
+        dmx.universe
+      )
+      const mappedLedCount = countSplitMappedLedSlots(
+        dmx.led.ledFixtures,
+        splitScene.groups,
+        slotAxis
+      )
+      const mappedSlotCount = countSplitMappedSlots(
         fixtures,
         dmx.led.ledFixtures,
         splitScene.groups,
+        slotAxis,
+        dmx.universe
+      )
+      const triggerIndexes = buildMappedTriggerIndexes(
+        mappedDmxFixtures,
+        mappedLedCount,
         intensityCeiling
       )
+
+      // Same clock as split LFO phase: triggers land on the offset beat grid.
+      const phaseOffset = splitScene.splitModShaping?.phaseOffsetBeats
+      const beatsLast = beatsWithPhaseOffset(
+        realtimeState.time.beats,
+        phaseOffset
+      )
+      const beatsNow = beatsWithPhaseOffset(nextTimeState.beats, phaseOffset)
+      const splitTime: TimeState =
+        beatsNow === nextTimeState.beats
+          ? nextTimeState
+          : { ...nextTimeState, beats: beatsNow }
 
       let newRandomizerState = resizeRandomizer(
         realtimeState.splitStates[splitIndex]?.randomizer ??
           initRandomizerState(),
-        randomizerSlotCount
+        mappedSlotCount
       )
 
       newRandomizerState = updateIndexes(
-        realtimeState.time.beats,
+        beatsLast,
         newRandomizerState,
-        nextTimeState,
-        indexArray(randomizerSlotCount),
-        splitScene.randomizer
+        splitTime,
+        triggerIndexes,
+        normalizeRandomizerOptions(splitScene.randomizer)
+      )
+
+      let newChaseState = resizeChase(
+        realtimeState.splitStates[splitIndex]?.chase ?? initChaseState(),
+        mappedSlotCount
+      )
+      newChaseState = updateChaseIndexes(
+        beatsLast,
+        newChaseState,
+        splitTime,
+        triggerIndexes,
+        normalizeChaseOptions(splitScene.chase ?? {})
       )
 
       return {
         outputParams: splitOutputParams,
         randomizer: newRandomizerState,
+        chase: newChaseState,
       }
     }
   )

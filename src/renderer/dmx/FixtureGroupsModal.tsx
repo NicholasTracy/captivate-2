@@ -3,15 +3,22 @@ import styled from 'styled-components'
 import { Button, Checkbox, FormControlLabel, TextField } from '@mui/material'
 import AppModal from '../overlays/AppModal'
 import {
+  ALL_GROUP_NAME,
+  isAllGroupName,
+  isAutoFixtureTypeGroupName,
   normalizeFixtureGroupList,
   normalizeFixtureGroupName,
 } from '../../shared/fixtureGroups'
+import type { FixtureType, Universe } from '../../shared/dmxFixtures'
 
 type Props = {
   open: boolean
   fixtureLabel: string
   selectedGroups: string[]
   availableGroups: string[]
+  /** When set, auto fixture-type groups are labeled in the list. */
+  universe?: Universe
+  fixtureTypesById?: { [id: string]: FixtureType }
   onClose: () => void
   onSave: (groups: string[]) => void
 }
@@ -21,6 +28,8 @@ export default function FixtureGroupsModal({
   fixtureLabel,
   selectedGroups,
   availableGroups,
+  universe,
+  fixtureTypesById,
   onClose,
   onSave,
 }: Props) {
@@ -35,15 +44,29 @@ export default function FixtureGroupsModal({
   }, [open, selectedGroups])
 
   const pickerGroups = useMemo(() => {
-    const merged = normalizeFixtureGroupList([...availableGroups, ...draft])
+    const merged = normalizeFixtureGroupList([...availableGroups, ...draft]).filter(
+      (group) => !isAllGroupName(group)
+    )
     return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
   }, [availableGroups, draft])
+
+  function groupLabel(group: string): string {
+    if (
+      universe !== undefined &&
+      fixtureTypesById !== undefined &&
+      isAutoFixtureTypeGroupName(group, universe, fixtureTypesById)
+    ) {
+      return `${group} (type)`
+    }
+    return group
+  }
 
   if (!open) {
     return null
   }
 
   function toggleGroup(group: string) {
+    if (isAllGroupName(group)) return
     setDraft((current) => {
       const set = new Set(current)
       if (set.has(group)) {
@@ -57,7 +80,7 @@ export default function FixtureGroupsModal({
 
   function addNewGroup() {
     const name = normalizeFixtureGroupName(newGroup)
-    if (name === null) {
+    if (name === null || isAllGroupName(name) || name === ALL_GROUP_NAME) {
       return
     }
     setDraft((current) => normalizeFixtureGroupList([...current, name]))
@@ -75,14 +98,20 @@ export default function FixtureGroupsModal({
         { label: 'Cancel', onClick: onClose },
         {
           label: 'Save',
-          onClick: () => onSave(normalizeFixtureGroupList(draft)),
+          onClick: () =>
+            onSave(
+              normalizeFixtureGroupList(
+                draft.filter((group) => !isAllGroupName(group))
+              )
+            ),
         },
       ]}
     >
       <Intro>
         Assign scene/split groups for <strong>{fixtureLabel}</strong>. Each patched
         fixture can belong to different groups, even when they share the same fixture
-        type.
+        type. Fixture-type labels (marked <em>type</em>) match automatically by
+        definition name; you can also pin them here alongside smart or custom groups.
       </Intro>
 
       <GroupList>
@@ -102,7 +131,7 @@ export default function FixtureGroupsModal({
                   onChange={() => toggleGroup(group)}
                 />
               }
-              label={group}
+              label={groupLabel(group)}
             />
           ))
         )}

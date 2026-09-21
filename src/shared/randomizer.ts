@@ -1,5 +1,5 @@
 import { TimeState, isNewPeriod } from './TimeState'
-import { lerp } from '../math/util'
+import { clampNormalized, lerp } from '../math/util'
 
 type Normalized = number
 
@@ -20,6 +20,36 @@ export function initRandomizerOptions() {
 }
 
 export type RandomizerOptions = ReturnType<typeof initRandomizerOptions>
+
+const MIN_TRIGGER_PERIOD = 0.05
+const MIN_ENVELOPE_DURATION = 0.05
+const MIN_ENVELOPE_SEGMENT = 1e-4
+
+/** Clamp / sanitize options so runtime math never hits NaN or divide-by-zero. */
+export function normalizeRandomizerOptions(
+  options: Partial<RandomizerOptions> | RandomizerOptions
+): RandomizerOptions {
+  const defaults = initRandomizerOptions()
+  const triggerPeriod = Number(options.triggerPeriod)
+  const triggerDensity = Number(options.triggerDensity)
+  const envelopeRatio = Number(options.envelopeRatio)
+  const envelopeDuration = Number(options.envelopeDuration)
+
+  return {
+    triggerPeriod: Number.isFinite(triggerPeriod)
+      ? Math.max(MIN_TRIGGER_PERIOD, triggerPeriod)
+      : defaults.triggerPeriod,
+    triggerDensity: Number.isFinite(triggerDensity)
+      ? clampNormalized(triggerDensity)
+      : defaults.triggerDensity,
+    envelopeRatio: Number.isFinite(envelopeRatio)
+      ? clampNormalized(envelopeRatio)
+      : defaults.envelopeRatio,
+    envelopeDuration: Number.isFinite(envelopeDuration)
+      ? Math.max(MIN_ENVELOPE_DURATION, envelopeDuration)
+      : defaults.envelopeDuration,
+  }
+}
 
 function initPoint(): Point {
   return {
@@ -43,7 +73,8 @@ export function applyRandomization(
 // returns a new randomizerState with the desired size. Growing or shrinking as necessary
 export function resizeRandomizer(state: RandomizerState, size: number) {
   const syncedState: Point[] = []
-  Array(size)
+  const safeSize = Number.isFinite(size) ? Math.max(0, Math.floor(size)) : 0
+  Array(safeSize)
     .fill(0)
     .forEach((_, i) => {
       let oldState = state[i]
@@ -57,7 +88,8 @@ export function resizeRandomizer(state: RandomizerState, size: number) {
 function pickRandomIndexes(randCount: number, size: number) {
   const randomIndexes: number[] = []
   const availableIndexes = Array.from(Array(size).keys())
-  for (let i = 0; i < randCount; i++) {
+  const count = Math.max(0, Math.min(size, Math.floor(randCount)))
+  for (let i = 0; i < count; i++) {
     const index = Math.floor(Math.random() * availableIndexes.length)
     const randomIndex = availableIndexes[index]
     availableIndexes.splice(index, 1)
@@ -66,26 +98,54 @@ function pickRandomIndexes(randCount: number, size: number) {
   return randomIndexes
 }
 
+/** How many slots should re-trigger for this density. Density 0 → none. */
+export function randomizerTriggerCount(
+  slotCount: number,
+  triggerDensity: number
+): number {
+  if (slotCount <= 0) {
+    return 0
+  }
+  const density = clampNormalized(triggerDensity)
+  if (density <= 0) {
+    return 0
+  }
+  if (density >= 1) {
+    return slotCount
+  }
+  // Density > 0 always arms at least one slot when any exist.
+  return Math.min(slotCount, Math.max(1, Math.ceil(slotCount * density)))
+}
+
 export function updateIndexes(
   beatsLast: number,
   state: RandomizerState,
   ts: TimeState,
   indexes: number[],
-  {
+  options: RandomizerOptions
+) {
+  const {
     triggerPeriod,
     triggerDensity,
     envelopeRatio,
     envelopeDuration,
-  }: RandomizerOptions
-) {
-  const riseBeats = envelopeDuration * envelopeRatio
-  const fallBeats = envelopeDuration - riseBeats
+  } = normalizeRandomizerOptions(options)
+
+  const riseBeats = Math.max(
+    MIN_ENVELOPE_SEGMENT,
+    envelopeDuration * envelopeRatio
+  )
+  const fallBeats = Math.max(
+    MIN_ENVELOPE_SEGMENT,
+    envelopeDuration - envelopeDuration * envelopeRatio
+  )
   const beatDelta = ts.beats - beatsLast
+  const safeBeatDelta = Number.isFinite(beatDelta) ? Math.max(0, beatDelta) : 0
   const indexesSet = new Set(indexes)
   const nextState = state.map<Point>(({ level, rising }, index) => {
     if (indexesSet.has(index)) {
       if (rising) {
-        const newLevel = level + beatDelta / riseBeats
+        const newLevel = level + safeBeatDelta / riseBeats
         if (newLevel > 1) {
           return {
             level: 1,
@@ -98,7 +158,7 @@ export function updateIndexes(
           }
         }
       } else {
-        const newLevel = level - beatDelta / fallBeats
+        const newLevel = level - safeBeatDelta / fallBeats
         return {
           level: newLevel < 0 ? 0 : newLevel,
           rising: false,
@@ -113,12 +173,22 @@ export function updateIndexes(
   })
 
   if (isNewPeriod(beatsLast, ts.beats, triggerPeriod)) {
-    let randCount = Math.ceil(indexes.length * triggerDensity)
-    if (randCount === 0 && indexes.length > 0) randCount = 1
-    pickRandomIndexes(randCount, indexes.length).forEach((randIndex) => {
-      let index = indexes[randIndex]
-      nextState[index].rising = true
-    })
+    const eligible = indexes.filter(
+      (index) => Number.isInteger(index) && index >= 0 && index < nextState.length
+    )
+    const randCount = randomizerTriggerCount(eligible.length, triggerDensity)
+    if (randCount > 0) {
+      pickRandomIndexes(randCount, eligible.length).forEach((pick) => {
+        const index = eligible[pick]
+        if (index === undefined) {
+          return
+        }
+        const point = nextState[index]
+        if (point !== undefined) {
+          point.rising = true
+        }
+      })
+    }
   }
 
   return nextState

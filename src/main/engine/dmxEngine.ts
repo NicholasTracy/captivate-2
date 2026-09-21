@@ -25,8 +25,9 @@ import {
   mapNormalizedToAxisPhysicalDmx,
   type MoverAxisOverrides,
 } from '../../shared/dmxUtil'
+import { effectiveMasterForFixture } from '../../shared/groupIntensity'
 import { indexArray, zip } from '../../shared/util'
-import { TimeState } from '../../shared/TimeState'
+import { TimeState, beatsWithPhaseOffset } from '../../shared/TimeState'
 import { SplitState } from 'renderer/redux/realtimeStore'
 import { getUniverseOverwrites } from '../../renderer/redux/mixerSlice'
 import { clampNormalized } from '../../math/util'
@@ -49,9 +50,12 @@ import {
 } from '../../shared/moverKinematics'
 import { initStageDimensions } from '../../shared/stage'
 import {
+  dmxFixtureWithinIntensityCeiling,
+  dmxChaseSlotIndex,
   dmxRandomizerSlotIndex,
-  getDmxRandomizerFixtures,
+  getSplitMappedDmxSlotFixtures,
 } from '../../shared/splitRandomizer'
+import { normalizeChaseOptions } from '../../shared/chase'
 import {
   getVisualizerDriverOutputParams,
   mergeParamsWithStageLightSample,
@@ -648,7 +652,7 @@ function calculateDmxForUniverse(
     const plannerNamespace = `u${universeIndex}`
 
     if (activeScene?.splitScenes) {
-      for (const [{ outputParams, randomizer }, splitScene] of zip(
+      for (const [{ outputParams, randomizer, chase }, splitScene] of zip(
         splitStates,
         activeScene.splitScenes
       )) {
@@ -679,11 +683,14 @@ function calculateDmxForUniverse(
 
       const splitSceneFixtures = getFixturesInGroups(all_fixtures, splitGroups)
       const intensityCeiling = outputParams.intensity ?? 1
-      const randomizerFixtures = getDmxRandomizerFixtures(
+      const mappedSlotAxis = normalizeChaseOptions(splitScene.chase ?? {}).slotAxis
+      const randomizerFixtures = getSplitMappedDmxSlotFixtures(
         allUniverseFixtures,
         splitGroups,
-        intensityCeiling
+        mappedSlotAxis,
+        state.dmx.universe
       )
+      const chaseFixtures = randomizerFixtures
       const splitMoverAxisOverrides =
         splitHasAxisBundle && universeHasMoverFixtureType
           ? buildMoverAxisOverridesForSplit(
@@ -698,6 +705,14 @@ function calculateDmxForUniverse(
               }
             )
           : {}
+
+      const splitBeatTime: TimeState = {
+        ...timeState,
+        beats: beatsWithPhaseOffset(
+          timeState.beats,
+          splitScene.splitModShaping?.phaseOffsetBeats
+        ),
+      }
 
       const stageLightGrid = getLatestStageLightMap()
       const visualScenes = state.control.visual
@@ -740,8 +755,15 @@ function calculateDmxForUniverse(
             fixture
           )
           const randomizerLevel =
-            randomizerSlot >= 0
+            randomizerSlot >= 0 &&
+            dmxFixtureWithinIntensityCeiling(fixture, intensityCeiling)
               ? randomizer[randomizerSlot]?.level ?? 1
+              : 1
+          const chaseSlot = dmxChaseSlotIndex(chaseFixtures, fixture)
+          const chaseLevel =
+            chaseSlot >= 0 &&
+            dmxFixtureWithinIntensityCeiling(fixture, intensityCeiling)
+              ? chase?.points?.[chaseSlot]?.level ?? 1
               : 1
           const moverAxisOverride =
             channel.type === 'axis'
@@ -785,6 +807,23 @@ function calculateDmxForUniverse(
             }
           }
 
+          const fixtureIsMover =
+            fixture.moverCalibration !== undefined ||
+            fixture.moverBounds !== undefined ||
+            fixture.channels.some(
+              ([, ch]) =>
+                ch.type === 'axis' && (ch.dir === 'x' || ch.dir === 'y')
+            )
+          const effectiveMaster = effectiveMasterForFixture(
+            state.control.master,
+            fixture.groups,
+            state.control.groupIntensity,
+            {
+              includeVirtualMovers: fixtureIsMover,
+              fixtureTypeName: fixture.fixtureTypeName,
+            }
+          )
+
           const nextValue =
             channel.type === 'axis' && calibrationOverride !== undefined
               ? channel.isFine
@@ -801,12 +840,13 @@ function calculateDmxForUniverse(
                     channel,
                     dmxParams,
                     fixture,
-                    state.control.master,
+                    effectiveMaster,
                     randomizerLevel,
-                    timeState,
+                    splitBeatTime,
                     syntheticStrobeFrameRateHz,
                     axisOverrides,
-                    placementDepth2DOnly
+                    placementDepth2DOnly,
+                    chaseLevel
                   )
 
           if (channel.type === 'axis') {

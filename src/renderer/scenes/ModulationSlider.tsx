@@ -442,12 +442,13 @@ const Root = styled.div`
   position: relative;
   user-select: none;
   text-align: center;
-  background-color: #ffffff08;
-  border-bottom: 1px solid #fff1;
-  color: #fff7;
+  background-color: ${(p) => p.theme.colors.bg.panel};
+  border-bottom: 1px solid ${(p) => p.theme.colors.divider};
+  color: ${(p) => p.theme.colors.text.secondary};
   font-size: var(--remote-mod-strip-font, 0.8rem);
   min-height: var(--remote-mod-strip-min-h, 0);
   cursor: ew-resize;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `
 
 const AddModPopupTitle = styled.div`
@@ -465,7 +466,7 @@ const AddModRoot = styled(Root)`
   font-weight: 700;
   line-height: 1;
   border-bottom: none;
-  background-color: #ffffff12;
+  background-color: ${(p) => p.theme.colors.bg.raised};
 `
 
 const StripHeader = styled.div`
@@ -503,7 +504,12 @@ const Item = styled.button<{ $active: boolean }>`
   text-align: left;
 
   :hover {
-    border-color: ${(props) => (props.$active ? '#a7c1ffcc' : '#ffffff66')};
+    border-color: ${(props) =>
+      props.$active
+        ? '#a7c1ffcc'
+        : props.theme.mode === 'light'
+          ? 'rgba(0, 0, 0, 0.35)'
+          : '#ffffff66'};
   }
 `
 
@@ -594,7 +600,19 @@ const StateBadge = styled.span<{ $active: boolean }>`
   font-weight: 700;
   border-radius: 999px;
   padding: 0.16rem 0.34rem;
-  border: 1px solid ${(props) => (props.$active ? '#8eb2ff77' : '#ffffff33')};
-  color: ${(props) => (props.$active ? '#d8e6ff' : '#bfc8d8')};
-  background: ${(props) => (props.$active ? '#4a70d033' : '#0006')};
+  border: 1px solid
+    ${(props) =>
+      props.$active ? '#8eb2ff77' : props.theme.colors.divider};
+  color: ${(props) =>
+    props.$active
+      ? props.theme.mode === 'light'
+        ? '#1a3a6a'
+        : '#d8e6ff'
+      : props.theme.colors.text.secondary};
+  background: ${(props) =>
+    props.$active
+      ? props.theme.mode === 'light'
+        ? 'rgba(74, 112, 208, 0.18)'
+        : '#4a70d033'
+      : props.theme.colors.bg.darker};
 `

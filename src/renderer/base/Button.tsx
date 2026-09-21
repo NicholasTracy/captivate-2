@@ -15,9 +15,10 @@ export default function Button({ label, fontSize = '0.9rem', onClick }: Props) {
 }
 
 const Root = styled.div`
-  background-color: #222;
-  color: #fff;
-  border: 1px solid #888;
+  background-color: ${(p) => p.theme.colors.bg.panel};
+  color: ${(p) => p.theme.colors.button.text};
+  border: 1px solid ${(p) => p.theme.colors.divider};
   border-radius: 3px;
   padding: 0.1rem 0.2rem;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `

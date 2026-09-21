@@ -235,6 +235,52 @@ export function getColorChannelDistance(
   return hueDistance * 0.7 + saturationDistance * 0.3
 }
 
+const COLOR_WHEEL_WHITE_SAT = 0.02
+
+/** Map hue/sat onto a discrete color-wheel param (0–1), matching DMX nearest-slot rules. */
+export function colorWheelValueFromHueSat(
+  slots: ReadonlyArray<{ hue: number; saturation: number; kind?: ColorKind }>,
+  hue: number,
+  saturation: number
+): number {
+  if (slots.length <= 1) {
+    return 0
+  }
+
+  let candidates = slots.map((slot, index) => ({ slot, index }))
+  if (saturation <= COLOR_WHEEL_WHITE_SAT) {
+    const white = candidates.filter(
+      ({ slot }) =>
+        inferColorKind(slot) === 'white' || slot.saturation <= COLOR_WHEEL_WHITE_SAT
+    )
+    if (white.length > 0) {
+      candidates = white
+    }
+  } else {
+    const chroma = candidates.filter(
+      ({ slot }) =>
+        !(
+          inferColorKind(slot) === 'white' ||
+          slot.saturation <= COLOR_WHEEL_WHITE_SAT
+        )
+    )
+    if (chroma.length > 0) {
+      candidates = chroma
+    }
+  }
+
+  let bestIndex = candidates[0]?.index ?? 0
+  let bestScore = Number.POSITIVE_INFINITY
+  for (const { slot, index } of candidates) {
+    const score = getColorChannelDistance(hue, saturation, slot) + index * 0.0001
+    if (score < bestScore) {
+      bestScore = score
+      bestIndex = index
+    }
+  }
+  return bestIndex / (slots.length - 1)
+}
+
 export function getColorPreview(channel: ColorChannel): string {
   const kind = inferColorKind(channel)
   if (kind === 'white') return '#f0f0f0'

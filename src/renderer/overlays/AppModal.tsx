@@ -8,6 +8,8 @@ export interface AppModalAction {
   label: string
   onClick: () => void
   tone?: AppModalTone
+  /** Optional `data-tour` for interactive tutorial spotlights. */
+  dataTour?: string
 }
 
 interface Props {
@@ -81,6 +83,7 @@ export default function AppModal({
               key={`${action.label}-${index}`}
               type="button"
               $tone={action.tone ?? 'default'}
+              data-tour={action.dataTour}
               onClick={action.onClick}
             >
               {action.label}

@@ -17,6 +17,7 @@ import {
 import { DmxState, normalizeLighting3DSettings } from 'renderer/redux/dmxSlice'
 import { initLedState } from 'renderer/redux/ledState'
 import { normalizeAppSettings } from './appSettings'
+import { normalizeGroupIntensityMap } from './groupIntensity'
 import type { CleanReduxState } from '../renderer/redux/store'
 import {
   initLaserState,
@@ -67,6 +68,11 @@ import {
   initLightScene,
   initSplitScene,
 } from './Scenes'
+import {
+  initRandomizerOptions,
+  normalizeRandomizerOptions,
+} from './randomizer'
+import { initChaseOptions, normalizeChaseOptions } from './chase'
 import {
   normLayerCfg,
 } from '../visualizer/threejs/layers/LayerConfig'
@@ -438,6 +444,15 @@ export default function fixState(state: CleanReduxState): CleanReduxState {
   if (state.control.device === undefined || state.control.device === null) {
     state.control.device = initDeviceState()
   }
+  if (
+    state.control.master === undefined ||
+    !Number.isFinite(state.control.master)
+  ) {
+    state.control.master = 1
+  }
+  state.control.groupIntensity = normalizeGroupIntensityMap(
+    state.control.groupIntensity
+  )
   fixGuiState(state.gui)
   fixLightScenes(state.control.light)
   fixVisualScenes(state.control.visual)
@@ -525,6 +540,18 @@ export function fixLightScenes(light: LightScenes_t) {
     }
     if (!Array.isArray(scene.splitScenes) || scene.splitScenes.length === 0) {
       scene.splitScenes = [initSplitScene()]
+    }
+    for (const split of scene.splitScenes) {
+      if (split.randomizer === undefined || typeof split.randomizer !== 'object') {
+        split.randomizer = initRandomizerOptions()
+      } else {
+        split.randomizer = normalizeRandomizerOptions(split.randomizer)
+      }
+      if (split.chase === undefined || typeof split.chase !== 'object') {
+        split.chase = initChaseOptions()
+      } else {
+        split.chase = normalizeChaseOptions(split.chase)
+      }
     }
   }
 

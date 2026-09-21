@@ -139,7 +139,7 @@ const UnitToggleRow = styled.div`
   align-items: stretch;
   flex: 0 0 auto;
   width: fit-content;
-  border: 1px solid #ffffff33;
+  border: 1px solid ${(props) => props.theme.colors.divider};
   border-radius: 0.26rem;
   overflow: hidden;
   min-height: 2.5rem;
@@ -147,8 +147,14 @@ const UnitToggleRow = styled.div`
 
 const UnitToggle = styled.button<{ active: boolean }>`
   border: 0;
-  background: ${(props) => (props.active ? '#4e7adf55' : '#0007')};
-  color: ${(props) => (props.active ? '#fff' : '#c7d0e8')};
+  background: ${(props) =>
+    props.active
+      ? props.theme.colors.accentMuted
+      : props.theme.colors.bg.panel};
+  color: ${(props) =>
+    props.active
+      ? props.theme.colors.accent
+      : props.theme.colors.text.secondary};
   min-width: 2.2rem;
   cursor: pointer;
   font-size: 0.76rem;

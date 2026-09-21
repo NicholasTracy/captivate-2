@@ -286,7 +286,7 @@ const Hero = styled.div`
   align-items: center;
   gap: 0.9rem;
   padding: 0.55rem 0.65rem;
-  border: 1px solid #ffffff24;
+  border: 1px solid ${(p) => p.theme.colors.divider};
   border-radius: 0.45rem;
   background: linear-gradient(
     135deg,

@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { useLfoAudioMetrics, useLfoBeats } from '../redux/realtimeSelectors'
 import Cursor from '../base/Cursor'
 import { GetPhase, LfoShape } from '../../shared/oscillator'
+import { beatsWithPhaseOffset } from '../../shared/TimeState'
 import { useActiveLightScene } from '../redux/store'
 import {
   effectiveLfosAtSplit,
@@ -51,10 +52,13 @@ function LfoStoredCursor({
     return null
   }
 
-  const phaseStored = GetPhase(lfo, beats)
-  const valueStored = getModulatorLfoValue(lfo, beats, audio, index)
-  const phaseEff = GetPhase(effectiveLfo, beats)
-  const valueEff = getModulatorLfoValue(effectiveLfo, beats, audio, index)
+  const phaseOff =
+    lightScene.splitScenes[splitIx]?.splitModShaping?.phaseOffsetBeats
+  const clock = beatsWithPhaseOffset(beats, phaseOff)
+  const phaseStored = GetPhase(lfo, clock)
+  const valueStored = getModulatorLfoValue(lfo, clock, audio, index)
+  const phaseEff = GetPhase(effectiveLfo, clock)
+  const valueEff = getModulatorLfoValue(effectiveLfo, clock, audio, index)
   const sameSpot =
     Math.abs(phaseStored - phaseEff) < 0.004 &&
     Math.abs(valueStored - valueEff) < 0.004

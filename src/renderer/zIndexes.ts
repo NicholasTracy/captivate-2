@@ -10,7 +10,10 @@
  *   muiDialog (10060)  — MUI Dialog (QLC browser, share to library, etc.)
  *   muiMenu (10070)    — MUI Select menus / Popover help
  *   busy (10080)       — BusyModal blocking overlay
+ *   tour (10090)       — interactive tutorial dim / spotlight cutout
  *   critical (10100)   — Quit app / highest-priority system confirms
+ *   tourPopup (19980)  — Popup.tsx while the tutorial is active
+ *   tourCoach (19990)  — tutorial coach card (above all app chrome; under tooltips)
  *   tooltip (20001)    — MUI tooltips (always on top)
  *
  * In-page canvas (stay inside layout; use low values + `isolation: isolate`):
@@ -27,7 +30,16 @@ export const overlayZIndex = {
   muiDialog: fullscreenOverlay + 60,
   muiMenu: fullscreenOverlay + 70,
   busy: fullscreenOverlay + 80,
+  /** Interactive tutorial dim / spotlight (above busy, below critical). */
+  tour: fullscreenOverlay + 90,
   critical: fullscreenOverlay + 100,
+  /** Popups opened during the tutorial (above dim, under coach). */
+  tourPopup: 19980,
+  /**
+   * Coach card sits above every app overlay (including elevated page chrome)
+   * but just under MUI tooltips.
+   */
+  tourCoach: 19990,
   tooltip: 20001,
 } as const
 

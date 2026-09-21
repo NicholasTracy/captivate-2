@@ -7,7 +7,10 @@ import {
   type Universe,
 } from './dmxFixtures'
 import type { SceneGroups } from './sceneGroups'
-import { evaluateSceneGroups } from './sceneGroups'
+import {
+  dmxFixtureMatchesSceneGroups,
+  ledFixtureMatchesSceneGroups,
+} from './sceneGroups'
 import type { LedFixture } from './ledFixtures'
 
 export type AuxColorGates = {
@@ -69,24 +72,17 @@ export function getSplitAuxColorGates(
     const fixtureType = dmx.fixtureTypesByID[fixture.type]
     if (fixtureType === undefined) continue
 
-    const groupedFixture = new Set(
-      fixture.groups
-        .map((group) => group.trim())
-        .filter((group) => group.length > 0)
-    )
     const isAtmosFixture =
       typeof fixture.id === 'string' &&
       fixture.id.trim().length > 0 &&
       atmosFixtureIdSet.has(fixture.id)
     const isMoverFixture = isMoverFixtureType(fixtureType)
 
-    const matchesSplit = evaluateSceneGroups(splitGroups, (group) => {
-      const normalized = group.trim()
-      if (normalized.length <= 0) return false
-      if (normalized === 'Visualizer') return false
-      if (normalized === 'Movers') return isMoverFixture
-      if (normalized === 'Atmosphere') return isAtmosFixture
-      return groupedFixture.has(normalized)
+    const matchesSplit = dmxFixtureMatchesSceneGroups(splitGroups, {
+      fixtureGroups: fixture.groups,
+      fixtureTypeName: fixtureType.name,
+      isMover: isMoverFixture,
+      isAtmosphere: isAtmosFixture,
     })
     if (!matchesSplit) continue
 
@@ -94,20 +90,9 @@ export function getSplitAuxColorGates(
   }
 
   for (const ledFixture of dmx.led.ledFixtures) {
-    const groupedFixture = new Set(
-      ledFixture.groups.map((group) => group.trim()).filter((group) => group.length > 0)
-    )
-    const matchesSplit = evaluateSceneGroups(splitGroups, (group) => {
-      const normalized = group.trim()
-      if (normalized.length <= 0) return false
-      if (normalized === 'Visualizer') return false
-      if (normalized === 'LEDs' || normalized === 'Pixels') {
-        return groupedFixture.has('LEDs') || groupedFixture.has('Pixels')
-      }
-      return groupedFixture.has(normalized)
-    })
-    if (!matchesSplit) continue
-
+    if (!ledFixtureMatchesSceneGroups(ledFixture.groups ?? [], splitGroups)) {
+      continue
+    }
     if (ledFixtureSupportsWhite(ledFixture)) {
       kinds.add('white')
     }
@@ -120,4 +105,3 @@ export function getSplitAuxColorGates(
     uv: kinds.has('uv'),
   }
 }
-

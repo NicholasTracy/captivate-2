@@ -67,6 +67,14 @@ interface SetMaster {
 interface SetBpm {
   type: 'setBpm'
 }
+interface SetGroupIntensity {
+  type: 'setGroupIntensity'
+  group: string
+}
+
+export function makeSetGroupIntensityAction(group: string): SetGroupIntensity {
+  return { type: 'setGroupIntensity', group }
+}
 
 interface SetBaseParam {
   type: 'setBaseParam'
@@ -150,6 +158,7 @@ export type MidiAction =
   | SetMaster
   | SetBaseParam
   | SetBpm
+  | SetGroupIntensity
   | TapTempo
   | ToggleAutoScene
   | ToggleBlackout
@@ -242,6 +251,9 @@ export function getActionID(action: MidiAction) {
       return action.type + action.paramKey
     }
     return `${action.type}${splitIndex}:${action.paramKey}`
+  }
+  if (action.type === 'setGroupIntensity') {
+    return action.type + action.group.toLowerCase()
   }
   if (action.type === 'triggerAtmosFixture') {
     return action.type + action.fixtureId

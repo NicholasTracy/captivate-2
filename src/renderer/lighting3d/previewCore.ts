@@ -1706,7 +1706,8 @@ export function resolveSplitParamsForFixture(
   fixtureGroups: string[],
   splitScenes: SplitScene_t[],
   splitStates: Array<{ outputParams: Params } | undefined>,
-  fallbackParams: Params
+  fallbackParams: Params,
+  fixtureTypeName?: string | null
 ): Params[] {
   if (splitScenes.length === 0 || splitStates.length === 0) {
     return [fallbackParams]
@@ -1714,7 +1715,11 @@ export function resolveSplitParamsForFixture(
 
   const matched: Params[] = []
   for (let i = 0; i < splitScenes.length; i++) {
-    if (!fixtureGroupsMatchSceneGroups(fixtureGroups, splitScenes[i].groups)) {
+    if (
+      !fixtureGroupsMatchSceneGroups(fixtureGroups, splitScenes[i].groups, {
+        fixtureTypeName,
+      })
+    ) {
       continue
     }
     const params = splitStates[i]?.outputParams
@@ -1815,7 +1820,8 @@ export function buildTargets(
         fixture.groups,
         splitScenes,
         splitStates,
-        fallbackParams
+        fallbackParams,
+        fixture.fixtureTypeName
       )
       const ledFixture = fixture.ledFixture
       const ledLayers =
@@ -2490,7 +2496,8 @@ export function applyLiveValuesToPreviewTargets(
         fixture.groups,
         splitScenes,
         splitStates,
-        fallbackParams
+        fallbackParams,
+        fixture.fixtureTypeName
       )
       const ledFixture = fixture.ledFixture
       const ledLayers =
@@ -2522,7 +2529,8 @@ export function applyLiveValuesToPreviewTargets(
       fixture.groups,
       splitScenes,
       splitStates,
-      fallbackParams
+      fallbackParams,
+      fixture.fixtureTypeName
     )
     const splitParams = splitParamsList[0] ?? fallbackParams
     const fixtureWorld = fixtureWorldFromUniversePosition(

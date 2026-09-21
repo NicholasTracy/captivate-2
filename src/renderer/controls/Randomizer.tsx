@@ -1,12 +1,20 @@
-import styled from 'styled-components'
-import { useActiveLightScene, useBaseParam } from '../redux/store'
-import RandomizerVisualizer from './RandomizerVisualizer'
-import DraggableNumber from '../base/DraggableNumber'
 import { useDispatch } from 'react-redux'
+import { useRealtimeSelector } from 'renderer/redux/realtimeStore'
+import { useActiveLightScene, useBaseParam } from '../redux/store'
 import { setRandomizer } from '../redux/controlSlice'
+import DraggableNumber from '../base/DraggableNumber'
 import Slider from '../base/Slider'
 import ParamSlider from './ParamSlider'
 import ADSR, { Control } from './ADSR'
+import SlotBarVisualizer from './SlotBarVisualizer'
+import {
+  ENVELOPE_ADSR_HEIGHT_PX,
+  ENVELOPE_MODULE_WIDTH_PX,
+  EnvelopeModuleRoot,
+  EnvelopeModuleRow,
+  EnvelopeNumberSlot,
+  EnvelopeSliderSlot,
+} from './EnvelopeModuleLayout'
 
 interface Props {
   splitIndex: number
@@ -18,17 +26,18 @@ export default function Randomizer({ splitIndex }: Props) {
   )
   const dispatch = useDispatch()
   const randomize = useBaseParam('randomize', splitIndex)
+  const levels = useRealtimeSelector(
+    (rtState) =>
+      rtState.splitStates[splitIndex]?.randomizer?.map((point) => point.level) ??
+      []
+  )
 
   if (randomizer === undefined || randomize === undefined) {
     return null
   }
 
-  const {
-    triggerPeriod,
-    triggerDensity,
-    envelopeRatio,
-    envelopeDuration,
-  } = randomizer
+  const { triggerPeriod, triggerDensity, envelopeRatio, envelopeDuration } =
+    randomizer
 
   const ratio: Control = {
     val: envelopeRatio,
@@ -62,16 +71,16 @@ export default function Randomizer({ splitIndex }: Props) {
 
   return (
     <>
-      <Root>
-        <ADSR width={200} height={100} ratio={ratio} duration={duration} />
-        <RandomizerVisualizer splitIndex={splitIndex} />
-        <Row>
-          <div
-            style={{
-              flex: '1 0 0',
-              marginRight: '0.3rem',
-            }}
-          >
+      <EnvelopeModuleRoot>
+        <ADSR
+          width={ENVELOPE_MODULE_WIDTH_PX}
+          height={ENVELOPE_ADSR_HEIGHT_PX}
+          ratio={ratio}
+          duration={duration}
+        />
+        <SlotBarVisualizer levels={levels} mix={randomize} />
+        <EnvelopeModuleRow>
+          <EnvelopeSliderSlot title="Trigger density — 0 never fires, 1 hits every slot each period">
             <Slider
               value={triggerDensity}
               orientation="horizontal"
@@ -85,43 +94,27 @@ export default function Randomizer({ splitIndex }: Props) {
                 )
               }
             />
-          </div>
-          <DraggableNumber
-            value={triggerPeriod}
-            min={0.05}
-            max={4}
-            onChange={(newVal) =>
-              dispatch(
-                setRandomizer({
-                  key: 'triggerPeriod',
-                  value: newVal,
-                  splitIndex,
-                })
-              )
-            }
-          />
-        </Row>
-      </Root>
+          </EnvelopeSliderSlot>
+          <EnvelopeNumberSlot>
+            <DraggableNumber
+              value={triggerPeriod}
+              min={0.05}
+              max={4}
+              title="Trigger period in beats"
+              onChange={(newVal) =>
+                dispatch(
+                  setRandomizer({
+                    key: 'triggerPeriod',
+                    value: newVal,
+                    splitIndex,
+                  })
+                )
+              }
+            />
+          </EnvelopeNumberSlot>
+        </EnvelopeModuleRow>
+      </EnvelopeModuleRoot>
       <ParamSlider param={'randomize'} splitIndex={splitIndex} />
     </>
   )
 }
-
-const Root = styled.div`
-  position: relative;
-  width: fit-content;
-  border: 1px solid ${(props) => props.theme.colors.divider};
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  margin-right: 1rem;
-`
-
-const Row = styled.div`
-  width: 100%;
-  display: flex;
-  height: 2rem;
-  align-items: stretch;
-  padding: 0 0.3rem 0.3rem 0.3rem;
-  box-sizing: border-box;
-`

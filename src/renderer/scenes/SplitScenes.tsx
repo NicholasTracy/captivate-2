@@ -39,7 +39,7 @@ export default function SplitScenes({
   const onAddSplitScene = () => dispatch(addSplitScene())
 
   return (
-    <Root $flatten={flattenScroll}>
+    <Root $flatten={flattenScroll} data-tour="tour-splits">
       {!hideTitle ? (
         <TitleRow>
           <Title>Splits</Title>

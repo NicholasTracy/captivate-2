@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { useLfoAudioMetrics, useLfoBeats } from '../redux/realtimeSelectors'
 import Cursor from '../base/Cursor'
 import { GetPhase, LfoShape } from '../../shared/oscillator'
+import { beatsWithPhaseOffset } from '../../shared/TimeState'
 import { useActiveLightScene } from '../redux/store'
 import { effectiveLfosAtSplit, getModulatorLfoValue } from '../../shared/modulation'
 import { useModPreviewSplit } from './useModPreviewSplit'
@@ -34,8 +35,11 @@ function LfoCursor({
   if (isAudioShape) {
     return null
   }
-  const phase = isAudioShape ? 1 : GetPhase(effectiveLfo, beats)
-  const value = getModulatorLfoValue(effectiveLfo, beats, audio, index)
+  const phaseOff =
+    lightScene.splitScenes[splitIx]?.splitModShaping?.phaseOffsetBeats
+  const clock = beatsWithPhaseOffset(beats, phaseOff)
+  const phase = GetPhase(effectiveLfo, clock)
+  const value = getModulatorLfoValue(effectiveLfo, clock, audio, index)
 
   const scale = 1 - padding * 2
 

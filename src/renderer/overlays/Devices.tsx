@@ -241,7 +241,8 @@ const Modal = styled.div<{ $embedded: boolean }>`
     props.$embedded ? '100%' : 'min(68rem, calc(100vw - 3rem))'};
   max-height: ${(props) => (props.$embedded ? 'none' : 'calc(100vh - 3rem)')};
   overflow: ${(props) => (props.$embedded ? 'visible' : 'auto')};
-  border: ${(props) => (props.$embedded ? 'none' : '1px solid #ffffff2d')};
+  border: ${(props) =>
+    props.$embedded ? 'none' : `1px solid ${props.theme.colors.divider}`};
   border-radius: ${(props) => (props.$embedded ? '0' : '0.5rem')};
   ${(props) => (props.$embedded ? 'margin: 0;' : 'margin: 1.5rem;')}
 `

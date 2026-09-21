@@ -41,7 +41,8 @@ export default function WizardModal({
   children,
   saveLabel = 'Save',
   maxWidth = 'min(42rem, calc(100vw - 2rem))',
-  minHeight = 'min(28rem, calc(100dvh - 6rem))',
+  /** Prefer a definite height so the body scrolls and footer actions stay clickable. */
+  minHeight = 'min(30rem, calc(100dvh - 2rem))',
   footerSlot,
 }: Props) {
   if (!open) {
@@ -51,6 +52,8 @@ export default function WizardModal({
   const isFirst = stepIndex <= 0
   const isLast = stepIndex >= steps.length - 1
   const step = steps[stepIndex]
+  const cardHeight =
+    minHeight === 'auto' ? 'min(30rem, calc(100dvh - 2rem))' : minHeight
 
   return (
     <OverlayPortal>
@@ -61,7 +64,7 @@ export default function WizardModal({
           }
         }}
       >
-      <Card $maxWidth={maxWidth} $minHeight={minHeight}>
+      <Card $maxWidth={maxWidth} $height={cardHeight}>
         <Title>{title}</Title>
         <StepRail>
           {steps.map((s, index) => (
@@ -121,17 +124,22 @@ const Root = styled.div`
   box-sizing: border-box;
 `
 
-const Card = styled.div<{ $maxWidth: string; $minHeight: string }>`
+const Card = styled.div<{ $maxWidth: string; $height: string }>`
   width: ${(p) => p.$maxWidth};
-  min-height: ${(p) => p.$minHeight};
+  height: ${(p) => p.$height};
   max-height: calc(100dvh - 2rem);
   overflow: hidden;
-  border: 1px solid #5b8fd6aa;
+  border: 1px solid ${(p) => p.theme.colors.divider};
   border-radius: 0.5rem;
-  background: linear-gradient(165deg, #1e2a3e 0%, #141c28 48%, #101620 100%);
+  background: linear-gradient(
+    165deg,
+    ${(p) => p.theme.colors.bg.raised} 0%,
+    ${(p) => p.theme.colors.bg.panel} 48%,
+    ${(p) => p.theme.colors.bg.primary} 100%
+  );
   box-shadow:
-    0 0.6rem 2.1rem #000a,
-    0 0 0 1px #6a9ee622 inset;
+    ${(p) => p.theme.elevation.shadowMd},
+    ${(p) => p.theme.elevation.insetHighlight};
   padding: 0.9rem 1rem;
   display: flex;
   flex-direction: column;
@@ -142,7 +150,7 @@ const Card = styled.div<{ $maxWidth: string; $minHeight: string }>`
 const Title = styled.div`
   font-size: 1.05rem;
   font-weight: 700;
-  color: #e4efff;
+  color: ${(p) => p.theme.colors.text.primary};
 `
 
 const StepRail = styled.div`
@@ -157,27 +165,37 @@ const StepChip = styled.div<{ $active: boolean; $done: boolean }>`
   border-radius: 0.25rem;
   border: 1px solid
     ${(p) =>
-      p.$active ? '#8eb8ff' : p.$done ? '#5a8fd6aa' : '#3d4f6688'};
+      p.$active
+        ? '#8eb8ff'
+        : p.$done
+          ? '#5a8fd6aa'
+          : p.theme.colors.divider};
   background: ${(p) =>
     p.$active
       ? 'linear-gradient(180deg, #3a5f9e 0%, #2a4a7a 100%)'
       : p.$done
         ? '#2a4a7a44'
-        : '#1a2433'};
+        : p.theme.colors.bg.darker};
   color: ${(p) =>
-    p.$active ? '#f0f6ff' : p.$done ? '#c5dcff' : '#9eb0c8'};
+    p.$active
+      ? '#f0f6ff'
+      : p.$done
+        ? p.theme.mode === 'light'
+          ? '#1a3a6a'
+          : '#c5dcff'
+        : p.theme.colors.text.secondary};
   font-weight: ${(p) => (p.$active ? 700 : 500)};
 `
 
 const StepHeading = styled.div`
   font-size: 0.95rem;
   font-weight: 600;
-  color: #dceaff;
+  color: ${(p) => p.theme.colors.text.primary};
 `
 
 const StepDescription = styled.div`
   font-size: 0.8rem;
-  color: #a8bdd8;
+  color: ${(p) => p.theme.colors.text.secondary};
   line-height: 1.35;
 `
 
@@ -197,8 +215,9 @@ const Body = styled.div`
   padding: 0.45rem 0.5rem;
   margin: 0 -0.15rem;
   border-radius: 0.35rem;
-  background: #0f1520cc;
-  border: 1px solid #3d527066;
+  background: ${(p) => p.theme.colors.bg.darker};
+  border: 1px solid ${(p) => p.theme.colors.divider};
+  box-shadow: ${(p) => p.theme.elevation.insetDepth};
 `
 
 const Actions = styled.div`
@@ -216,16 +235,25 @@ const Spacer = styled.div`
 const ActionButton = styled.button<{ $primary?: boolean }>`
   min-width: 5.5rem;
   border-radius: 0.35rem;
-  border: 1px solid ${(p) => (p.$primary ? '#8eb8ff' : '#5a6f8888')};
+  border: 1px solid
+    ${(p) => (p.$primary ? p.theme.colors.accent : p.theme.colors.divider)};
   background: ${(p) =>
     p.$primary
-      ? 'linear-gradient(180deg, #4a7fd6 0%, #2f5aa8 100%)'
-      : 'linear-gradient(180deg, #243040 0%, #1a2430 100%)'};
-  color: ${(p) => (p.$primary ? '#f4f8ff' : '#c5d4e8')};
+      ? p.theme.mode === 'light'
+        ? 'linear-gradient(180deg, #4a7fd6 0%, #2f5aa8 100%)'
+        : `linear-gradient(180deg, ${p.theme.colors.accentMuted} 0%, ${p.theme.colors.bg.raised} 100%)`
+      : p.theme.colors.bg.panel};
+  color: ${(p) =>
+    p.$primary
+      ? p.theme.mode === 'light'
+        ? '#f4f8ff'
+        : p.theme.colors.accent
+      : p.theme.colors.button.text};
   padding: 0.35rem 0.65rem;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: ${(p) => (p.$primary ? 700 : 500)};
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
   :not(:disabled):hover {
     filter: brightness(1.08);
   }

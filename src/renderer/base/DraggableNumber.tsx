@@ -138,7 +138,11 @@ export default function DraggableNumber({
 const Root = styled.div`
   display: flex;
   align-items: center;
-  background-color: #0005;
+  background-color: ${(p) => p.theme.colors.bg.panel};
+  color: ${(p) => p.theme.colors.text.primary};
+  border: 1px solid ${(p) => p.theme.colors.divider};
+  border-radius: 0.25rem;
+  box-shadow: ${(p) => p.theme.elevation.shadowSm};
 `
 const DragArea = styled.div`
   padding: 0.5rem 0.3rem 0.5rem 0.7rem;
