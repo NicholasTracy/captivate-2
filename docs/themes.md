@@ -159,6 +159,10 @@ Keep values under ~160 characters.
   follow the theme file; the shared chrome and most controls do.
 - Schema + parser live in `src/shared/themeFile.ts`.
 
+## Related
+
+- [README](../README.md) — Documentation index
+
 ## Example file
 
 See [`examples/ocean.cth`](examples/ocean.cth).

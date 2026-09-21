@@ -156,7 +156,7 @@ locked to `strips × 1 beat` so the step timing matches the strip count.
 
 Spark / peak recipes also arm the **Randomizer** and **Chase** envelope modules
 (`baseParams.randomize` / `chase` > 0) so slot envelopes actually mix — options
-alone are inert at amount 0.
+alone are inert at amount 0. Operator controls: [Split envelopes](split-envelopes.md).
 
 Full-stage splits use the virtual **All** group (same as a new manual split).
 
