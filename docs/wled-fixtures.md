@@ -1,6 +1,6 @@
 # WLED fixtures
 
-Captivate can drive WLED controllers as non-DMX LED fixtures. LED fixtures participate in the same light scenes, splits, group matching, master brightness, and randomizers as DMX fixtures, then the engine sends the result to WLED over the local network.
+Captivate can drive WLED controllers as non-DMX LED fixtures. LED fixtures participate in the same light scenes, splits, group matching, master brightness, [group intensity](group-intensity.md) ceilings, and [randomizer / chase envelopes](split-envelopes.md) as DMX fixtures, then the engine sends the result to WLED over the local network. Group-intensity lookup for LED uses fixture `groups[]` only (no virtual **Movers** row).
 
 ## Enable the LED editor
 

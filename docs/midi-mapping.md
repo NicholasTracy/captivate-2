@@ -63,7 +63,6 @@ bound to keys.
 | `toggleAutoScene` | Auto scene button | Toggles auto for that scene type |
 | `tapTempo` | Status-bar TAP | Same as clicking TAP |
 | `toggleBlackout` | Sidebar BLACKOUT | Toggles `gui.blackout` |
-| `toggleMoverFollowOverride` | Movers follow override | Toggles follow override |
 | `triggerAtmosFixture` | Atmospherics Trigger | Manual nonce for that fixture id |
 | `setActivePage` | Sidebar page icons | Switches the main page |
 | `laserTool` | Laser editor tools | Selects that tool (`select`, `line`, `freehand`, …) |
@@ -77,16 +76,18 @@ the CC press latch.
 | Action | UI | Range |
 |--------|----|-------|
 | `setMaster` | Sidebar MASTER | 0..1 |
-| `setBaseParam` | Split params, pads, gobo/prism/focus, HSV | 0..1, per split |
+| `setGroupIntensity` | Sidebar **GRP** per-group sliders | 0..1; missing group = full. Action id lowercases the group name. |
+| `setBaseParam` | Split params, pads, gobo/prism/focus, HSV, `randomize` / `chase` mix | 0..1, per split |
 | `setAutoSceneBombacity` | Auto energy slider | 0..1 |
 | `setBpm` | Status-bar BPM | Learned 60..180 by default; clamp 1..1000 |
-| `setMoverFollowOverridePan` / `Tilt` | Movers follow override | 0..1 |
 
 XY / HSV pads expose one slider zone per axis (top/bottom for two-axis pads).
 Split index **0** keeps the legacy action id (`setBaseParam` + param key).
 Other splits use `setBaseParam{splitIndex}:{paramKey}`.
 
-The DMX mixer has no MIDI overlays.
+The DMX mixer has no MIDI overlays. Follow-override MIDI actions were removed
+with that UI; old `toggleMoverFollowOverride` / `setMoverFollowOverride*`
+bindings in a `.cap` file no longer match an action type.
 
 ## Slider options (shown on the overlay)
 
@@ -129,7 +130,8 @@ With MIDI clock or audio beat clock on, TAP does not write NodeLink tempo
 MIDI port enables, clock flag, `buttonActions`, `sliderActions`, and
 `keyboardShortcuts` live on `control.device` and save with **Serial Device
 Settings (MIDI & DMX)** in the `.cap` file. Uncheck that section on load to
-keep the current mappings.
+keep the current mappings. Group **ceiling values** are App UI Settings, not
+this section — see [Group intensity](group-intensity.md).
 
 Learn-mode flags (`isEditing`, `keyboardLearnMode`, `listening`) are on the
 same object and are **not** stripped on save. Exit mapping before a manual
@@ -148,6 +150,8 @@ save if you do not want overlays restored on the next load.
 | MIDI clock BPM never locks | Enable **Drive BPM from MIDI clock**; the DAW must send `0xF8` on an **enabled** port. Wait for ~30 ticks. Out-of-range tempo (< 45 or > 220) is dropped. |
 | Transport ignores MIDI Start/Stop | Expected. Only the clock estimator uses `0xFA` / `0xFC`. |
 | Mixer faders ignore MIDI | Expected. Mixer has no MIDI overlays. |
+| GRP sliders ignore MIDI | Open **GRP** so overlays exist, then learn. Keyboard cannot bind them. |
+| Follow-override mapping does nothing | That action was removed. Re-learn Master, GRP, or mover pads. |
 
 ## Runtime pipeline
 
@@ -172,6 +176,7 @@ from a key sends the `TapTempo` user command so the engine owns tempo/phase.
 | Learn + playback | `src/main/engine/handleMidi.ts` |
 | Clock estimator, 60 Hz throttle, TAP rules | `src/main/engine/engine.ts` |
 | Action types, slider bounds, reducers | `src/renderer/redux/deviceState.ts` |
+| Group intensity MIDI | `src/shared/groupIntensity.ts`, `src/renderer/controls/GroupIntensityButton.tsx` |
 | Button side effects | `src/renderer/redux/fireMidiButtonAction.ts` |
 | Overlays | `src/renderer/base/MidiOverlay.tsx`, `MidiOverlay_xy.tsx` |
 | Piano / Connections UI | `src/renderer/menu/StatusBar.tsx`, `src/renderer/overlays/Devices.tsx` |
@@ -183,4 +188,6 @@ from a key sends the `TapTempo` user command so the engine owns tempo/phase.
 - [Audio input, beat clock, and music energy](audio-input-sync.md) — MIDI clock vs audio beat clock vs Link
 - [Project files and autosave](PROJECTS.md) — mappings travel with Serial Device Settings
 - [Atmospherics](atmospherics.md) — `triggerAtmosFixture`
+- [Group intensity](group-intensity.md) — `setGroupIntensity`
+- [Split envelopes](split-envelopes.md) — `randomize` / `chase` mix via `setBaseParam`
 - [Remote control (LAN)](remote-control.md) — no learn UI on remotes

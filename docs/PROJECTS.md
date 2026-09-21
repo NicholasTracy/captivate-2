@@ -64,7 +64,7 @@ sections:
 | Visual Scenes | Visual scene state and visual parameters. |
 | Visualizer Streaming Defaults | Streaming output defaults such as FFmpeg / NDI runtime settings when available. |
 | Serial Device Settings (MIDI & DMX) | MIDI/DMX connection state, audio input settings (including Advanced Music Energy), MIDI learn maps (`buttonActions` / `sliderActions`), keyboard shortcuts, and MIDI clock / Link flags. |
-| App UI Settings | A profile subset: active page, blackout, LED/video toggles, depth view, and LED sidebar visibility. |
+| App UI Settings | A profile subset: active page, blackout, LED/video toggles, depth view, LED sidebar visibility, and [group intensity](group-intensity.md) ceilings. |
 | DMX Mixer State | Mixer values and related live mixer state. |
 | Laser Engine | Laser fixtures, zones, scenes, and laser project state. |
 

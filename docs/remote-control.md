@@ -27,4 +27,4 @@ Optional **web UI** for phones and tablets on the same network. The show compute
 
 ## Not available on remote
 
-Visualizer, fixture editor, Laser ILDA, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs. Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host. MIDI/keyboard mapping on the show computer: [MIDI and keyboard mapping](midi-mapping.md).
+Visualizer, fixture editor, Laser ILDA, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs, sidebar **GRP** (group intensity), and split envelope editors (Randomizer / Chase / phase). Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host. MIDI/keyboard mapping on the show computer: [MIDI and keyboard mapping](midi-mapping.md). Group ceilings: [Group intensity](group-intensity.md).

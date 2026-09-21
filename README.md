@@ -71,6 +71,12 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, slider/encoder modes, keyboard chords, and MIDI clock vs mapped BPM.
 
+**[Group intensity](docs/group-intensity.md)** — sidebar GRP ceilings under Master, including MIDI and project persistence.
+
+**[Split envelopes](docs/split-envelopes.md)** — randomizer and chase slot banks, mix amounts, and per-split beat phase.
+
+**[Custom themes](docs/themes.md)** — `.cth` theme files from Settings → Appearance.
+
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
 ## Download
@@ -166,6 +172,9 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [DMX output and movers](docs/dmx-movers.md)
 - [Atmospherics](docs/atmospherics.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
+- [Group intensity](docs/group-intensity.md)
+- [Split envelopes](docs/split-envelopes.md)
+- [Custom themes](docs/themes.md)
 - [Scene generation](docs/scene-generation.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
