@@ -109,7 +109,8 @@ used for energy timing.
   in `src/shared/audioAgc.ts`.
 - Audio settings are stored under
   `device.connectionSettings.audioInput` in `src/renderer/redux/deviceState.ts`.
-  MIDI clock and audio beat clock disable each other there.
+  MIDI clock and audio beat clock disable each other there. MIDI learn, mapped
+  TAP/BPM, and the clock estimator are in [MIDI and keyboard mapping](midi-mapping.md).
 - The main engine receives metrics over `audio_engine_metrics`, stores
   `_latestAudioMetrics`, and applies MIDI/audio beat following in
   `src/main/engine/engine.ts`.
