@@ -63,7 +63,7 @@ sections:
 | Light Scenes | Light scenes, splits, auto-scene settings, modulation mappings, and scene parameters. |
 | Visual Scenes | Visual scene state and visual parameters. |
 | Visualizer Streaming Defaults | Streaming output defaults such as FFmpeg / NDI runtime settings when available. |
-| Serial Device Settings (MIDI & DMX) | MIDI/DMX connection state and audio input settings, including Advanced Music Energy controls. |
+| Serial Device Settings (MIDI & DMX) | MIDI/DMX connection state, audio input settings (including Advanced Music Energy), MIDI learn maps (`buttonActions` / `sliderActions`), keyboard shortcuts, and MIDI clock / Link flags. |
 | App UI Settings | A profile subset: active page, blackout, LED/video toggles, depth view, and LED sidebar visibility. |
 | DMX Mixer State | Mixer values and related live mixer state. |
 | Laser Engine | Laser fixtures, zones, scenes, and laser project state. |
@@ -82,7 +82,9 @@ Some data is application preference or runtime state instead of project content:
 - Transient UI state such as open dialogs, status messages, and temporary
   calibration overrides is cleared during load.
 - The short-lived BPM tap hint used by audio beat detection is cleared when
-  device state is normalized on load.
+  device state is normalized on load. MIDI/keyboard **bindings** are kept with
+  device settings; learn-mode overlay flags are also on that object and are not
+  stripped (see troubleshooting).
 
 ## Autosave and recovery
 
@@ -113,6 +115,7 @@ list, and **Clear Recent Projects** removes the stored list.
 | Autosave is not creating `.cap` / `.cfx` files | Confirm the project has been created or saved to disk, then confirm **File > Autosave** is checked. Unsaved sessions only use local recovery. |
 | A copied project is missing custom fixture definitions | Copy the sibling `.cfx` file with the `.cap`, or use **Load Fixture Database...** to merge a saved fixture database. |
 | Loading a project changes only part of the show | Reopen the load dialog and verify the section checkboxes. Unchecked sections are intentionally left unchanged. |
+| Green MIDI/keyboard overlays appear after load | Learn-mode flags are saved with Serial Device Settings. Exit mapping (**Esc**) and save again, or uncheck that section on load. Bindings: [MIDI and keyboard mapping](midi-mapping.md). |
 | A legacy save reports an incompatible format | Start a new project and import the fixture database when prompted. Modern supported project files use the `captivate.project` schema. |
 
 ## Implementation map
