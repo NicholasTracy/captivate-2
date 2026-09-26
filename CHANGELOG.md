@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0
+
+### Show control
+
+- Group intensity ceilings (GRP) under Master, with MIDI-assignable sliders.
+- Chase, and split beat-coordinated behavior (randomizer, chase, LFOs, strobe) follows each split’s phase offset.
+- Optional mover group kinematics.
+
+### Themes & UI
+
+- White, Captivate, and Black themes, plus loadable `.cth` theme files.
+- Label, mixer, and position-pad polish (size via secondary drag; Feather kept).
+
+### Fixtures & scenes
+
+- Scene generation wizard, smart fixture groupings, and a first-run tutorial.
+- Master channel assignment and detached preview window close crash fixes.
+
 ## 1.1.3
 
 ### Fixes
