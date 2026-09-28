@@ -103,4 +103,5 @@ control snapshot, not this GUI profile).
 - [DMX output and movers](dmx-movers.md)
 - [WLED fixtures](wled-fixtures.md)
 - [MIDI and keyboard mapping](midi-mapping.md)
+- [Smart fixture groupings](smart-fixture-groupings.md) — creates the group names GRP lists
 - [Project files and autosave](PROJECTS.md)

@@ -79,6 +79,10 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
+**[Smart fixture groupings](docs/smart-fixture-groupings.md)** — Universe map tool that names groups from placement and can add splits.
+
+**[First-run tutorial](docs/first-run-tutorial.md)** — interactive coach marks, and why the prompt does not return after skip.
+
 ## Download
 
 Installers for Windows, macOS, and Linux are on the [Releases](https://github.com/NicholasTracy/captivate-2/releases/latest) page.
@@ -176,6 +180,8 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Split envelopes](docs/split-envelopes.md)
 - [Custom themes](docs/themes.md)
 - [Scene generation](docs/scene-generation.md)
+- [Smart fixture groupings](docs/smart-fixture-groupings.md)
+- [First-run tutorial](docs/first-run-tutorial.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
 ---

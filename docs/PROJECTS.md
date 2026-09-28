@@ -75,8 +75,9 @@ fixture library.
 
 Some data is application preference or runtime state instead of project content:
 
-- Theme, language, autosave preference, last project path, and last fixture path
-  are app settings.
+- Theme, language, autosave preference, last project path, last fixture path,
+  and the [first-run tutorial](first-run-tutorial.md) completed flag are app
+  settings (`app-data/app-settings.json`), not fields in the `.cap` file.
 - Recent Projects is stored by the desktop app under user data, not inside the
   `.cap` file.
 - Transient UI state such as open dialogs, status messages, and temporary
