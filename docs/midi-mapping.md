@@ -85,9 +85,9 @@ XY / HSV pads expose one slider zone per axis (top/bottom for two-axis pads).
 Split index **0** keeps the legacy action id (`setBaseParam` + param key).
 Other splits use `setBaseParam{splitIndex}:{paramKey}`.
 
-The DMX mixer has no MIDI overlays. Follow-override MIDI actions were removed
-with that UI; old `toggleMoverFollowOverride` / `setMoverFollowOverride*`
-bindings in a `.cap` file no longer match an action type.
+The DMX mixer has no MIDI overlays. Follow-override actions were removed with
+that UI. Saved `toggleMoverFollowOverride` / `setMoverFollowOverride*` bindings
+are outside the `MidiAction` union and are ignored at playback.
 
 ## Slider options (shown on the overlay)
 

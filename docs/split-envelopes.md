@@ -84,8 +84,10 @@ They scale:
 
 - Color / windowed emitters (`getWindowRandomizerLevel`)
 - Fixture **master** dimmer when the partition uses a color wheel/map
-  (`partitionBrightnessUsesMasterChannel`)
-- WLED / LED RGB after HTP combine (`applyLedRandomizerToColors`)
+  (`partitionBrightnessUsesMasterChannel`). Those fixtures skip the color-channel
+  envelope so the same gate is not applied twice.
+- WLED **pixel** RGB after HTP combine (`applyLedRandomizerToColors`). PWM
+  (`pwm3` / `pwm4`) posts do not run that pass.
 
 They do **not** scale mover **axis** channels, strobe on/off pulses, or
 atmospherics trigger/level channels.
@@ -122,8 +124,8 @@ Empty shaping is omitted from the save (`normSplitShapingForStore`).
   documents that pattern.
 - **Phase uses floor division** for period edges, so a negative offset still
   crosses boundaries in the correct direction (`isNewPeriod`).
-- **LAN remote** has no envelope editors; mix params that already exist on
-  the scene can still move if the remote modulation UI exposes them.
+- **LAN remote** has no sidebar **GRP** control. Scenes & modulation does
+  include Randomizer, Chase, and phase shaping (`SplitScenes` on the remote).
 
 ## Codepaths
 
@@ -147,3 +149,4 @@ Empty shaping is omitted from the save (`normSplitShapingForStore`).
 - [MIDI and keyboard mapping](midi-mapping.md) — `setBaseParam` for mix sliders
 - [Audio input, beat clock, and music energy](audio-input-sync.md) — master beat clock
 - [Group intensity](group-intensity.md) — overall group ceilings (separate from envelopes)
+- [Smart fixture groupings](smart-fixture-groupings.md) — placement-based group names for splits
