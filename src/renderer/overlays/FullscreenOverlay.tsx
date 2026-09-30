@@ -59,22 +59,32 @@ export default function FullscreenOverlay({}: Props) {
               stack={appDialog.critical === true ? 'critical' : 'appModal'}
               title={appDialog.title}
               message={appDialog.message}
-              actions={[
-                ...(appDialog.cancelLabel !== undefined &&
-                appDialog.cancelLabel.length > 0
-                  ? [
+              actions={
+                appDialog.choices !== undefined && appDialog.choices.length > 0
+                  ? appDialog.choices.map((choice) => ({
+                      label: choice.label,
+                      tone: choice.tone ?? 'default',
+                      onClick: () =>
+                        resolveActiveAppDialog(true, choice.id),
+                    }))
+                  : [
+                      ...(appDialog.cancelLabel !== undefined &&
+                      appDialog.cancelLabel.length > 0
+                        ? [
+                            {
+                              label: appDialog.cancelLabel,
+                              onClick: () => resolveActiveAppDialog(false),
+                            },
+                          ]
+                        : []),
                       {
-                        label: appDialog.cancelLabel,
-                        onClick: () => resolveActiveAppDialog(false),
+                        label: appDialog.confirmLabel ?? 'OK',
+                        tone:
+                          appDialog.danger === true ? 'danger' : 'default',
+                        onClick: () => resolveActiveAppDialog(true),
                       },
                     ]
-                  : []),
-                {
-                  label: appDialog.confirmLabel ?? 'OK',
-                  tone: appDialog.danger === true ? 'danger' : 'default',
-                  onClick: () => resolveActiveAppDialog(true),
-                },
-              ]}
+              }
             />
           )}
           <AboutModal
@@ -95,4 +105,6 @@ const Root = styled.div`
   left: 0;
   bottom: 0;
   right: 0;
+  /* Children portal their own fixed layers; this shell must not steal clicks. */
+  pointer-events: none;
 `

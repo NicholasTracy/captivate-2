@@ -479,7 +479,17 @@ ipcMain.handle(ipcChannels.request_window_close, (event) => {
   }
 
   detachedCloseApprovedWebContentsIds.add(targetWindow.webContents.id)
-  targetWindow.close()
+  try {
+    targetWindow.close()
+  } catch {
+    try {
+      if (!targetWindow.isDestroyed()) {
+        targetWindow.destroy()
+      }
+    } catch {
+      return false
+    }
+  }
   return true
 })
 
@@ -953,6 +963,9 @@ function runAppShutdownCleanup(): Promise<void> {
 }
 
 async function requestMainWindowQuit(window: BrowserWindow): Promise<void> {
+  // Mark closing first so any re-entrant `close` handlers stop prompting.
+  isClosing = true
+
   try {
     const saveAttempt = saveFixtureLibraryIfDirty().catch((error) => {
       console.error('Failed to save fixture library on quit:', error)
@@ -962,34 +975,61 @@ async function requestMainWindowQuit(window: BrowserWindow): Promise<void> {
     console.error('Failed to save fixture library on quit:', err)
   }
 
-  const mainPlacement = captureWindowPlacementSafe(window)
-  if (mainPlacement !== null) {
-    persistedWindowLayout.main = mainPlacement
-  }
-  syncDetachedWindowLayoutSnapshot()
-  if (
-    visualizerContainer.visualizer !== null &&
-    !visualizerContainer.visualizer.isDestroyed()
-  ) {
-    const visualizerPlacement = captureWindowPlacementSafe(
-      visualizerContainer.visualizer
-    )
-    if (visualizerPlacement !== null) {
-      persistedWindowLayout.visualizer = {
-        isOpen: true,
-        placement: visualizerPlacement,
+  try {
+    const mainPlacement = captureWindowPlacementSafe(window)
+    if (mainPlacement !== null) {
+      persistedWindowLayout.main = mainPlacement
+    }
+    syncDetachedWindowLayoutSnapshot()
+    if (
+      visualizerContainer.visualizer !== null &&
+      !visualizerContainer.visualizer.isDestroyed()
+    ) {
+      const visualizerPlacement = captureWindowPlacementSafe(
+        visualizerContainer.visualizer
+      )
+      if (visualizerPlacement !== null) {
+        persistedWindowLayout.visualizer = {
+          isOpen: true,
+          placement: visualizerPlacement,
+        }
       }
     }
+    flushPersistedWindowLayout()
+  } catch (error) {
+    console.error('Failed to persist window layout on quit:', error)
   }
 
-  isClosing = true
-  flushPersistedWindowLayout()
-  await runAppShutdownCleanup()
-  engine.stop()
-  mainWindow = null
-  if (!window.isDestroyed()) {
-    window.close()
+  try {
+    await Promise.race([runAppShutdownCleanup(), wait(2000)])
+  } catch {
+    /* ignore */
   }
+
+  try {
+    engine.stop()
+  } catch (error) {
+    console.error('Failed to stop engine on quit:', error)
+  }
+
+  mainWindow = null
+  try {
+    if (!window.isDestroyed()) {
+      window.close()
+    }
+  } catch (error) {
+    console.error('window.close failed during quit:', error)
+  }
+
+  // If close is still blocked for any reason, force-destroy then quit.
+  try {
+    if (!window.isDestroyed()) {
+      window.destroy()
+    }
+  } catch {
+    /* ignore */
+  }
+
   app.quit()
 }
 

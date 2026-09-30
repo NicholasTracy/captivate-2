@@ -48,6 +48,12 @@ export interface StatusMessage {
   ts: number
 }
 
+export interface AppDialogChoice {
+  id: string
+  label: string
+  tone?: 'default' | 'danger'
+}
+
 export interface AppDialogState {
   id: string
   title: string
@@ -57,6 +63,11 @@ export interface AppDialogState {
   danger?: boolean
   /** Quit app and other must-see prompts — above all other overlays except tooltips. */
   critical?: boolean
+  /**
+   * When set, dialog buttons are these choices (ids returned to `openAppChoice`).
+   * Confirm/cancel labels are ignored.
+   */
+  choices?: AppDialogChoice[]
 }
 
 export interface ProjectWorkspace {

@@ -29,7 +29,7 @@ import {
   writeTextFile as writeTextFileToDisk,
 } from './project/fileIO'
 import { writeProjectToPath } from './project/projectFileWriter'
-import { runPersistenceBusy } from './project/projectPersistenceBusy'
+import { runPersistenceBusy, clearPersistenceBusy } from './project/projectPersistenceBusy'
 import { setProjectWorkspace } from './redux/guiSlice'
 
 const AUTOSAVE_SCHEMA = 'captivate.autosave'
@@ -119,8 +119,12 @@ function waitMs(ms: number) {
   })
 }
 
-async function waitForFileAutosaveIdle() {
+async function waitForFileAutosaveIdle(timeoutMs = 3000) {
+  const started = Date.now()
   while (fileAutosaveWriteInFlight) {
+    if (Date.now() - started >= timeoutMs) {
+      return
+    }
     await waitMs(25)
   }
 }
@@ -350,44 +354,104 @@ export function getAutoSaveRestoreStatus() {
   return lastRestoreStatus
 }
 
+export type QuitFlushResult = 'ok' | 'timeout' | 'error'
+
+const QUIT_FLUSH_TIMEOUT_MS = 4000
+
 /** Await a final workspace write when the app is closing. */
-export async function flushAutoSaveForQuit(): Promise<void> {
+export async function flushAutoSaveForQuit(
+  timeoutMs = QUIT_FLUSH_TIMEOUT_MS
+): Promise<QuitFlushResult> {
   stopFileAutosave()
   const workspace = store.getState().gui.projectWorkspace
+  const hasProjectFile = workspace.projectFilePath !== null
 
-  await runPersistenceBusy(
+  if (!hasProjectFile) {
+    try {
+      await runPersistenceBusy(
+        {
+          title: 'Closing Captivate',
+          message: 'Finishing up...',
+          progress: 0.45,
+        },
+        async (update) => {
+          autoSavedVal?.flush()
+          update({ progress: 1, message: 'Closing...' })
+          logProjectPersistence({
+            phase: 'quit_save_flush',
+            filePath: undefined,
+            extra: { mode: 'session_only' },
+          })
+        }
+      )
+      return 'ok'
+    } catch (error) {
+      clearPersistenceBusy()
+      logProjectPersistence({
+        phase: 'quit_save_failed',
+        level: 'error',
+        error,
+        extra: { mode: 'session_only' },
+      })
+      return 'error'
+    }
+  }
+
+  let settled: QuitFlushResult | null = null
+  const work = runPersistenceBusy(
     {
       title: 'Closing Captivate',
-      message:
-        workspace.projectFilePath !== null
-          ? 'Saving project before exit...'
-          : 'Finishing up...',
+      message: 'Saving project before exit...',
       progress: 0.05,
     },
     async (update) => {
-      if (workspace.projectFilePath !== null) {
-        try {
-          await writeWorkspaceFilesSilent(
-            workspace.projectFilePath,
-            workspace.fixtureLibraryFilePath,
-            'quit',
-            (progress, message) => update({ progress, message })
-          )
-        } catch {
-          // Best-effort on quit; errors are logged.
-        }
-      } else {
-        update({ progress: 0.45, message: 'Saving session...' })
+      try {
+        await writeWorkspaceFilesSilent(
+          workspace.projectFilePath!,
+          workspace.fixtureLibraryFilePath,
+          'quit',
+          (progress, message) => update({ progress, message })
+        )
+        autoSavedVal?.flush()
+        update({ progress: 1, message: 'Closing...' })
+        logProjectPersistence({
+          phase: 'quit_save_flush',
+          filePath: workspace.projectFilePath ?? undefined,
+        })
+        settled = 'ok'
+      } catch (error) {
+        logProjectPersistence({
+          phase: 'quit_save_failed',
+          level: 'error',
+          error,
+          filePath: workspace.projectFilePath ?? undefined,
+        })
+        settled = 'error'
+        throw error
       }
-
-      autoSavedVal?.flush()
-      update({ progress: 1, message: 'Closing...' })
-      logProjectPersistence({
-        phase: 'quit_save_flush',
-        filePath: workspace.projectFilePath ?? undefined,
-      })
     }
-  )
+  ).catch(() => {
+    // Error already recorded above; result read from `settled`.
+  })
+
+  const timedOut = await Promise.race([
+    work.then(() => false),
+    waitMs(timeoutMs).then(() => true),
+  ])
+
+  if (timedOut && settled === null) {
+    clearPersistenceBusy()
+    logProjectPersistence({
+      phase: 'quit_save_failed',
+      level: 'warn',
+      message: 'Quit save flush timed out',
+      filePath: workspace.projectFilePath ?? undefined,
+      extra: { timeoutMs },
+    })
+    return 'timeout'
+  }
+
+  return settled ?? 'error'
 }
 
 /** Write the current project state to disk (or localStorage fallback). */

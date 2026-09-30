@@ -45,6 +45,11 @@ export function updatePersistenceBusy(
   })
 }
 
+/** Force-clear a stuck busy overlay (e.g. quit save timed out). */
+export function clearPersistenceBusy() {
+  emit(null)
+}
+
 export async function runPersistenceBusy<T>(
   initial: PersistenceBusyState,
   work: (

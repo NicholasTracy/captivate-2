@@ -182,6 +182,9 @@ function isWaitingAdvance(advance: TourAdvance): boolean {
 export default function InteractiveTour() {
   const dispatch = useDispatch()
   const active = useTypedSelector((s) => s.gui.interactiveTourActive)
+  const criticalDialogOpen = useTypedSelector(
+    (s) => s.gui.appDialog?.critical === true
+  )
   const activePage = useTypedSelector((s) => s.gui.activePage)
   const connectionMenu = useTypedSelector((s) => s.gui.connectionMenu)
   const appSettings = useTypedSelector((s) => s.gui.appSettings)
@@ -384,7 +387,7 @@ export default function InteractiveTour() {
   }, [rect, suppressDim])
   const progressLabel = `${stepIndex + 1} / ${steps.length}`
 
-  if (!active || !step || !content) return null
+  if (!active || criticalDialogOpen || !step || !content) return null
 
   const needsClick =
     step.advance.kind === 'click' ||

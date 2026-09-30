@@ -87,6 +87,7 @@ import RendererTelemetry from './telemetry/RendererTelemetry'
 import {
   closeAllAppDialogs,
   openAppAlert,
+  openAppChoice,
   openAppConfirm,
 } from './overlays/appDialogService'
 import { runGenerateScenesFromMenu } from './sceneGeneration/runGenerateScenesFromMenu'
@@ -552,6 +553,10 @@ ipc_setup({
       return
     }
     _appClosePromptOpen = true
+    // Tour coach sits very high; suspend it so quit confirm clicks always land.
+    if (store.getState().gui.interactiveTourActive) {
+      store.dispatch(setInteractiveTourActive(false))
+    }
     void openAppConfirm({
       title: 'Are you sure?',
       message: 'Closing the app will stop all lighting and video output.',
@@ -561,9 +566,100 @@ ipc_setup({
       critical: true,
     })
       .then(async (shouldQuit) => {
-        if (shouldQuit) {
-          await flushAutoSaveForQuit()
-          await requestAppQuit()
+        if (!shouldQuit) {
+          return
+        }
+
+        const flushResult = await flushAutoSaveForQuit().catch((error) => {
+          console.error('Quit save flush failed:', error)
+          return 'error' as const
+        })
+
+        if (flushResult === 'ok') {
+          try {
+            await requestAppQuit()
+          } catch (error) {
+            console.error('requestAppQuit failed:', error)
+          }
+          return
+        }
+
+        const hasProjectFile =
+          store.getState().gui.projectWorkspace.projectFilePath !== null
+        const reason =
+          flushResult === 'timeout'
+            ? 'Saving your project is taking longer than expected.'
+            : 'Captivate could not finish saving before exit.'
+
+        const choice = await openAppChoice({
+          title: 'Save did not finish',
+          message: hasProjectFile
+            ? `${reason}\n\nYou can try saving manually, or quit without saving recent changes.`
+            : `${reason}\n\nYou can save the project to a file, or quit without saving.`,
+          critical: true,
+          choices: [
+            {
+              id: 'quit',
+              label: 'Quit Without Saving',
+              tone: 'danger',
+            },
+            {
+              id: 'save',
+              label: hasProjectFile ? 'Save and Quit' : 'Save As and Quit',
+            },
+          ],
+        })
+
+        if (choice === 'quit' || choice === null) {
+          try {
+            await requestAppQuit()
+          } catch (error) {
+            console.error('requestAppQuit failed:', error)
+          }
+          return
+        }
+
+        if (choice === 'save') {
+          try {
+            await saveProject({
+              saveAs: !hasProjectFile,
+            })
+          } catch (error) {
+            console.error('Manual save before quit failed:', error)
+            const fallback = await openAppChoice({
+              title: 'Save Failed',
+              message:
+                error instanceof Error
+                  ? `Could not save the project: ${error.message}\n\nQuit without saving, or try again.`
+                  : 'Could not save the project.\n\nQuit without saving, or try again.',
+              critical: true,
+              choices: [
+                {
+                  id: 'quit',
+                  label: 'Quit Without Saving',
+                  tone: 'danger',
+                },
+                {
+                  id: 'retry',
+                  label: hasProjectFile ? 'Save and Quit' : 'Save As and Quit',
+                },
+              ],
+            })
+            if (fallback === 'retry') {
+              try {
+                await saveProject({
+                  saveAs: !hasProjectFile,
+                })
+              } catch (retryError) {
+                console.error('Retry save before quit failed:', retryError)
+              }
+            }
+          }
+          try {
+            await requestAppQuit()
+          } catch (error) {
+            console.error('requestAppQuit failed:', error)
+          }
         }
       })
       .finally(() => {
@@ -578,11 +674,15 @@ ipc_setup({
       return
     }
     _detachedClosePromptOpen = true
+    if (store.getState().gui.interactiveTourActive) {
+      store.dispatch(setInteractiveTourActive(false))
+    }
     void openAppConfirm({
       title: 'Close Window?',
       message: 'Closing this window will not close the main window.',
       confirmLabel: 'Close',
       cancelLabel: 'Dont close',
+      critical: true,
     })
       .then(async (shouldClose) => {
         if (shouldClose) {
