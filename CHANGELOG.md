@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+### Fixes
+
+- Quit confirm no longer blocked by the interactive tutorial coach overlay.
+- Closing the app is more reliable when a pre-exit save stalls: choose Save and Quit or Quit Without Saving.
+- Detached window close confirm uses the same critical dialog stack as app quit.
+
 ## 1.2.0
 
 ### Show control
