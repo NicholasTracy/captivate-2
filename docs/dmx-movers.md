@@ -8,7 +8,8 @@ moving-head pan/tilt (raw pad or optional kinematics).
 ```text
 Realtime loop (~90 Hz)
   → DMX compute at configured output rate
-  → calculateDmx (scenes → HTP / axis overrides → mixer)
+  → calculateDmx (scenes → HTP / axis overrides → mixer;
+     Master × group-intensity ceilings on color/master channels)
   → AtmosphericsOutputManager.apply (fog / FX channels)
   → finalizeDmxUniverses (blackout + zero unpatched)
   → USB DMX devices and/or Art-Net UDP
@@ -103,6 +104,15 @@ Movers page → Advanced → **Spot Wizard** for a group: for each fixture × co
 (TL, TR, BL, BR), aim with **pan/tilt** controls (live DMX override), then **Store**.
 Values are saved into `moverBounds`. Completing enables kinematics for that group.
 
+## Group intensity
+
+Sidebar **GRP** ceilings scale `effectiveMasterForFixture` (global Master ×
+strictest matching group) for color and fixture-master channels. Axis / kinematics
+aim is not scaled. Operator details: [Group intensity](group-intensity.md).
+
+Slot envelopes (randomizer / chase) mix after that master. See
+[Split envelopes](split-envelopes.md).
+
 ## Operator pitfalls
 
 - **Fine mid while moving is intentional** (not 0).
@@ -114,4 +124,6 @@ Values are saved into `moverBounds`. Completing enables kinematics for that grou
 ## Related
 
 - [Project files and autosave](PROJECTS.md)
+- [Group intensity](group-intensity.md)
+- [Split envelopes](split-envelopes.md)
 - [Atmospherics](atmospherics.md)
