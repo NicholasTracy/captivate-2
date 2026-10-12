@@ -73,6 +73,10 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
+**[DMX mixer](docs/dmx-mixer.md)** — universe faders, what an override replaces, and the save/load null-slot pitfall.
+
+**[Modulation matrix](docs/modulation-matrix.md)** — LFO amount strips, manual anchors, and LFO-to-LFO inter-modulation.
+
 ## Download
 
 Installers for Windows, macOS, and Linux are on the [Releases](https://github.com/NicholasTracy/captivate-2/releases/latest) page.
@@ -167,6 +171,8 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Atmospherics](docs/atmospherics.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
 - [Scene generation](docs/scene-generation.md)
+- [DMX mixer](docs/dmx-mixer.md)
+- [Modulation matrix](docs/modulation-matrix.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
 ---

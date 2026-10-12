@@ -115,3 +115,5 @@ Values are saved into `moverBounds`. Completing enables kinematics for that grou
 
 - [Project files and autosave](PROJECTS.md)
 - [Atmospherics](atmospherics.md)
+- [DMX mixer](dmx-mixer.md) — manual address overrides after scene math
+- [Modulation matrix](modulation-matrix.md) — which mover params LFOs cannot drive

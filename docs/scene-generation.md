@@ -183,6 +183,7 @@ or add a slow **director** LFO whose `lfoInterModulation` routes
 Period directors never target LFOs with period &lt; 8 beats (or audio LFOs), and
 never use Square for period (stepped octave jumps). Full intermod depth
 (`amount = 1` = ±1 octave) is **not** used by generation — depths stay near 0.5.
+Route math and the amount-0.5 center: [Modulation matrix](modulation-matrix.md).
 
 ## Rig profiling
 
