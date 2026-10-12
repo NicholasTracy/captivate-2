@@ -32,7 +32,8 @@ audio devices.
 
 Audio Band modulators read a configured frequency range from the live spectrum.
 Audio Energy modulators read the smoothed Energy metric. If audio capture is
-off, both audio-driven LFO shapes output 0 until capture resumes.
+off, both audio-driven LFO shapes output 0 until capture resumes. Amount,
+anchors, and LFO-to-LFO routes: [Modulation matrix](modulation-matrix.md).
 
 ## Clock source rules
 

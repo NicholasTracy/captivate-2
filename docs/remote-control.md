@@ -17,7 +17,7 @@ Optional **web UI** for phones and tablets on the same network. The show compute
 
 ![Remote control sign-in](screenshots/Captivate_Remote_Login.png)
 
-4. Use **Scenes & modulation** or **DMX mixer** tabs; open **Connections** from the status bar for DMX/MIDI/Link settings.
+4. Use **Scenes & modulation** or **DMX mixer** tabs; open **Connections** from the status bar for DMX/MIDI/Link settings. Modulation edits use the same scene actions as the show computer ([modulation matrix](modulation-matrix.md)). Mixer faders use the same overrides as the desktop mixer ([DMX mixer](dmx-mixer.md)).
 
 ## Security
 
