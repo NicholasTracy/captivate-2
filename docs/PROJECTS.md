@@ -97,6 +97,10 @@ Captivate has two persistence paths:
    path or project file autosave is disabled. This is a fallback for the current
    computer, not a portable project file.
 
+Every renderer starts these timers, including detached page windows. A Lighting
+3D window does not apply later project snapshots, so its 15-second write can put
+an older show back into the `.cap`. See [Detached windows](detached-windows.md).
+
 Autosave is enabled by default as an app preference. It starts writing project
 files after you create, save, or load a project path. On quit, Captivate makes a
 best-effort final workspace write when a project path exists, then flushes the
@@ -113,6 +117,7 @@ list, and **Clear Recent Projects** removes the stored list.
 | Symptom | Check |
 |---------|-------|
 | Autosave is not creating `.cap` / `.cfx` files | Confirm the project has been created or saved to disk, then confirm **File > Autosave** is checked. Unsaved sessions only use local recovery. |
+| The sidebar page or show on disk changes while a preview window is open | Detached windows run their own 15-second file autosave. Lighting 3D writes its bootstrap snapshot. Save from the main window after closing the preview. See [Detached windows](detached-windows.md). |
 | A copied project is missing custom fixture definitions | Copy the sibling `.cfx` file with the `.cap`, or use **Load Fixture Database...** to merge a saved fixture database. |
 | Loading a project changes only part of the show | Reopen the load dialog and verify the section checkboxes. Unchecked sections are intentionally left unchanged. |
 | Green MIDI/keyboard overlays appear after load | Learn-mode flags are saved with Serial Device Settings. Exit mapping (**Esc**) and save again, or uncheck that section on load. Bindings: [MIDI and keyboard mapping](midi-mapping.md). |

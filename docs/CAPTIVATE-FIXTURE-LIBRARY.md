@@ -59,6 +59,24 @@ Project saves also write a sibling `.cfx` fixture database next to the `.cap`
 file. See [Project files and autosave](PROJECTS.md) for how that paired file is
 used; **Load DB** and **Save DB** remain the manual import/export tools.
 
+## Channel type changes
+
+A new channel is a **Master** dimmer: `min` 0, `max` 255, not an on/off switch
+(`initChannelMaster`).
+
+In the channel editor, changing a channel’s **type** can also rewrite the
+**next** channel, but only when that next channel is still this default Master.
+The rewrite follows the type you just chose (the next color in the auto
+sequence, another split, or the same type). A Master you have narrowed, or
+marked on/off, is left alone.
+
+Captivate does not replace a Master because the previous channel is a different
+type. An intentional Master after the first channel stays a Master when the
+fixture map changes.
+
+Code: `src/renderer/dmx/FixtureChannelPopup.tsx`, `initFixtureChannel` /
+`initChannelMaster` in `src/shared/dmxFixtures.ts`.
+
 ## Library repository
 
 Browse published fixtures on GitHub:
