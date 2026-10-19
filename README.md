@@ -27,7 +27,7 @@ Captivate 2 builds on the original [Captivate](https://github.com/spensbot/capti
 - **DMX lighting** — fixture library, community online fixtures (QLC+, Open Fixture Library, Captivate library), import/export, multi-universe USB and Art-Net, spatial fixture layout
 - **Synth-style control** — LFOs, modulation, pads, randomizers, [MIDI and keyboard mapping](docs/midi-mapping.md)
 - **Visuals** — built-in visualizers and effects, synced to the active light scene
-- **Multi-window UI** — detached pages for mixer, laser, 3D lighting preview, and more
+- **Multi-window UI** — detached pages for mixer, laser, 3D lighting preview, and more ([docs](docs/detached-windows.md))
 - **Ableton Link** — BPM and phase sync with [supported apps](https://www.ableton.com/en/link/products/)
 - **LAN remote** — optional browser UI for scenes, modulation, and mixer ([docs](docs/remote-control.md))
 
@@ -72,6 +72,10 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 **[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, slider/encoder modes, keyboard chords, and MIDI clock vs mapped BPM.
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
+
+**[Detached windows](docs/detached-windows.md)** — pop-out pages, which window owns the show, close confirmation, and layout restore.
+
+**[Custom themes](docs/themes.md)** — built-in themes and `.cth` theme files loaded from Settings.
 
 ## Download
 
@@ -167,6 +171,8 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Atmospherics](docs/atmospherics.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
 - [Scene generation](docs/scene-generation.md)
+- [Detached windows](docs/detached-windows.md)
+- [Custom themes](docs/themes.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 
 ---
