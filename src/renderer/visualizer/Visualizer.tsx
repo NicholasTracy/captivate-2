@@ -20,13 +20,20 @@ import {
   setAllVisualScenesProjectionMapping,
   setVisualSceneConfig,
 } from '../redux/controlSlice'
-import { sendDiagnosticsEvent, sendTelemetryMark } from '../ipcHandler'
+import { heliosSetPoints, sendDiagnosticsEvent, sendTelemetryMark } from '../ipcHandler'
 import type {
   ProjectionMappingConfig,
   ProjectionMappingOutput,
 } from '../../visualizer/threejs/layers/LayerConfig'
 import { ProjectionMappingGpuCompositor } from './ProjectionMappingGpuCompositor'
-import HeliosOutputPanel from './HeliosOutputPanel'
+import HeliosOutputPanel, {
+  type HeliosTraceConfig,
+} from './HeliosOutputPanel'
+import {
+  placeTracePoints,
+  traceVisualizerFrame,
+  type TraceWarp,
+} from './traceVisualizerFrame'
 import {
   cssMatrix3dFromCorners,
   homographyFromCorners,
@@ -238,6 +245,15 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const viewportFrameRef = useRef<null | HTMLDivElement>(null)
   const sourceHostRef = useRef<null | HTMLDivElement>(null)
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const traceConfigRef = useRef<HeliosTraceConfig>({
+    enabled: false,
+    effect: 'edges',
+    armed: false,
+  })
+  const traceWarpRef = useRef<TraceWarp | null>(null)
+  const onTraceConfig = useCallback((config: HeliosTraceConfig) => {
+    traceConfigRef.current = config
+  }, [])
   const outputCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({})
   const mappingGpuCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const mappingGpuRef = useRef<ProjectionMappingGpuCompositor | null>(null)
@@ -286,6 +302,14 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       null
     )
   }, [mappingDraft.activeOutputId, mappingDraft.outputs])
+
+  traceWarpRef.current =
+    mappingDraft.enabled && activeOutput
+      ? {
+          corners: activeOutput.corners,
+          sourceRect: activeOutput.sourceRect,
+        }
+      : null
 
   useEffect(() => {
     setSelectedOutputIds((current) => {
@@ -1097,6 +1121,47 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
     }
   }, [mappingDraft.enabled, mappingDraft.outputs, viewportSize.height, viewportSize.width])
 
+  useEffect(() => {
+    let frameHandle = 0
+    let lastAt = 0
+    let wasLive = false
+    const tick = () => {
+      frameHandle = requestAnimationFrame(tick)
+      const cfg = traceConfigRef.current
+      if (!cfg.armed) {
+        wasLive = false
+        return
+      }
+      if (!cfg.enabled) {
+        if (wasLive) {
+          wasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      const source = sourceCanvasRef.current
+      if (source === null) return
+      const now = performance.now()
+      if (now - lastAt < 70) return
+      lastAt = now
+      const placed = placeTracePoints(
+        traceVisualizerFrame(source, cfg.effect),
+        traceWarpRef.current
+      )
+      if (placed.length === 0) {
+        if (wasLive) {
+          wasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      wasLive = true
+      void heliosSetPoints(placed)
+    }
+    frameHandle = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frameHandle)
+  }, [])
+
   const keystoneH = useMemo(() => {
     if (!activeOutput) return []
     const warp = homographyFromCorners(activeOutput.corners)
@@ -1377,7 +1442,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
         <VisualizerStreamingModal open={streamingOpen} onClose={() => setStreamingOpen(false)} />
       ) : null}
 
-      {!viewportOnly ? <HeliosOutputPanel /> : null}
+      {!viewportOnly ? <HeliosOutputPanel onTraceConfig={onTraceConfig} /> : null}
     </Root>
   )
 }

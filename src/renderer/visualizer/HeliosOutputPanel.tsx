@@ -13,13 +13,34 @@ import {
   type HeliosDeviceChoice,
   type HeliosStatus,
 } from '../../shared/heliosOutput'
+import type { HeliosTraceEffect } from './traceVisualizerFrame'
 
-export default function HeliosOutputPanel() {
+export interface HeliosTraceConfig {
+  enabled: boolean
+  effect: HeliosTraceEffect
+  armed: boolean
+}
+
+export default function HeliosOutputPanel({
+  onTraceConfig,
+}: {
+  onTraceConfig?: (config: HeliosTraceConfig) => void
+}) {
   const [status, setStatus] = useState<HeliosStatus>(emptyHeliosStatus())
   const [devices, setDevices] = useState<HeliosDeviceChoice[]>([])
   const [scanError, setScanError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [traceEnabled, setTraceEnabled] = useState(false)
+  const [traceEffect, setTraceEffect] = useState<HeliosTraceEffect>('edges')
+
+  useEffect(() => {
+    onTraceConfig?.({
+      enabled: traceEnabled,
+      effect: traceEffect,
+      armed: status.armed,
+    })
+  }, [onTraceConfig, status.armed, traceEffect, traceEnabled])
 
   const refresh = useCallback(async () => {
     const next = await heliosGetStatus()
@@ -121,12 +142,32 @@ export default function HeliosOutputPanel() {
           Test pattern
         </Btn>
       </Row>
+      <Row>
+        <Btn
+          type="button"
+          $on={traceEnabled}
+          disabled={busy}
+          onClick={() => setTraceEnabled((current) => !current)}
+        >
+          {traceEnabled ? 'Trace on' : 'Trace off'}
+        </Btn>
+        <Select
+          value={traceEffect}
+          disabled={busy}
+          onChange={(event) =>
+            setTraceEffect(event.target.value === 'dots' ? 'dots' : 'edges')
+          }
+        >
+          <option value="edges">Edge trace</option>
+          <option value="dots">Dot sample</option>
+        </Select>
+      </Row>
       <Hint>
         {status.connected
           ? status.armed
-            ? `Output armed${status.sendingTestPattern ? ' · test pattern' : ''}`
-            : 'Connected. Output is blank until you arm.'
-          : 'One DAC. Output stays off until you arm it.'}
+            ? `Output armed${status.sendingTestPattern ? ' · test pattern' : ''}. Trace does not arm the DAC.`
+            : 'Connected. Output is blank until you arm. Trace does not arm the DAC.'
+          : 'One DAC. Output stays off until you arm. Trace does not arm the DAC.'}
       </Hint>
       {message ? <ErrorText>{message}</ErrorText> : null}
     </Panel>
