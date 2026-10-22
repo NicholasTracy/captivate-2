@@ -1,4 +1,8 @@
 import type { ProjectionMappingOutput } from '../../visualizer/threejs/layers/LayerConfig'
+import {
+  homographyFromCorners,
+  projectNormalizedPoint,
+} from '../../shared/projectionHomography'
 
 const VERT_SRC = `#version 300 es
 precision highp float;
@@ -40,24 +44,8 @@ void main() {
 }
 `
 
-/** Subdivision for bilinear corner-pin meshes (matches overlay keystone density). */
+/** Subdivision so the mesh follows the projective keystone, not a bilinear pin. */
 const GRID_DIV = 16
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t
-}
-
-function bilinearCorner(
-  corners: ProjectionMappingOutput['corners'],
-  u: number,
-  v: number
-) {
-  const topX = lerp(corners[0].x, corners[1].x, u)
-  const topY = lerp(corners[0].y, corners[1].y, u)
-  const botX = lerp(corners[3].x, corners[2].x, u)
-  const botY = lerp(corners[3].y, corners[2].y, u)
-  return { x: lerp(topX, botX, v), y: lerp(topY, botY, v) }
-}
 
 function compileShader(
   gl: WebGLRenderingContext,
@@ -97,7 +85,7 @@ function linkProgram(
 /**
  * GPU compositor for visualizer projection mapping.
  * Samples the visualizer source canvas once as a texture and draws each
- * output as a bilinear corner-pin mesh (crop via UVs).
+ * output as a projective keystone mesh (crop via UVs).
  */
 export class ProjectionMappingGpuCompositor {
   private readonly canvas: HTMLCanvasElement
@@ -301,11 +289,12 @@ export class ProjectionMappingGpuCompositor {
     const verts = new Float32Array((GRID_DIV + 1) * (GRID_DIV + 1) * 4)
     let o = 0
     const sr = output.sourceRect
+    const warp = homographyFromCorners(output.corners)
     for (let row = 0; row <= GRID_DIV; row++) {
       const v = row / GRID_DIV
       for (let col = 0; col <= GRID_DIV; col++) {
         const u = col / GRID_DIV
-        const p = bilinearCorner(output.corners, u, v)
+        const p = projectNormalizedPoint(warp, output.corners, u, v)
         // NDC: x,y in [0,1] → [-1,1], Y flipped for canvas top-left.
         verts[o++] = p.x * 2 - 1
         verts[o++] = 1 - p.y * 2
