@@ -26,6 +26,7 @@ import type {
   ProjectionMappingOutput,
 } from '../../visualizer/threejs/layers/LayerConfig'
 import { ProjectionMappingGpuCompositor } from './ProjectionMappingGpuCompositor'
+import HeliosOutputPanel from './HeliosOutputPanel'
 import {
   cssMatrix3dFromCorners,
   homographyFromCorners,
@@ -1375,6 +1376,8 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       {!viewportOnly ? (
         <VisualizerStreamingModal open={streamingOpen} onClose={() => setStreamingOpen(false)} />
       ) : null}
+
+      {!viewportOnly ? <HeliosOutputPanel /> : null}
     </Root>
   )
 }

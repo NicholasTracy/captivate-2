@@ -495,3 +495,47 @@ export async function remoteControlApplySettings(
 export async function remoteControlRegeneratePin() {
   return ipcRenderer.invoke(ipc_channels.remote_control_regenerate_pin)
 }
+
+export async function heliosScanDevices() {
+  return ipcRenderer.invoke(ipc_channels.helios_scan) as Promise<
+    import('../shared/heliosOutput').HeliosScanResult
+  >
+}
+
+export async function heliosGetStatus() {
+  return ipcRenderer.invoke(ipc_channels.helios_status) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosConnectDevice(deviceIndex: number) {
+  return ipcRenderer.invoke(ipc_channels.helios_connect, deviceIndex) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosDisconnectDevice() {
+  return ipcRenderer.invoke(ipc_channels.helios_disconnect) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSetArmed(armed: boolean) {
+  return ipcRenderer.invoke(ipc_channels.helios_set_armed, armed) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSendTestPattern() {
+  return ipcRenderer.invoke(ipc_channels.helios_test_pattern) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSetPoints(
+  points: import('../shared/heliosOutput').HeliosPoint[]
+) {
+  return ipcRenderer.invoke(ipc_channels.helios_set_points, points) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}

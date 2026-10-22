@@ -15,6 +15,7 @@ import {
 import NodeLink from 'node-link'
 import { ipcSetup, IPC_Callbacks } from './ipcHandler'
 import { shutdownRemoteControl } from './remoteControl/remoteControlManager'
+import { heliosShutdown } from './laser/heliosSession'
 import { CleanReduxState } from '../../renderer/redux/store'
 import {
   RealtimeState,
@@ -977,6 +978,7 @@ export function stop() {
   MidiConnection.shutdownMidi()
   MidiOutputConnection.shutdownMidiOut()
   OscConnection.shutdownOsc()
+  void heliosShutdown()
   resetControlBusPublishState()
   try {
     _connectionManager.shutdown()
