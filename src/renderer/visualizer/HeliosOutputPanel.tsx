@@ -100,7 +100,7 @@ export default function HeliosOutputPanel({
   const message = status.lastError ?? scanError
 
   return (
-    <Panel>
+    <Panel data-tour="tour-helios-trace">
       <Title>Helios</Title>
       <Row>
         <Select

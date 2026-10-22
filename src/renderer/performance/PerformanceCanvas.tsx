@@ -142,7 +142,7 @@ export default function PerformanceCanvas() {
   }
 
   return (
-    <Root>
+    <Root data-tour="tour-performance-bank">
       <Toolbar>
         <Title>Performance</Title>
         <ToolbarSpacer />

@@ -174,6 +174,7 @@ export default function MenuBar() {
         page="Performance"
         tooltipText="Performance pads & sliders"
         accent="performance"
+        tourId={TOUR_IDS.navPerformance}
       >
         <TuneIcon fontSize="inherit" />
       </MenuItem>
@@ -182,6 +183,7 @@ export default function MenuBar() {
           <Item
             selected={false}
             accent="visualizer"
+            data-tour={TOUR_IDS.navVisualizer}
             style={{ padding: '0.5rem', fontSize: '1.7rem', margin: '0' }}
             onClick={() => send_open_page_window('Video')}
           >

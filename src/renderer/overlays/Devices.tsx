@@ -177,6 +177,7 @@ export default function Devices({
           </SectionHeader>
           <ArtNetDevices />
         </ConnectionSection>
+        <div data-tour="tour-show-control" style={{ display: 'contents' }}>
         <ConnectionSection>
           <SectionHeader title="MIDI" helpAriaLabel="How to set up MIDI">
             <HelpTitle>How to set up MIDI</HelpTitle>
@@ -285,6 +286,7 @@ export default function Devices({
           </SectionHeader>
           <AbletonLinkConnections />
         </ConnectionSection>
+        </div>
         {!hideRemoteControl ? <RemoteControlSection /> : null}
       </ConnectionsGrid>
       <DmxTroubleShoot />

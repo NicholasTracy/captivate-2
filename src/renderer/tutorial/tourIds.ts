@@ -20,6 +20,11 @@ export const TOUR_IDS = {
   blackout: 'tour-blackout',
   transport: 'tour-transport',
   saveLoad: 'tour-save-load',
+  navPerformance: 'tour-nav-performance',
+  performanceBank: 'tour-performance-bank',
+  showControl: 'tour-show-control',
+  navVisualizer: 'tour-nav-visualizer',
+  heliosTrace: 'tour-helios-trace',
 } as const
 
 export type TourId = (typeof TOUR_IDS)[keyof typeof TOUR_IDS]
