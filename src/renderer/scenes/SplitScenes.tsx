@@ -1,6 +1,4 @@
-import { useMemo } from 'react'
 import ParamsControl from 'renderer/controls/ParamsControl'
-import { collectLaserLightingGroupNames } from 'renderer/laser/laserSplitLink'
 import {
   useActiveLightScene,
   useControlSelector,
@@ -9,7 +7,6 @@ import {
 } from 'renderer/redux/store'
 import {
   hideMoversSplitUi,
-  hideLaserSplitUi,
   hideVisSplitUi,
 } from './splitUiVisibility'
 import { universeHasMovers } from 'shared/dmxFixtures'
@@ -191,12 +188,6 @@ interface Props {
 
 function SplitScene({ index }: Props) {
   const videoEnabled = useTypedSelector((state) => state.gui.videoEnabled)
-  const laserWindowOpen = useTypedSelector((state) => state.gui.laserWindowOpen)
-  const laser = useTypedSelector((state) => state.laser)
-  const laserGroupNames = useMemo(
-    () => new Set(collectLaserLightingGroupNames(laser)),
-    [laser.groupSlots, laser.units]
-  )
   const hasMoverFixtures = useDmxSelector((dmx) =>
     universeHasMovers(dmx.universe, dmx.fixtureTypesByID)
   )
@@ -207,9 +198,6 @@ function SplitScene({ index }: Props) {
     return null
   }
   if (hideMoversSplitUi(hasMoverFixtures, groups)) {
-    return null
-  }
-  if (hideLaserSplitUi(laserWindowOpen, groups, laserGroupNames)) {
     return null
   }
   return (

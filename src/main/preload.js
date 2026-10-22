@@ -25,7 +25,6 @@ contextBridge.exposeInMainWorld('electron', {
         'diagnostics_event',
         'telemetry_mark',
         'visualizer_stage_light_map',
-        'laser_dac_push_frame',
       ]
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args)
@@ -41,6 +40,8 @@ contextBridge.exposeInMainWorld('electron', {
         'new_midi_message',
         'dmx_connection_update',
         'midi_connection_update',
+        'midi_out_connection_update',
+        'osc_connection_update',
         'dispatch',
         'new_control_state',
         'lighting3d_preview_bootstrap',
@@ -123,11 +124,6 @@ contextBridge.exposeInMainWorld('electron', {
         'telemetry_export_debug_log',
         'app_about_info',
         'stage_light_map_preview_get',
-        'laser_dac_connect',
-        'laser_dac_disconnect',
-        'laser_dac_stop_output',
-        'laser_dac_status',
-        'laser_dac_list_devices',
         'remote_control_get_status',
         'remote_control_apply_settings',
         'remote_control_regenerate_pin',

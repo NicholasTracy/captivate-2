@@ -1,12 +1,15 @@
 import type { Page } from '../../shared/pages'
-import type { LaserTool } from '../laser/laserEditorTypes'
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import { SaveInfo } from '../../shared/save'
 import {
   MidiConnections,
+  MidiOutConnections,
+  OscConnections,
   DmxConnectionInfo,
   initDmxConnections,
   initMidiConnections,
+  initMidiOutConnections,
+  initOscConnections,
 } from '../../shared/connection'
 import {
   DEFAULT_APP_SETTINGS,
@@ -80,6 +83,8 @@ export interface GuiState {
   blackout: boolean
   connectionMenu: boolean
   midi: MidiConnections
+  midiOut: MidiOutConnections
+  osc: OscConnections
   dmx: DmxConnectionInfo
   /** @deprecated Save no longer opens a config modal; kept for compatibility. */
   saving: boolean
@@ -89,8 +94,6 @@ export interface GuiState {
   projectWorkspace: ProjectWorkspace
   ledEnabled: boolean
   videoEnabled: boolean
-  /** True while the detached Laser window is open (synced from main). */
-  laserWindowOpen: boolean
   moverCalibrationOverride: MoverCalibrationOverride | null
   /** When true, show floor bounds calibration and related Advanced mover tools. */
   moverAdvancedControlEnabled: boolean
@@ -112,8 +115,6 @@ export interface GuiState {
   appSettingsLoaded: boolean
   appSettings: AppSettings
   atmosManualTriggerNonceByFixtureId: { [fixtureId: string]: number | undefined }
-  /** Laser editor (detached window) applies tool when this nonce bumps. */
-  laserToolMidiRequest: { tool: LaserTool; nonce: number } | null
 }
 
 export function initGuiState(): GuiState {
@@ -122,6 +123,8 @@ export function initGuiState(): GuiState {
     blackout: false,
     connectionMenu: false,
     midi: initMidiConnections(),
+    midiOut: initMidiOutConnections(),
+    osc: initOscConnections(),
     dmx: initDmxConnections(),
     saving: false,
     loading: null,
@@ -132,7 +135,6 @@ export function initGuiState(): GuiState {
     },
     ledEnabled: true,
     videoEnabled: false,
-    laserWindowOpen: false,
     moverCalibrationOverride: null,
     moverAdvancedControlEnabled: false,
     colorMapCalibrationOverride: null,
@@ -150,7 +152,6 @@ export function initGuiState(): GuiState {
     appSettingsLoaded: false,
     appSettings: { ...DEFAULT_APP_SETTINGS },
     atmosManualTriggerNonceByFixtureId: {},
-    laserToolMidiRequest: null,
   }
 }
 
@@ -169,6 +170,12 @@ const guiSlice = createSlice({
     },
     setMidi: (state, { payload }: PayloadAction<MidiConnections>) => {
       state.midi = payload
+    },
+    setMidiOut: (state, { payload }: PayloadAction<MidiOutConnections>) => {
+      state.midiOut = payload
+    },
+    setOsc: (state, { payload }: PayloadAction<OscConnections>) => {
+      state.osc = payload
     },
     setDmx: (state, { payload }: PayloadAction<DmxConnectionInfo>) => {
       state.dmx = payload
@@ -202,9 +209,6 @@ const guiSlice = createSlice({
     },
     setVideoEnabled: (state, { payload }: PayloadAction<boolean>) => {
       state.videoEnabled = payload === true
-    },
-    setLaserWindowOpen: (state, { payload }: PayloadAction<boolean>) => {
-      state.laserWindowOpen = payload === true
     },
     setMoverCalibrationOverride: (
       state,
@@ -351,15 +355,6 @@ const guiSlice = createSlice({
     clearAtmosManualTriggers: (state, _: PayloadAction<undefined>) => {
       state.atmosManualTriggerNonceByFixtureId = {}
     },
-    setLaserToolFromMidiMapping: (
-      state,
-      { payload }: PayloadAction<{ tool: LaserTool }>
-    ) => {
-      state.laserToolMidiRequest = {
-        tool: payload.tool,
-        nonce: (state.laserToolMidiRequest?.nonce ?? 0) + 1,
-      }
-    },
   },
 })
 
@@ -368,6 +363,8 @@ export const {
   setBlackout,
   setConnectionsMenu,
   setMidi,
+  setMidiOut,
+  setOsc,
   setDmx,
   setSaving,
   setLoading,
@@ -377,7 +374,6 @@ export const {
   toggleLedEnabled,
   toggleVideoEnabled,
   setVideoEnabled,
-  setLaserWindowOpen,
   setMoverCalibrationOverride,
   clearMoverCalibrationOverride,
   setMoverAdvancedControlEnabled,
@@ -403,7 +399,6 @@ export const {
   setAppSettings,
   fireAtmosManualTrigger,
   clearAtmosManualTriggers,
-  setLaserToolFromMidiMapping,
 } = guiSlice.actions
 
 export default guiSlice.reducer

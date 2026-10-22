@@ -3,10 +3,9 @@ import { DmxState } from 'renderer/redux/dmxSlice'
 import { DeviceState } from 'renderer/redux/deviceState'
 import { MixerState } from 'renderer/redux/mixerSlice'
 import type { Page } from './pages'
+import type { PerformanceBank } from './performance'
 import type { VisualizerStreamingSettings } from './visualizerStreaming'
 import { migrateLegacyFixturePersistedJson } from './dmxFixtures'
-import type { LaserProjectState } from '../renderer/laser/laserProjectState'
-import { migrateLaserProjectState } from '../renderer/laser/laserProjectState'
 
 export interface ProfileGuiState {
   activePage?: Page
@@ -27,7 +26,8 @@ export interface SaveState {
   device?: DeviceState
   gui?: ProfileGuiState
   mixer?: MixerState
-  laser?: LaserProjectState
+  /** Performance bank (pads/sliders). Per-scene routes live on light scenes. */
+  performance?: PerformanceBank
 }
 export type SaveType = keyof SaveState
 export type SaveConfig = { [key in SaveType]: boolean }
@@ -39,7 +39,7 @@ export const saveTypes: SaveType[] = [
   'device',
   'gui',
   'mixer',
-  'laser',
+  'performance',
 ]
 export interface SaveInfo {
   state: SaveState
@@ -83,8 +83,8 @@ export function displaySaveType(saveType: SaveType) {
       return 'App UI Settings'
     case 'mixer':
       return 'DMX Mixer State'
-    case 'laser':
-      return 'Laser Engine (fixtures, zones, scenes)'
+    case 'performance':
+      return 'Performance Controls'
   }
 }
 
@@ -114,6 +114,7 @@ function normalizeSaveStatePayload(raw: unknown): {
       light?: LightScenes_t
       visual?: VisualScenes_t
       device?: DeviceState
+      performance?: PerformanceBank
     }
   }
 
@@ -130,6 +131,13 @@ function normalizeSaveStatePayload(raw: unknown): {
     if (state.device === undefined && state.control.device !== undefined) {
       state.device = state.control.device
       normalization.push('promote_control_device')
+    }
+    if (
+      state.performance === undefined &&
+      state.control.performance !== undefined
+    ) {
+      state.performance = state.control.performance
+      normalization.push('promote_control_performance')
     }
     delete (state as { control?: unknown }).control
   }
@@ -269,10 +277,6 @@ export function parseVersionedProjectSave(raw: unknown): ParsedProjectSave {
       migrateLegacyFixturePersistedJson(JSON.stringify(state.dmx))
     ) as DmxState
     normalization.push('migrate_legacy_dmx')
-  }
-  if (state.laser !== undefined) {
-    state.laser = migrateLaserProjectState(state.laser)
-    normalization.push('migrate_laser')
   }
 
   return {

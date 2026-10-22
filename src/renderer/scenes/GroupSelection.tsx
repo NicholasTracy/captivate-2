@@ -18,7 +18,7 @@ import {
 } from 'renderer/redux/controlSlice'
 import { universeHasMovers } from 'shared/dmxFixtures'
 import { getSortedGroupsFromPlacedFixtures } from 'shared/dmxUtil'
-import { ALL_GROUP_NAME } from 'shared/fixtureGroups'
+import { ALL_GROUP_NAME, isObsoleteLaserGroupName } from 'shared/fixtureGroups'
 import { universeHasAtmospherics } from 'shared/atmosphericsMapping'
 import { showVisGroupUi, splitDisplayName } from './splitUiVisibility'
 import SplitModShapingModal from './SplitModShapingModal'
@@ -77,6 +77,9 @@ export default function GroupSelection({ splitIndex }: Props) {
     if (!showVisualizerGroup && group === 'Visualizer') {
       continue
     }
+    if (isObsoleteLaserGroupName(group)) {
+      continue
+    }
     allAvailableGroups.add(group)
   }
 
@@ -86,6 +89,7 @@ export default function GroupSelection({ splitIndex }: Props) {
   availableGroups = Array.from(allAvailableGroups)
     .filter(
       (group) =>
+        !isObsoleteLaserGroupName(group) &&
         (showVisualizerGroup || group !== 'Visualizer') &&
         (hasMoverFixtures ||
           group !== 'Movers' ||

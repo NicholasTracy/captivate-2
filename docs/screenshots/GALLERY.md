@@ -87,9 +87,3 @@ Visualizer streaming / NDI output settings
 3D stage lighting preview
 
 ![3D lighting preview](https://raw.githubusercontent.com/NicholasTracy/captivate-2/Main/docs/screenshots/Captivate_Lighting_3D.png)
-
-## Laser
-
-Laser control window
-
-![Laser](https://raw.githubusercontent.com/NicholasTracy/captivate-2/Main/docs/screenshots/Captivate_Laser.png)

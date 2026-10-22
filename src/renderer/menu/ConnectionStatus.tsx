@@ -7,7 +7,7 @@ import {
 } from './statusBarUi'
 
 interface Props {
-  type: 'midi' | 'dmx' | 'link'
+  type: 'midi' | 'osc' | 'dmx' | 'link'
 }
 
 function dmxIndicatorState(
@@ -55,6 +55,10 @@ export default function ConnectionStatus({ type }: Props) {
   const numPeers = useRealtimeSelector((state) => state.time.numPeers)
   const dmxConnected = useTypedSelector((state) => state.gui.dmx.connected)
   const midiConnected = useTypedSelector((state) => state.gui.midi.connected)
+  const midiOutConnected = useTypedSelector(
+    (state) => state.gui.midiOut.connected
+  )
+  const osc = useTypedSelector((state) => state.gui.osc)
   const dmxConnectable = useControlSelector(
     (state) => state.device.connectable.dmx
   )
@@ -83,13 +87,66 @@ export default function ConnectionStatus({ type }: Props) {
     )
   }
 
+  if (type === 'osc') {
+    const enabled = osc.enabled === true
+    const listening = osc.listening === true
+    const sendEnabled = osc.sendEnabled === true
+    const sending = osc.sending === true
+    const parts: string[] = []
+    if (!enabled && !sendEnabled) {
+      parts.push('OSC off — enable in Connections')
+    } else {
+      if (enabled) {
+        parts.push(
+          listening
+            ? `listening :${osc.port}`
+            : osc.error
+              ? `listen error: ${osc.error}`
+              : 'listen starting'
+        )
+      }
+      if (sendEnabled) {
+        parts.push(
+          osc.sendError
+            ? `send error: ${osc.sendError}`
+            : sending
+              ? `sending ${osc.sendHost}:${osc.sendPort}`
+              : 'send ready'
+        )
+      }
+    }
+    const title = parts.join(' · ')
+    const color =
+      listening || sending
+        ? '#78dc82'
+        : enabled || sendEnabled
+          ? '#e8a020'
+          : '#e05a5a'
+
+    return (
+      <StatusBarConnectionRow title={title}>
+        <StatusBarConnectionLabel>osc</StatusBarConnectionLabel>
+        <StatusBarStatusDot $color={color} />
+      </StatusBarConnectionRow>
+    )
+  }
+
   const isConnected = midiConnected.length > 0
-  const title = isConnected ? 'midi connected' : 'No midi connection'
+  const outCount = midiOutConnected.length
+  const title = isConnected
+    ? outCount > 0
+      ? `midi in (${midiConnected.length}) · out (${outCount})`
+      : 'midi connected'
+    : outCount > 0
+      ? `midi out (${outCount}) — no inputs`
+      : 'No midi connection'
 
   return (
     <StatusBarConnectionRow title={title}>
       <StatusBarConnectionLabel>midi</StatusBarConnectionLabel>
-      <StatusBarStatusDot $color={isConnected ? '#78dc82' : '#e05a5a'} />
+      <StatusBarStatusDot
+        $color={isConnected || outCount > 0 ? '#78dc82' : '#e05a5a'}
+      />
     </StatusBarConnectionRow>
   )
 }

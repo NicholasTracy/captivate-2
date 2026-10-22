@@ -51,6 +51,12 @@ export function initSplitScene(): SplitScene_t {
 export interface LightScene_t extends SceneBase {
   modulators: Modulator[]
   splitScenes: SplitScene_t[]
+  /**
+   * Per-scene routing from performance bank control id → destination action.
+   * Only the active scene's routes are applied when a performance value changes.
+   * Values are stored as plain objects compatible with MidiAction (see deviceState).
+   */
+  performanceRoutes?: { [controlId: string]: unknown }
 }
 
 export function initLightScene(): LightScene_t {
@@ -60,6 +66,7 @@ export function initLightScene(): LightScene_t {
     autoEnabled: true,
     modulators: [initModulator(1)],
     splitScenes: [initSplitScene()],
+    performanceRoutes: {},
   }
 }
 

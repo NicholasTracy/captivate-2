@@ -28,9 +28,9 @@ import {
   recordRecentProject,
 } from './recentProjectsStorage'
 import { readAppSettings, writeAppSettings } from './appSettingsStorage'
+import { applyGpuAccelerationFlags } from './gpuAcceleration'
 import { resolveHtmlPath } from './util'
 import * as engine from './engine/engine'
-import { laserDacDisconnect } from './engine/laserDacSession'
 import {
   bootstrapRemoteControlIpc,
   registerLighting3dPreviewPage,
@@ -69,7 +69,6 @@ import {
 } from './windowStateStorage'
 import {
   setActivePage,
-  setLaserWindowOpen,
   setVideoEnabled,
 } from '../renderer/redux/guiSlice'
 
@@ -258,35 +257,8 @@ function syncVideoEnabledToDetachedVisualizerCount() {
   )
 }
 
-function countDetachedLaserWindows(): number {
-  let n = 0
-  for (const w of detachedWindows) {
-    if (w.isDestroyed()) continue
-    let page: Page | undefined
-    try {
-      page = detachedWindowPagesById.get(w.webContents.id)
-    } catch {
-      continue
-    }
-    if (page === 'Laser') {
-      n += 1
-    }
-  }
-  return n
-}
-
-function syncLaserWindowOpenToDetachedCount() {
-  if (isClosing) {
-    return
-  }
-  engine.getIpcCallbacks()?.send_dispatch(
-    setLaserWindowOpen(countDetachedLaserWindows() > 0)
-  )
-}
-
 function reconcileDetachedGuiFlags() {
   syncVideoEnabledToDetachedVisualizerCount()
-  syncLaserWindowOpenToDetachedCount()
 }
 
 function focusWindow(window: BrowserWindow) {
@@ -332,7 +304,6 @@ function openOrFocusDetachedPage(page: Page, options?: OpenPageWindowOptions) {
   // Heavy pages are intentionally single-instance and process-isolated.
   if (
     page === 'Lighting3D' ||
-    page === 'Laser' ||
     page === 'Video' ||
     page === 'VideoViewport' ||
     page === 'Streaming'
@@ -575,8 +546,6 @@ function createAppWindow({
       ? 'persist:captivate-lighting3d'
       : !isMain && defaultPage === 'Atmospherics'
       ? 'persist:captivate-atmos'
-      : !isMain && defaultPage === 'Laser'
-      ? 'persist:captivate-laser'
       : !isMain &&
         (defaultPage === 'Video' ||
           defaultPage === 'VideoViewport' ||
@@ -832,9 +801,6 @@ function createAppWindow({
     if (isVisualizerDetachedPage(defaultPage)) {
       syncVideoEnabledToDetachedVisualizerCount()
     }
-    if (defaultPage === 'Laser') {
-      syncLaserWindowOpenToDetachedCount()
-    }
     window.on('close', (event) => {
       if (isClosing) {
         detachedCloseApprovedWebContentsIds.delete(webContentsId)
@@ -859,7 +825,6 @@ function createAppWindow({
       try {
         telemetryCounter('window.detached', 'closed')
         const wasVisualizerDetached = isVisualizerDetachedPage(defaultPage)
-        const wasLaserDetached = defaultPage === 'Laser'
         detachedWindows.delete(window)
         detachedCloseApprovedWebContentsIds.delete(webContentsId)
         detachedWindowPagesById.delete(webContentsId)
@@ -871,9 +836,6 @@ function createAppWindow({
         syncDetachedWindowLayoutSnapshot()
         if (wasVisualizerDetached) {
           syncVideoEnabledToDetachedVisualizerCount()
-        }
-        if (wasLaserDetached) {
-          syncLaserWindowOpenToDetachedCount()
         }
       } catch (error) {
         console.error('Error while cleaning up detached window:', error)
@@ -953,11 +915,7 @@ let appShutdownCleanupPromise: Promise<void> | null = null
 function runAppShutdownCleanup(): Promise<void> {
   if (appShutdownCleanupPromise) return appShutdownCleanupPromise
   appShutdownCleanupPromise = (async () => {
-    try {
-      await Promise.race([laserDacDisconnect(), wait(1500)])
-    } catch {
-      /* ignore */
-    }
+    /* reserved for future shutdown teardown */
   })()
   return appShutdownCleanupPromise
 }
@@ -1173,6 +1131,9 @@ if (!gotSingleInstanceLock) {
   console.info('Captivate is already running; exiting duplicate instance.')
   app.quit()
 } else {
+  // Must run before whenReady — Chromium GPU switches are otherwise ignored.
+  applyGpuAccelerationFlags()
+
   app.on('second-instance', () => {
     telemetryCounter('app', 'second_instance')
     if (mainWindow !== null && !mainWindow.isDestroyed()) {

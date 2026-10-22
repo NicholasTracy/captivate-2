@@ -6,6 +6,7 @@ import {
   clearKeyboardListening,
   midiSetIsEditing,
   midiSetKeyboardLearnMode,
+  midiSetMidiOutLearnMode,
 } from '../redux/controlSlice'
 import { useDeviceSelector } from '../redux/store'
 
@@ -17,9 +18,15 @@ export default function DetachedKeyboardMappingBar() {
   const keyboardLearnMode = useDeviceSelector((state) => state.keyboardLearnMode)
   const keyboardListening = useDeviceSelector((state) => state.keyboardListening)
   const isEditing = useDeviceSelector((state) => state.isEditing)
+  const midiOutLearnMode = useDeviceSelector((state) => state.midiOutLearnMode)
   const dispatch = useDispatch()
 
-  if (!keyboardLearnMode && !keyboardListening && !isEditing) {
+  if (
+    !keyboardLearnMode &&
+    !keyboardListening &&
+    !isEditing &&
+    !midiOutLearnMode
+  ) {
     return null
   }
 
@@ -27,6 +34,7 @@ export default function DetachedKeyboardMappingBar() {
     dispatch(clearKeyboardListening())
     dispatch(midiSetKeyboardLearnMode(false))
     dispatch(midiSetIsEditing(false))
+    dispatch(midiSetMidiOutLearnMode(false))
   }
 
   return (
@@ -35,9 +43,11 @@ export default function DetachedKeyboardMappingBar() {
         <KeyboardAltOutlinedIcon sx={{ fontSize: '1rem' }} />
         {keyboardListening
           ? 'Press a key to assign (Esc exits mapping)'
-          : isEditing
-            ? 'MIDI mapping mode (Esc exits)'
-            : 'Keyboard mapping mode (Esc exits)'}
+          : midiOutLearnMode
+            ? 'MIDI out assign mode (Esc exits)'
+            : isEditing
+              ? 'MIDI mapping mode (Esc exits)'
+              : 'Keyboard mapping mode (Esc exits)'}
       </Label>
       <ExitButton type="button" onClick={exitMapping} title="Exit mapping mode (Esc)">
         <CloseIcon sx={{ fontSize: '0.95rem' }} />

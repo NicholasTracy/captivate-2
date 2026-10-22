@@ -1,6 +1,17 @@
 import { WebContents } from 'electron'
 import { ConnectionManager } from './connections/ConnectionManager'
 import * as MidiConnection from './midiConnection'
+import * as MidiOutputConnection from './midiOutputConnection'
+import * as OscConnection from './oscConnection'
+import {
+  publishControlBusTick,
+  resetControlBusPublishState,
+} from './controlBusPublish'
+import {
+  linkRoleAllowsLocalTempoAuthorship,
+  normalizeLinkRole,
+  type LinkRole,
+} from '../../shared/controlBus'
 import NodeLink from 'node-link'
 import { ipcSetup, IPC_Callbacks } from './ipcHandler'
 import { shutdownRemoteControl } from './remoteControl/remoteControlManager'
@@ -24,8 +35,13 @@ import {
   updateChaseIndexes,
   normalizeChaseOptions,
 } from '../../shared/chase'
-import { getOutputParams } from '../../shared/modulation'
+import {
+  effectiveLfosAtSplit,
+  getModulatorLfoValue,
+  getOutputParams,
+} from '../../shared/modulation'
 import { handleMessage } from './handleMidi'
+import { handleOscMessage } from './handleOsc'
 import { VisualizerContainer } from './createVisualizerWindow'
 import {
   calculateDmx,
@@ -53,6 +69,7 @@ import {
 } from '../../shared/splitRandomizer'
 import { ThrottleMap } from './midiConnection'
 import { MidiMessage, midiInputID } from '../../shared/midi'
+import { OscMessage, oscInputID, DEFAULT_OSC_PORT } from '../../shared/osc'
 import { getAllParamKeys } from '../../renderer/redux/dmxSlice'
 import WledManager from './wled/wled_manager'
 import type { Page } from '../../shared/pages'
@@ -145,9 +162,38 @@ function isVisualizerWindowOpen(): boolean {
 }
 const _tapTempoEngine = new TapTempoEngine()
 
+function getLinkRole(control: CleanReduxState | null): LinkRole {
+  return normalizeLinkRole(
+    control?.control.device.connectionSettings.linkRole
+  )
+}
+
+function canSetLocalTempo(control: CleanReduxState | null): boolean {
+  return linkRoleAllowsLocalTempoAuthorship(getLinkRole(control))
+}
+
+/** Captivate-owned tempo while Link role is `leader` (resists peer tempo). */
+let _leaderAuthoritativeBpm: number | null = null
+
+function setNodeLinkTempo(bpm: number, control: CleanReduxState | null = _controlState) {
+  if (!canSetLocalTempo(control)) {
+    return
+  }
+  if (!Number.isFinite(bpm)) {
+    return
+  }
+  _nodeLink.setTempo(bpm)
+  if (getLinkRole(control) === 'leader') {
+    _leaderAuthoritativeBpm = bpm
+  }
+}
+
 function shouldApplyTapTempoToNodeLink(control: CleanReduxState | null) {
   if (control === null) {
     return true
+  }
+  if (!canSetLocalTempo(control)) {
+    return false
   }
   if (control.control.device.connectionSettings.midiClockBpmEnabled === true) {
     return false
@@ -176,7 +222,7 @@ function _tapTempo() {
   _tapTempoEngine.tap(
     (newBpm) => {
       if (shouldApplyTapTempoToNodeLink(_controlState)) {
-        _nodeLink.setTempo(newBpm)
+        setNodeLinkTempo(newBpm)
       }
     },
     (newPhase, { force }) => {
@@ -327,7 +373,20 @@ const _midiThrottle = new ThrottleMap((message: MidiMessage) => {
       message,
       _controlState,
       _realtimeState,
-      _nodeLink,
+      (bpm) => setNodeLinkTempo(bpm),
+      _ipcCallbacks.send_dispatch,
+      _tapTempo
+    )
+  }
+}, 1000 / 60)
+
+const _oscThrottle = new ThrottleMap((message: OscMessage) => {
+  if (_controlState !== null && _ipcCallbacks !== null) {
+    handleOscMessage(
+      message,
+      _controlState,
+      _realtimeState,
+      (bpm) => setNodeLinkTempo(bpm),
       _ipcCallbacks.send_dispatch,
       _tapTempo
     )
@@ -506,6 +565,40 @@ function runRealtimeLoopTick() {
           state: _controlState,
         })
       }
+
+      // Leader role: keep overwriting session tempo from Captivate's bpm.
+      if (
+        getLinkRole(_controlState) === 'leader' &&
+        _controlState.control.device.connectionSettings.linkEnabled === true
+      ) {
+        if (_leaderAuthoritativeBpm === null) {
+          const sessionBpm = _nodeLink.getSessionInfoCurrent().bpm
+          if (Number.isFinite(sessionBpm)) {
+            _leaderAuthoritativeBpm = sessionBpm
+          }
+        }
+        const localBpm =
+          _leaderAuthoritativeBpm ?? _realtimeState.time.bpm
+        if (Number.isFinite(localBpm)) {
+          const sessionBpm = _nodeLink.getSessionInfoCurrent().bpm
+          if (
+            !Number.isFinite(sessionBpm) ||
+            Math.abs(sessionBpm - localBpm) >= 0.05
+          ) {
+            _nodeLink.setTempo(localBpm)
+          }
+        }
+      } else {
+        _leaderAuthoritativeBpm = null
+      }
+
+      publishControlBusTick(
+        _controlState,
+        _realtimeState,
+        (status) => {
+          _ipcCallbacks?.send_osc_connection_update(status)
+        }
+      )
     }
     telemetryHealthSampled('engine.realtime', 'ok')
   } catch (error) {
@@ -612,7 +705,7 @@ export function start(
     },
     on_user_command: (command) => {
       if (command.type === 'IncrementTempo') {
-        _nodeLink.setTempo(_realtimeState.time.bpm + command.amount)
+        setNodeLinkTempo(_realtimeState.time.bpm + command.amount)
       } else if (command.type === 'SetLinkEnabled') {
         if (_controlState !== null) {
           _controlState.control.device.connectionSettings.linkEnabled =
@@ -639,7 +732,7 @@ export function start(
           _nodeLink.setIsPlaying(false)
         }
       } else if (command.type === 'SetBPM') {
-        _nodeLink.setTempo(command.bpm)
+        setNodeLinkTempo(command.bpm)
       } else if (command.type === 'TapTempo') {
         _tapTempo()
       }
@@ -821,6 +914,40 @@ export function start(
     },
   })
 
+  MidiOutputConnection.maintain({
+    update_ms: 1000,
+    onUpdate: (activeDevices) => {
+      if (_ipcCallbacks !== null)
+        _ipcCallbacks.send_midi_out_connection_update(activeDevices)
+    },
+    getConnectable: () => {
+      return _controlState
+        ? _controlState.control.device.connectable.midiOut ?? []
+        : []
+    },
+  })
+
+  OscConnection.maintain({
+    update_ms: 1000,
+    onUpdate: (status) => {
+      if (_ipcCallbacks !== null)
+        _ipcCallbacks.send_osc_connection_update(status)
+    },
+    onMessage: (message) => {
+      _oscThrottle.call(oscInputID(message.address), message)
+    },
+    getSettings: () => {
+      const settings = _controlState?.control.device.connectionSettings
+      return {
+        enabled: settings?.oscEnabled === true,
+        port:
+          typeof settings?.oscPort === 'number'
+            ? settings.oscPort
+            : DEFAULT_OSC_PORT,
+      }
+    },
+  })
+
   return _ipcCallbacks
 }
 
@@ -848,6 +975,9 @@ export function stop() {
   telemetryHealth('engine', 'warn', 'Engine stopped')
   clearEngineLoopTimers()
   MidiConnection.shutdownMidi()
+  MidiOutputConnection.shutdownMidiOut()
+  OscConnection.shutdownOsc()
+  resetControlBusPublishState()
   try {
     _connectionManager.shutdown()
   } catch {
@@ -944,7 +1074,7 @@ function applyAudioBeatClock(controlState: CleanReduxState | null) {
   telemetryGauge('audio.beat_clock', 'target_tempo_bpm', targetTempo, 'bpm')
   telemetryGauge('audio.beat_clock', 'nudge_bpm', _audioBeatClockNudgeBpm, 'bpm')
   if (Math.abs(currentTempo - targetTempo) >= AUDIO_BEAT_CLOCK_TEMPO_EPSILON) {
-    _nodeLink.setTempo(targetTempo)
+    setNodeLinkTempo(targetTempo, controlState)
     telemetryCounter('audio.beat_clock', 'tempo_adjustments')
   }
 }
@@ -1644,10 +1774,30 @@ function getNextRealtimeState(
         normalizeChaseOptions(splitScene.chase ?? {})
       )
 
+      // After getOutputParams advanced envelopes, read current LFO values without
+      // double-advancing for the control bus / OSC publish path.
+      const effectiveLfos = effectiveLfosAtSplit(
+        scene,
+        splitIndex,
+        nextTimeState.beats,
+        _latestAudioMetrics
+      )
+      const phaseOff = splitScene.splitModShaping?.phaseOffsetBeats
+      const modBeats =
+        nextTimeState.beats +
+        (Number.isFinite(phaseOff) ? Number(phaseOff) : 0)
+      const modulatorValues = effectiveLfos.map((lfo, modIndex) =>
+        getModulatorLfoValue(lfo, modBeats, _latestAudioMetrics, modIndex, {
+          advance: false,
+          splitIndex,
+        })
+      )
+
       return {
         outputParams: splitOutputParams,
         randomizer: newRandomizerState,
         chase: newChaseState,
+        modulatorValues,
       }
     }
   )

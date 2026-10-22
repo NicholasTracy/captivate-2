@@ -312,11 +312,6 @@ const paramDisplayNames: { [key: string]: string } = {
   visSlider7: 'Visual Slider 7',
   visSlider8: 'Visual Slider 8',
   visStageMapMix: 'Stage light map',
-  laserDotDensity: 'Dot density',
-  laserScanPath: 'Scan path',
-  laserPlaybackSpeed: 'Playback speed',
-  laserAnimProgress: 'Animation progress',
-  laserBeamHue: 'Beam color (solid)',
 }
 
 export function paramDisplayName(param: DefaultParam | string): string {

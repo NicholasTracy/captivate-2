@@ -1,26 +1,30 @@
-# MIDI input, learn, and keyboard shortcuts
+# MIDI input, learn, out, and keyboard shortcuts
 
 Captivate listens to enabled MIDI **input** ports for show control (pads,
-faders, encoders) and, optionally, MIDI timing clock for master BPM. Keyboard
-shortcuts fire the same **button** actions. There is no MIDI output, MIDI Thru,
-Program Change, pitch bend, or aftertouch path.
+faders, encoders) and, optionally, MIDI timing clock for master BPM. It can also
+open MIDI **outputs** for CC parameter publish and MIDI clock out. Keyboard
+shortcuts fire the same **button** actions. There is no MIDI Thru, Program
+Change, pitch bend, or aftertouch path.
 
-MIDI learn and keyboard assignment are mutually exclusive: turning one on
-clears the other.
+Hub overview: [Show control hub](show-control.md).
 
-## Connect a MIDI port
+MIDI learn, MIDI out assign, and keyboard assignment are mutually exclusive:
+turning one on clears the others.
+
+## Connect MIDI ports
 
 1. Open **Connections** (ethernet icon in the status bar).
-2. Under **MIDI**, click each input you want Captivate to open.
-3. The status-bar **midi** dot is green when at least one enabled port is
-   actually open. It is red when no ports are open (including “enabled in the
-   list but unplugged”).
-4. Optional: with at least one port open, turn on **Drive BPM from MIDI clock**.
-   That follows `0xF8` timing clock (24 PPQ) and turns off **Use Audio Beat
-   Clock**. Details: [Audio input, beat clock, and music energy](audio-input-sync.md).
+2. Under **MIDI → Inputs**, click each input you want Captivate to open.
+3. Under **MIDI → Outputs**, click each output for CC publish / clock out.
+4. The status-bar **midi** dot is green when at least one in or out port is
+   open.
+5. Optional input: **Drive BPM from MIDI clock** follows `0xF8` (24 PPQ) and
+   turns off audio beat clock **and** MIDI clock out (loop guard).
+6. Optional output: **Send MIDI clock** emits `0xF8` at 24 PPQ from master BPM,
+   plus `0xFA` / `0xFC` on play/stop edges. Disabled while clock-in is on.
 
-The engine rescans ports every **1000 ms**. Clicking a port toggles
-`device.connectable.midi`; only those IDs are opened.
+The engine rescans ports every **1000 ms**. Clicking toggles
+`device.connectable.midi` or `device.connectable.midiOut`.
 
 ## MIDI learn
 
@@ -66,7 +70,7 @@ bound to keys.
 | `toggleMoverFollowOverride` | Movers follow override | Toggles follow override |
 | `triggerAtmosFixture` | Atmospherics Trigger | Manual nonce for that fixture id |
 | `setActivePage` | Sidebar page icons | Switches the main page |
-| `laserTool` | Laser editor tools | Selects that tool (`select`, `line`, `freehand`, …) |
+| `firePerformancePad` | Performance page pads | Fires pad → active-scene route |
 
 Button CCs fire on a **rising edge** through 64 (value ≥ 64). Note On always
 fires, including velocity 0. Note Off does not fire a button; it only clears
@@ -77,14 +81,19 @@ the CC press latch.
 | Action | UI | Range |
 |--------|----|-------|
 | `setMaster` | Sidebar MASTER | 0..1 |
-| `setBaseParam` | Split params, pads, gobo/prism/focus, HSV | 0..1, per split |
+| `setBaseParam` | Split params, pads, gobo/prism/focus, HSV | 0..1, per split; **active scene only** |
 | `setAutoSceneBombacity` | Auto energy slider | 0..1 |
 | `setBpm` | Status-bar BPM | Learned 60..180 by default; clamp 1..1000 |
+| `setPerformanceValue` | Performance page sliders | 0..1 → bank, then active-scene route |
 | `setMoverFollowOverridePan` / `Tilt` | Movers follow override | 0..1 |
 
 XY / HSV pads expose one slider zone per axis (top/bottom for two-axis pads).
 Split index **0** keeps the legacy action id (`setBaseParam` + param key).
 Other splits use `setBaseParam{splitIndex}:{paramKey}`.
+
+For the **same CC** to drive **different** params per light scene, learn MIDI onto
+a performance slider (`setPerformanceValue`), then assign a destination route on
+each scene (Performance page).
 
 The DMX mixer has no MIDI overlays.
 
@@ -113,27 +122,60 @@ Legacy BPM mappings stored in 0..1 are migrated to 60..180 on load.
 - Clearing the MIDI **X** on a button overlay also removes that action’s
   keyboard chord. Use the keyboard × / dialog Remove to clear only the key.
 
+## MIDI out assign
+
+MIDI **out** is configured manually on the orange overlays — you pick channel and
+CC/note numbers. Captivate does **not** learn out mappings from MIDI input
+(that would only make sense for MIDI in).
+
+### Sliders → CC
+
+`setMaster`, `setBaseParam`, `setBpm`, `setGroupIntensity`, `setAutoSceneBombacity`.
+
+1. Enable at least one MIDI **output** in Connections.
+2. Click the status-bar **upload** icon (orange overlays).
+3. On a slider overlay, click **Assign CC**, then drag **ch** (1–16) and **cc**
+   (0–127) to the values your external software expects.
+4. Values are scaled 0..127 from the action’s default range and sent when they
+   change. **X** clears the binding. Esc or the upload icon exits.
+
+### Buttons → note
+
+Stateful buttons publish note on/off on all enabled outputs:
+
+`toggleBlackout`, `setActiveSceneIndex`, `setActivePage`, `toggleAutoScene`.
+
+Same assign flow with **Assign note** → **ch** + **note**. Note On (vel 127)
+when the state is active; Note Off when inactive.
+
+Bindings persist as `device.midiOutActions`.
+
 ## MIDI clock vs mapped BPM
 
-Mapped `setBpm` writes NodeLink tempo directly. **Drive BPM from MIDI clock**
-is a separate path: it estimates BPM from `0xF8` on any enabled input, clamps
-**45..220**, and goes stale after **450 ms** without ticks. MIDI Start (`0xFA`)
-and Stop (`0xFC`) reset the clock estimator; they do **not** play or pause
-Captivate transport.
+Mapped `setBpm` writes NodeLink tempo directly (subject to [Link role](show-control.md)).
+**Drive BPM from MIDI clock** estimates BPM from `0xF8` on any enabled input,
+clamps **45..220**, and goes stale after **450 ms** without ticks. MIDI Start
+(`0xFA`) and Stop (`0xFC`) reset the clock estimator; they do **not** play or
+pause Captivate transport when received as input.
+
+**Send MIDI clock** (output) emits `0xF8` from Captivate BPM and `0xFA`/`0xFC`
+on local play/stop. It cannot run while clock-in is enabled.
 
 With MIDI clock or audio beat clock on, TAP does not write NodeLink tempo
-(it can still hint the audio detector when Audio Mode is on).
+(it can still hint the audio detector when Audio Mode is on). Link **follow**
+role also blocks local `setTempo` from UI/MIDI/OSC/audio/MIDI-clock followers.
 
 ## Persistence
 
-MIDI port enables, clock flag, `buttonActions`, `sliderActions`, and
-`keyboardShortcuts` live on `control.device` and save with **Serial Device
-Settings (MIDI & DMX)** in the `.cap` file. Uncheck that section on load to
-keep the current mappings.
+MIDI in/out port enables, clock flags, `buttonActions`, `sliderActions`,
+`midiOutActions`, and `keyboardShortcuts` live on `control.device` and save with
+**Serial Device Settings (MIDI & DMX)** in the `.cap` file. Uncheck that section
+on load to keep the current mappings.
 
-Learn-mode flags (`isEditing`, `keyboardLearnMode`, `listening`) are on the
-same object and are **not** stripped on save. Exit mapping before a manual
-save if you do not want overlays restored on the next load.
+Learn-mode flags (`isEditing`, `keyboardLearnMode`, `midiOutLearnMode`,
+`listening`) are on the same object and are **not** stripped on save. Exit
+mapping before a manual save if you do not want overlays restored on the next
+load.
 
 ## Troubleshooting
 
@@ -156,8 +198,13 @@ midi Input (enabled ports, poll 1 s)
   → 0xF8/FA/FC: handleMidiSystemRealtime (BPM estimator)
   → Note/CC: throttle 60 Hz per input id (leading + trailing)
   → handleMessage
+       midi-out learn? setMidiOutAction, return
        learn? midiSetButtonAction / midiSetSliderAction, return
        else fire button (fireMidiButtonAction) and/or slider
+
+midi Output (enabled ports, poll 1 s)
+  → control bus publish (~30 Hz): CC for midiOutActions
+  → MIDI clock out: 0xF8 @ 24 PPQ; 0xFA/0xFC on play/stop edges
 ```
 
 Keyboard: capture-phase `keydown` → `fireMidiButtonAction` (buttons only). TAP
@@ -168,18 +215,22 @@ from a key sends the `TapTempo` user command so the engine owns tempo/phase.
 | Role | Path |
 |------|------|
 | Parse Note/CC; input ids | `src/shared/midi.ts` |
-| Open ports, poll, realtime bytes | `src/main/engine/midiConnection.ts` |
+| Open input ports, poll, realtime bytes | `src/main/engine/midiConnection.ts` |
+| Open output ports; sendMessage | `src/main/engine/midiOutputConnection.ts` |
+| Control bus + CC/clock publish | `src/main/engine/controlBusPublish.ts` |
 | Learn + playback | `src/main/engine/handleMidi.ts` |
 | Clock estimator, 60 Hz throttle, TAP rules | `src/main/engine/engine.ts` |
 | Action types, slider bounds, reducers | `src/renderer/redux/deviceState.ts` |
 | Button side effects | `src/renderer/redux/fireMidiButtonAction.ts` |
 | Overlays | `src/renderer/base/MidiOverlay.tsx`, `MidiOverlay_xy.tsx` |
-| Piano / Connections UI | `src/renderer/menu/StatusBar.tsx`, `src/renderer/overlays/Devices.tsx` |
+| Piano / upload / Connections UI | `src/renderer/menu/StatusBar.tsx`, `src/renderer/overlays/Devices.tsx` |
 | Keyboard learn + dispatch | `src/renderer/hooks/useKeyboardShortcuts.ts`, `src/renderer/input/keyboardChord.ts` |
-| Load-time mapping normalize | `src/shared/fixState.ts` (`normalizeDeviceMidiMappings`) |
+| Load-time mapping normalize | `src/shared/fixState.ts` |
 
 ## Related
 
+- [Show control hub](show-control.md)
+- [OSC input and auto-publish](osc-mapping.md) — same action maps over UDP
 - [Audio input, beat clock, and music energy](audio-input-sync.md) — MIDI clock vs audio beat clock vs Link
 - [Project files and autosave](PROJECTS.md) — mappings travel with Serial Device Settings
 - [Atmospherics](atmospherics.md) — `triggerAtmosFixture`

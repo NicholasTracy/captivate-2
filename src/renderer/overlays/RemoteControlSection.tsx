@@ -132,9 +132,9 @@ export default function RemoteControlSection() {
               widely. Connected browsers appear below when the server is running.
             </li>
             <li>
-              Not available remotely: visualizer, fixture editor, Laser ILDA,
-              Lighting 3D, wLED, MIDI mapping learn mode, keyboard shortcuts, and
-              project save/load.
+              Not available remotely: visualizer, fixture editor, Lighting 3D,
+              wLED, MIDI mapping learn mode, keyboard shortcuts, and project
+              save/load.
             </li>
           </HelpList>
         </SectionHelpButton>

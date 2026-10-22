@@ -51,6 +51,8 @@ export default function MidiOverlay_xy({
   style,
 }: XYProps) {
   const isEditing = useDeviceSelector((state) => state.isEditing)
+  const midiOutLearnMode = useDeviceSelector((state) => state.midiOutLearnMode)
+  const mappingVisible = isEditing || midiOutLearnMode
   const zoneLabels = resolveLabels(actions, labels)
   const overlayStyle: React.CSSProperties = { width: '100%', height: '100%' }
   const splitBadge =
@@ -70,7 +72,7 @@ export default function MidiOverlay_xy({
   return (
     <Root style={style}>
       {children}
-      {isEditing && actionsWithSplit.length === 2 && (
+      {mappingVisible && actionsWithSplit.length === 2 && (
         <Overlay>
           {splitBadge}
           <AxisZone $position="top">
@@ -89,7 +91,7 @@ export default function MidiOverlay_xy({
           </AxisZone>
         </Overlay>
       )}
-      {isEditing && actionsWithSplit.length !== 2 && (
+      {mappingVisible && actionsWithSplit.length !== 2 && (
         <Overlay $wrap>
           {splitBadge}
           {actionsWithSplit.map((action, index) => (

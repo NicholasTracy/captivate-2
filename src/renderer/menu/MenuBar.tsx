@@ -8,6 +8,7 @@ import WbIncandescentIcon from '@mui/icons-material/WbIncandescent'
 import AirIcon from '@mui/icons-material/Air'
 import VisualsIcon from '../images/Thick.png'
 import MixerIcon from '@mui/icons-material/BarChart'
+import TuneIcon from '@mui/icons-material/Tune'
 import { useDmxSelector, useTypedSelector } from '../redux/store'
 import { useDispatch } from 'react-redux'
 import { setActivePage, Page } from '../redux/guiSlice'
@@ -28,6 +29,7 @@ type SidebarAccent =
   | 'movers'
   | 'led'
   | 'modulation'
+  | 'performance'
   | 'visualizer'
   | 'mixer'
   | 'atmos'
@@ -57,6 +59,12 @@ function accentColors(accent: SidebarAccent) {
         base: 'linear-gradient(180deg, rgba(161, 110, 255, 0.22), rgba(161, 110, 255, 0.08))',
         active: 'linear-gradient(180deg, rgba(161, 110, 255, 0.56), rgba(161, 110, 255, 0.2))',
         border: '#a16eff',
+      }
+    case 'performance':
+      return {
+        base: 'linear-gradient(180deg, rgba(255, 140, 90, 0.22), rgba(255, 140, 90, 0.08))',
+        active: 'linear-gradient(180deg, rgba(255, 140, 90, 0.58), rgba(255, 140, 90, 0.2))',
+        border: '#ff8c5a',
       }
     case 'visualizer':
       return {
@@ -161,6 +169,13 @@ export default function MenuBar() {
         tourId={TOUR_IDS.navScenes}
       >
         <LightingIcon fontSize="inherit" />
+      </MenuItem>
+      <MenuItem
+        page="Performance"
+        tooltipText="Performance pads & sliders"
+        accent="performance"
+      >
+        <TuneIcon fontSize="inherit" />
       </MenuItem>
       <Tooltip title="Open visualizer in a separate window" placement="right">
         <span>

@@ -266,7 +266,6 @@ export function getSaveSlots(): SaveSlot[] {
             after: countProjectContent({
               dmx: slotState.dmx,
               control: slotState.control,
-              laser: slotState.laser,
             }),
             extra: { source: 'save_slot_history' },
           })
@@ -327,7 +326,6 @@ function restoreLastState(
   const after = countProjectContent({
     dmx: parsed.state.dmx,
     control: parsed.state.control,
-    laser: parsed.state.laser,
   })
   reduxStore.dispatch(resetState(parsed.state))
   logProjectPersistence({

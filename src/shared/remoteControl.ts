@@ -94,7 +94,6 @@ const LOCAL_ONLY_ACTION_TYPES = new Set<string>([
   'gui/setAboutOpen',
   'gui/clearAtmosManualTriggers',
   'gui/setLedSidebarEnabled',
-  'gui/setLaserToolMidiRequest',
   'reset-state',
   'reset-remote-state',
   'reset-universe',
@@ -132,7 +131,6 @@ export function isRemoteDispatchAllowed(action: unknown): boolean {
   if (typeof type !== 'string' || type.length <= 0) return false
   if (type.startsWith('@@')) return false
   if (LOCAL_ONLY_ACTION_TYPES.has(type)) return false
-  if (type.startsWith('laser/')) return false
   if (type.startsWith('dmx/')) return false
   if (type.startsWith('scenes/')) return true
   if (SHARED_GUI_ACTION_TYPES.has(type)) return true

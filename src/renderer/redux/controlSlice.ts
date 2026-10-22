@@ -48,6 +48,25 @@ import {
   normalizeGroupIntensityMap,
   type GroupIntensityMap,
 } from '../../shared/groupIntensity'
+import {
+  cellsOverlap,
+  clampGridToBank,
+  createPerformanceControl,
+  findFreeGridSlot,
+  initPerformanceBank,
+  normalizeGridCell,
+  normalizePerformanceColor,
+  PERFORMANCE_COLOR_PRESETS,
+  PERFORMANCE_DEFAULT_COLS,
+  PERFORMANCE_DEFAULT_ROWS,
+  type PerformanceBank,
+  type PerformanceControlKind,
+} from '../../shared/performance'
+import {
+  applyPerformanceRouteToControlState,
+  autoLabelForRoute,
+} from './performanceRouteApply'
+import type { MidiAction } from './deviceState'
 
 export interface ControlState extends ScenesStateBundle {
   device: DeviceState
@@ -57,6 +76,8 @@ export interface ControlState extends ScenesStateBundle {
    * Multiplies under global master on DMX/LED output.
    */
   groupIntensity: GroupIntensityMap
+  /** Snap-grid performance pads/sliders; per-scene routes live on light scenes. */
+  performance: PerformanceBank
 }
 export function initControlState(): ControlState {
   return {
@@ -65,6 +86,7 @@ export function initControlState(): ControlState {
     device: initDeviceState(),
     master: 1,
     groupIntensity: {},
+    performance: initPerformanceBank(),
   }
 }
 
@@ -290,6 +312,156 @@ const scenesSlice = createSlice({
     resetGroupIntensities: (state) => {
       state.groupIntensity = {}
     },
+
+    // =====================   PERFORMANCE BANK   ===========================
+    setPerformanceEditUnlocked: (
+      state,
+      { payload }: PayloadAction<boolean>
+    ) => {
+      state.performance.editUnlocked = payload === true
+    },
+    setPerformanceGridSize: (
+      state,
+      { payload }: PayloadAction<{ cols: number; rows: number }>
+    ) => {
+      const cols = Math.min(24, Math.max(2, Math.round(payload.cols)))
+      const rows = Math.min(24, Math.max(2, Math.round(payload.rows)))
+      state.performance.cols = cols
+      state.performance.rows = rows
+      for (const control of Object.values(state.performance.controls)) {
+        if (!control) continue
+        control.grid = clampGridToBank(
+          normalizeGridCell(control.grid, control.kind),
+          cols,
+          rows
+        )
+      }
+    },
+    addPerformanceControl: (
+      state,
+      { payload }: PayloadAction<{ kind: PerformanceControlKind }>
+    ) => {
+      if (!state.performance.editUnlocked) return
+      const kind = payload.kind === 'pad' ? 'pad' : 'slider'
+      const slot = findFreeGridSlot(state.performance, kind)
+      if (!slot) return
+      const used = new Set(
+        Object.values(state.performance.controls).map((c) =>
+          c.color.toLowerCase()
+        )
+      )
+      const nextColor =
+        PERFORMANCE_COLOR_PRESETS.find(
+          (c) => !used.has(c.toLowerCase())
+        ) ?? PERFORMANCE_COLOR_PRESETS[state.performance.order.length % PERFORMANCE_COLOR_PRESETS.length]
+      const control = createPerformanceControl(kind, slot, undefined, nextColor)
+      state.performance.controls[control.id] = control
+      state.performance.order.push(control.id)
+    },
+    removePerformanceControl: (state, { payload }: PayloadAction<string>) => {
+      if (!state.performance.editUnlocked) return
+      const id = payload
+      if (!state.performance.controls[id]) return
+      delete state.performance.controls[id]
+      state.performance.order = state.performance.order.filter((x) => x !== id)
+      // Drop routes for this control from all light scenes
+      for (const sceneId of state.light.ids) {
+        const scene = state.light.byId[sceneId]
+        if (scene?.performanceRoutes && id in scene.performanceRoutes) {
+          delete scene.performanceRoutes[id]
+        }
+      }
+    },
+    movePerformanceControl: (
+      state,
+      { payload }: PayloadAction<{ id: string; x: number; y: number }>
+    ) => {
+      if (!state.performance.editUnlocked) return
+      const control = state.performance.controls[payload.id]
+      if (!control) return
+      const bank = state.performance
+      const next = clampGridToBank(
+        normalizeGridCell(
+          { ...control.grid, x: payload.x, y: payload.y },
+          control.kind
+        ),
+        bank.cols,
+        bank.rows
+      )
+      const overlap = Object.values(bank.controls).some(
+        (c) => c && c.id !== control.id && cellsOverlap(next, c.grid)
+      )
+      if (overlap) {
+        // Try nearby free slot with same size
+        const free = findFreeGridSlot(bank, control.kind, control.id)
+        if (!free) return
+        control.grid = free
+        return
+      }
+      control.grid = next
+    },
+    renamePerformanceControl: (
+      state,
+      { payload }: PayloadAction<{ id: string; label: string }>
+    ) => {
+      const control = state.performance.controls[payload.id]
+      if (!control) return
+      const label = payload.label.trim()
+      if (label.length === 0) return
+      control.label = label
+      control.manuallyRenamed = true
+    },
+    setPerformanceControlColor: (
+      state,
+      { payload }: PayloadAction<{ id: string; color: string }>
+    ) => {
+      const control = state.performance.controls[payload.id]
+      if (!control) return
+      control.color = normalizePerformanceColor(payload.color)
+    },
+    setPerformanceControlValue: (
+      state,
+      { payload }: PayloadAction<{ id: string; value: number }>
+    ) => {
+      const control = state.performance.controls[payload.id]
+      if (!control) return
+      const value = clampNormalized(payload.value)
+      control.value = value
+      applyPerformanceRouteToControlState(state, payload.id, value)
+    },
+    firePerformancePad: (state, { payload }: PayloadAction<string>) => {
+      const control = state.performance.controls[payload]
+      if (!control || control.kind !== 'pad') return
+      control.value = 1
+      applyPerformanceRouteToControlState(state, payload, 1)
+    },
+    setPerformanceRoute: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ controlId: string; action: MidiAction | null }>
+    ) => {
+      const scene = state.light.byId[state.light.active]
+      if (!scene) return
+      if (!scene.performanceRoutes) {
+        scene.performanceRoutes = {}
+      }
+      const control = state.performance.controls[payload.controlId]
+      if (payload.action === null) {
+        delete scene.performanceRoutes[payload.controlId]
+        return
+      }
+      scene.performanceRoutes[payload.controlId] = payload.action
+      if (control && !control.manuallyRenamed) {
+        control.label = autoLabelForRoute(payload.action)
+      }
+    },
+    clearPerformanceRoute: (state, { payload }: PayloadAction<string>) => {
+      const scene = state.light.byId[state.light.active]
+      if (!scene?.performanceRoutes) return
+      delete scene.performanceRoutes[payload]
+    },
+
     // =====================   LIGHT & VISUAL SCENES   ===========================
     setAutoSceneEnabled: (
       state,
@@ -1078,6 +1250,12 @@ const scenesSlice = createSlice({
       midiActions.clearKeyboardListening(state.device),
     midiSetKeyboardLearnMode: (state, action) =>
       midiActions.setKeyboardLearnMode(state.device, action),
+    midiSetMidiOutLearnMode: (state, action) =>
+      midiActions.setMidiOutLearnMode(state.device, action),
+    setMidiOutAction: (state, action) =>
+      midiActions.setMidiOutAction(state.device, action),
+    removeMidiOutAction: (state, action) =>
+      midiActions.removeMidiOutAction(state.device, action),
     setKeyboardShortcut: (state, action) =>
       midiActions.setKeyboardShortcut(state.device, action),
     removeKeyboardChord: (state, action) =>
@@ -1094,6 +1272,8 @@ const scenesSlice = createSlice({
       midiActions.setDmxConnectable(state.device, action),
     setMidiConnectable: (state, action) =>
       midiActions.setMidiConnectable(state.device, action),
+    setMidiOutConnectable: (state, action) =>
+      midiActions.setMidiOutConnectable(state.device, action),
     removeMidiAction: (state, action) =>
       midiActions.removeMidiAction(state.device, action),
     setArtNetConnectable: (state, action) =>
@@ -1120,10 +1300,24 @@ const scenesSlice = createSlice({
       midiActions.setAudioBeatClockEnabled(state.device, action),
     setMidiClockBpmEnabled: (state, action) =>
       midiActions.setMidiClockBpmEnabled(state.device, action),
+    setMidiClockOutEnabled: (state, action) =>
+      midiActions.setMidiClockOutEnabled(state.device, action),
+    setOscEnabled: (state, action) =>
+      midiActions.setOscEnabled(state.device, action),
+    setOscPort: (state, action) =>
+      midiActions.setOscPort(state.device, action),
+    setOscSendEnabled: (state, action) =>
+      midiActions.setOscSendEnabled(state.device, action),
+    setOscSendHost: (state, action) =>
+      midiActions.setOscSendHost(state.device, action),
+    setOscSendPort: (state, action) =>
+      midiActions.setOscSendPort(state.device, action),
     setLinkEnabled: (state, action) =>
       midiActions.setLinkEnabled(state.device, action),
     setLinkStartStopSyncEnabled: (state, action) =>
       midiActions.setLinkStartStopSyncEnabled(state.device, action),
+    setLinkRole: (state, action) =>
+      midiActions.setLinkRole(state.device, action),
     setAudioBeatSensitivity: (state, action) =>
       midiActions.setAudioBeatSensitivity(state.device, action),
     setAudioBeatMinIntervalMs: (state, action) =>
@@ -1202,6 +1396,19 @@ export const {
   setGroupIntensityMap,
   resetGroupIntensities,
 
+  // PERFORMANCE BANK
+  setPerformanceEditUnlocked,
+  setPerformanceGridSize,
+  addPerformanceControl,
+  removePerformanceControl,
+  movePerformanceControl,
+  renamePerformanceControl,
+  setPerformanceControlColor,
+  setPerformanceControlValue,
+  firePerformancePad,
+  setPerformanceRoute,
+  clearPerformanceRoute,
+
   // LIGHT & VISUAL SCENES
   setAutoSceneEnabled,
   setAutoSceneBombacity,
@@ -1260,6 +1467,9 @@ export const {
   keyboardListen,
   clearKeyboardListening,
   midiSetKeyboardLearnMode,
+  midiSetMidiOutLearnMode,
+  setMidiOutAction,
+  removeMidiOutAction,
   setKeyboardShortcut,
   removeKeyboardChord,
   clearButtonMapping,
@@ -1268,6 +1478,7 @@ export const {
   midiSetSliderAction,
   setDmxConnectable,
   setMidiConnectable,
+  setMidiOutConnectable,
   removeMidiAction,
   setArtNetConnectable,
   setOpenDmxRefreshRateHz,
@@ -1281,8 +1492,15 @@ export const {
   setAudioInputAutoGainControl,
   setAudioBeatClockEnabled,
   setMidiClockBpmEnabled,
+  setMidiClockOutEnabled,
+  setOscEnabled,
+  setOscPort,
+  setOscSendEnabled,
+  setOscSendHost,
+  setOscSendPort,
   setLinkEnabled,
   setLinkStartStopSyncEnabled,
+  setLinkRole,
   setAudioBeatSensitivity,
   setAudioBeatMinIntervalMs,
   setAudioBpmSmoothing,

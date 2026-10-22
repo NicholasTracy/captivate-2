@@ -25,6 +25,7 @@ import type {
   ProjectionMappingConfig,
   ProjectionMappingOutput,
 } from '../../visualizer/threejs/layers/LayerConfig'
+import { ProjectionMappingGpuCompositor } from './ProjectionMappingGpuCompositor'
 
 interface VisualizerProps {
   viewportOnly?: boolean
@@ -298,6 +299,9 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const sourceHostRef = useRef<null | HTMLDivElement>(null)
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const outputCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({})
+  const mappingGpuCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const mappingGpuRef = useRef<ProjectionMappingGpuCompositor | null>(null)
+  const [gpuMappingActive, setGpuMappingActive] = useState(false)
   const dt = useRef<number>(60)
   const cleanStateRef = useRef(getCleanReduxState(store.getState()))
   const realtimeStateRef = useRef(realtimeStore.getState())
@@ -1077,6 +1081,8 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       vm.dispose()
+      mappingGpuRef.current?.dispose()
+      mappingGpuRef.current = null
       if (sourceCanvasRef.current === sourceCanvas) sourceCanvasRef.current = null
       sendTelemetryMark({
         source: 'visualizer-renderer',
@@ -1089,31 +1095,57 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   }, [])
 
   useEffect(() => {
-    if (!mappingDraft.enabled) return
+    if (!mappingDraft.enabled) {
+      setGpuMappingActive(false)
+      mappingGpuRef.current?.dispose()
+      mappingGpuRef.current = null
+      return
+    }
+
     let disposed = false
     let frameHandle: number | null = null
+    const gpuCanvas = mappingGpuCanvasRef.current
+    if (gpuCanvas !== null && mappingGpuRef.current === null) {
+      mappingGpuRef.current = new ProjectionMappingGpuCompositor(gpuCanvas)
+    }
+    const gpu = mappingGpuRef.current
+    const useGpu = gpu !== null && gpu.ok
+    setGpuMappingActive(useGpu)
+
     const draw = () => {
       frameHandle = null
       if (disposed || document.visibilityState !== 'visible') return
       const source = sourceCanvasRef.current
       if (source !== null && source.width > 0 && source.height > 0) {
-        for (const output of mappingDraft.outputs) {
-          if (!output.enabled) continue
-          const canvas = outputCanvasRefs.current[output.id]
-          if (!canvas) continue
-          if (canvas.width !== viewportSize.width || canvas.height !== viewportSize.height) {
-            canvas.width = viewportSize.width
-            canvas.height = viewportSize.height
+        if (useGpu && gpu !== null) {
+          gpu.resize(viewportSize.width, viewportSize.height)
+          const ok = gpu.draw(source, mappingDraft.outputs)
+          if (!ok) {
+            setGpuMappingActive(false)
           }
-          const ctx = canvas.getContext('2d')
-          if (!ctx) continue
-          const sr = output.sourceRect
-          const sx = Math.round(sr.x * source.width)
-          const sy = Math.round(sr.y * source.height)
-          const sw = Math.max(1, Math.round(sr.width * source.width))
-          const sh = Math.max(1, Math.round(sr.height * source.height))
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+        } else {
+          // Canvas2D fallback when WebGL compositor is unavailable.
+          for (const output of mappingDraft.outputs) {
+            if (!output.enabled) continue
+            const canvas = outputCanvasRefs.current[output.id]
+            if (!canvas) continue
+            if (
+              canvas.width !== viewportSize.width ||
+              canvas.height !== viewportSize.height
+            ) {
+              canvas.width = viewportSize.width
+              canvas.height = viewportSize.height
+            }
+            const ctx = canvas.getContext('2d')
+            if (!ctx) continue
+            const sr = output.sourceRect
+            const sx = Math.round(sr.x * source.width)
+            const sy = Math.round(sr.y * source.height)
+            const sw = Math.max(1, Math.round(sr.width * source.width))
+            const sh = Math.max(1, Math.round(sr.height * source.height))
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+          }
         }
       }
       frameHandle = requestAnimationFrame(draw)
@@ -1163,20 +1195,49 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
         <ViewportFrame ref={viewportFrameRef} style={{ width: `${viewportSize.width}px`, height: `${viewportSize.height}px` }}>
           <SourceStage ref={sourceHostRef} style={{ opacity: mappingDraft.enabled ? 0 : 1 }} />
           {mappingDraft.enabled ? (
-            <OutputHost>
-              {mappingDraft.outputs.filter((o) => o.enabled).map((output) => (
-                <OutputSurface
-                  key={output.id}
-                  style={{ transform: computeHomography(output.corners, viewportSize.width, viewportSize.height) ?? 'none' }}
-                >
-                  <OutputCanvas ref={(node) => { outputCanvasRefs.current[output.id] = node }} />
-                  {mappingDraft.showSelectedOutputGrid &&
-                  activeOutput?.id === output.id ? (
-                    <OutputGridOverlay />
-                  ) : null}
-                </OutputSurface>
-              ))}
-            </OutputHost>
+            <>
+              <MappingGpuCanvas
+                ref={mappingGpuCanvasRef}
+                style={{ display: gpuMappingActive ? 'block' : 'none' }}
+              />
+              {!gpuMappingActive ? (
+                <OutputHost>
+                  {mappingDraft.outputs.filter((o) => o.enabled).map((output) => (
+                    <OutputSurface
+                      key={output.id}
+                      style={{
+                        transform:
+                          computeHomography(
+                            output.corners,
+                            viewportSize.width,
+                            viewportSize.height
+                          ) ?? 'none',
+                      }}
+                    >
+                      <OutputCanvas
+                        ref={(node) => {
+                          outputCanvasRefs.current[output.id] = node
+                        }}
+                      />
+                      {mappingDraft.showSelectedOutputGrid &&
+                      activeOutput?.id === output.id ? (
+                        <OutputGridOverlay />
+                      ) : null}
+                    </OutputSurface>
+                  ))}
+                </OutputHost>
+              ) : mappingDraft.showSelectedOutputGrid && activeOutput ? (
+                <OutputHost>
+                  <OutputGridOverlay
+                    style={{
+                      clipPath: `polygon(${activeOutput.corners
+                        .map((c) => `${c.x * 100}% ${c.y * 100}%`)
+                        .join(', ')})`,
+                    }}
+                  />
+                </OutputHost>
+              ) : null}
+            </>
           ) : null}
 
           {mappingDraft.enabled && !viewportOnly ? (
@@ -1381,6 +1442,15 @@ const Root = styled.div`position: relative; flex: 1 0 0; height: 100%; overflow:
 const CanvasViewport = styled.div`position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden;`
 const ViewportFrame = styled.div`position: relative;`
 const SourceStage = styled.div`position: absolute; inset: 0; background: #000; transition: opacity 140ms linear;`
+const MappingGpuCanvas = styled.canvas`
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  background: #000;
+`
 const OutputHost = styled.div`position: absolute; inset: 0; pointer-events: none; z-index: 2;`
 const OutputSurface = styled.div`position: absolute; inset: 0; transform-origin: 0 0; will-change: transform;`
 const OutputCanvas = styled.canvas`position: absolute; inset: 0; width: 100%; height: 100%;`

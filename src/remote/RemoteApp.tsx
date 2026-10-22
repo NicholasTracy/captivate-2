@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux'
 import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
 import RemoteModulationPage from './RemoteModulationPage'
+import RemotePerformancePage from './RemotePerformancePage'
 import RemoteStatusBar from './RemoteStatusBar'
 import Devices from '../renderer/overlays/Devices'
 import { setConnectionsMenu } from '../renderer/redux/guiSlice'
@@ -12,7 +13,7 @@ import { useRemoteUiMode } from './RemoteUiModeContext'
 
 const Mixer = lazy(() => import('../renderer/pages/Mixer'))
 
-export type RemoteTab = 'modulation' | 'mixer'
+export type RemoteTab = 'modulation' | 'performance' | 'mixer'
 
 export default function RemoteApp() {
   const dispatch = useDispatch()
@@ -34,6 +35,14 @@ export default function RemoteApp() {
         </TabButton>
         <TabButton
           type="button"
+          $active={tab === 'performance'}
+          $mobile={isMobile}
+          onClick={() => setTab('performance')}
+        >
+          Performance
+        </TabButton>
+        <TabButton
+          type="button"
           $active={tab === 'mixer'}
           $mobile={isMobile}
           onClick={() => setTab('mixer')}
@@ -44,6 +53,8 @@ export default function RemoteApp() {
       <PageBody>
         {tab === 'modulation' ? (
           <RemoteModulationPage />
+        ) : tab === 'performance' ? (
+          <RemotePerformancePage />
         ) : (
           <Suspense fallback={<TabLoading $mobile={isMobile}>Loading DMX mixer…</TabLoading>}>
             <Mixer hideStatusBar mobileTouchFaders={isMobile} />

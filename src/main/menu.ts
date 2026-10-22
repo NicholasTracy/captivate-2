@@ -367,12 +367,6 @@ export default class MenuBuilder {
             this.res.openPageWindow('Lighting3D')
           },
         },
-        {
-          label: 'Open Laser Window (Alpha)',
-          click: () => {
-            this.res.openPageWindow('Laser')
-          },
-        },
       ],
     }
     const subMenuWindow: DarwinMenuItemConstructorOptions = {
@@ -562,12 +556,6 @@ export default class MenuBuilder {
             label: 'Open Lighting 3D Window (Alpha)',
             click: () => {
               this.res.openPageWindow('Lighting3D')
-            },
-          },
-          {
-            label: 'Open Laser Window (Alpha)',
-            click: () => {
-              this.res.openPageWindow('Laser')
             },
           },
         ],

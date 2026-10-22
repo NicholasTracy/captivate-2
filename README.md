@@ -16,7 +16,7 @@
   </a>
 </p>
 
-**Visual & lighting synth** — live DMX, visuals, and laser control synchronized to music.
+**Visual & lighting synth** — live DMX and visuals synchronized to music.
 
 **Website:** [https://nicholastracy.github.io/captivate-2/](https://nicholastracy.github.io/captivate-2/)
 
@@ -25,9 +25,9 @@ Captivate 2 builds on the original [Captivate](https://github.com/spensbot/capti
 ## Highlights
 
 - **DMX lighting** — fixture library, community online fixtures (QLC+, Open Fixture Library, Captivate library), import/export, multi-universe USB and Art-Net, spatial fixture layout
-- **Synth-style control** — LFOs, modulation, pads, randomizers, [MIDI and keyboard mapping](docs/midi-mapping.md)
+- **Synth-style control** — LFOs, modulation, pads, randomizers, [MIDI / OSC / Link show control](docs/show-control.md)
 - **Visuals** — built-in visualizers and effects, synced to the active light scene
-- **Multi-window UI** — detached pages for mixer, laser, 3D lighting preview, and more
+- **Multi-window UI** — detached pages for mixer, 3D lighting preview, and more
 - **Ableton Link** — BPM and phase sync with [supported apps](https://www.ableton.com/en/link/products/)
 - **LAN remote** — optional browser UI for scenes, modulation, and mixer ([docs](docs/remote-control.md))
 
@@ -69,7 +69,11 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
 
-**[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, slider/encoder modes, keyboard chords, and MIDI clock vs mapped BPM.
+**[Show control hub](docs/show-control.md)** — MIDI/OSC bidirectional control, MIDI clock out, Ableton Link tempo roles.
+
+**[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, MIDI out assign, slider/encoder modes, keyboard chords, and MIDI clock in/out.
+
+**[OSC mapping](docs/osc-mapping.md)** — OSC listen/learn and `/captivate` auto-publish namespace.
 
 **[Scene generation](docs/scene-generation.md)** — Extras → Generate Scenes…, rig profiling, and what is replaced vs preserved.
 
@@ -160,12 +164,13 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Community fixture library](docs/CAPTIVATE-FIXTURE-LIBRARY.md)
 - [Remote control (LAN)](docs/remote-control.md)
 - [Audio input, beat clock, and music energy](docs/audio-input-sync.md)
-- [Laser FB4 / Pangolin BEYOND](docs/laser-fb4-beyond.md)
 - [Visualizer streaming (RTSP / NDI)](docs/visualizer-streaming.md)
 - [WLED fixtures](docs/wled-fixtures.md)
 - [DMX output and movers](docs/dmx-movers.md)
 - [Atmospherics](docs/atmospherics.md)
+- [Show control hub](docs/show-control.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
+- [OSC mapping](docs/osc-mapping.md)
 - [Scene generation](docs/scene-generation.md)
 - [macOS packaging and native modules](docs/macos-packaging-natives.md)
 

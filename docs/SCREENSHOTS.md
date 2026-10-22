@@ -60,7 +60,7 @@ Environment knobs:
 
 - `page` — main-window page (`Modulation`, `Universe`, `Mixer`, …)
 - `overlay` — optional `connections` / `settings` / `about` / `newProject` / `audio`
-- `openWindow` — optional detached page (`Video`, `Lighting3D`, `Laser`)
+- `openWindow` — optional detached page (`Video`, `Lighting3D`)
 - `clickInWindow` — optional button `title` to click inside a detached window (e.g. `Streaming Settings`)
 - `readme` / `wiki` — whether to include in generated galleries
 - `requires` — soft tags (`movers`, `atmospherics`, `led`); capture still runs, but missing UI is logged as a skip warning

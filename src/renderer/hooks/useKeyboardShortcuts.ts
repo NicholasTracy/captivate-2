@@ -4,9 +4,11 @@ import {
   setKeyboardShortcut,
   midiSetKeyboardLearnMode,
   midiSetIsEditing,
+  midiSetMidiOutLearnMode,
   clearKeyboardListening,
 } from '../redux/controlSlice'
 import { fireMidiButtonAction } from '../redux/fireMidiButtonAction'
+import { commitPerformancePad } from '../redux/performanceControl'
 import { buttonMidiActionTypes } from '../redux/deviceState'
 import { getCleanReduxState, type ReduxState } from '../redux/store'
 import { realtimeStore } from '../redux/realtimeStore'
@@ -41,7 +43,12 @@ export default function useKeyboardShortcuts() {
       const shortcuts = dev.keyboardShortcuts ?? {}
 
       if (ev.key === 'Escape') {
-        if (dev.keyboardListening || dev.keyboardLearnMode || dev.isEditing) {
+        if (
+          dev.keyboardListening ||
+          dev.keyboardLearnMode ||
+          dev.isEditing ||
+          dev.midiOutLearnMode
+        ) {
           ev.preventDefault()
           if (dev.keyboardListening) {
             dispatch(clearKeyboardListening())
@@ -51,6 +58,9 @@ export default function useKeyboardShortcuts() {
           }
           if (dev.isEditing) {
             dispatch(midiSetIsEditing(false))
+          }
+          if (dev.midiOutLearnMode) {
+            dispatch(midiSetMidiOutLearnMode(false))
           }
           return
         }
@@ -82,12 +92,23 @@ export default function useKeyboardShortcuts() {
       ev.stopPropagation()
       const state = getCleanReduxState(store.getState() as ReduxState)
       const rt = realtimeStore.getState()
+      const tapTempo = () => send_user_command({ type: 'TapTempo' })
+      if (bound.action.type === 'firePerformancePad') {
+        commitPerformancePad(
+          dispatch as (a: unknown) => void,
+          () => getCleanReduxState(store.getState() as ReduxState),
+          bound.action.controlId,
+          tapTempo,
+          rt
+        )
+        return
+      }
       fireMidiButtonAction(
         dispatch as (a: unknown) => void,
         state,
         rt,
         bound.action,
-        () => send_user_command({ type: 'TapTempo' })
+        tapTempo
       )
     }
 

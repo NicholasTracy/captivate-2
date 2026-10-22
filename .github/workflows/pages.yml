@@ -42,7 +42,7 @@ jobs:
                 docs/screenshots/Captivate_Remote_Login.png \
                 website/assets/screenshots/ || true
           # Optional screenshots (may be placeholders until captured)
-          for f in Captivate_Laser.png Captivate_Audio_Input.png; do
+          for f in Captivate_Audio_Input.png; do
             if [ -f "docs/screenshots/$f" ]; then
               cp -f "docs/screenshots/$f" website/assets/screenshots/
             fi

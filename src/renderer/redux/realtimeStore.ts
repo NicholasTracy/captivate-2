@@ -34,6 +34,8 @@ export interface SplitState {
   outputParams: Params
   randomizer: RandomizerState
   chase: ChaseState
+  /** Current modulator LFO values (post-advance, read with advance:false). */
+  modulatorValues?: number[]
 }
 
 export interface RealtimeState {

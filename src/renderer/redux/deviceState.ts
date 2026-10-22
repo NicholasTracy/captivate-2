@@ -1,5 +1,4 @@
 import type { Page } from '../../shared/pages'
-import type { LaserTool } from '../laser/laserEditorTypes'
 import { PayloadAction } from '@reduxjs/toolkit'
 import { DefaultParam } from '../../shared/params'
 import { SceneType } from '../../shared/Scenes'
@@ -24,6 +23,18 @@ import {
   normAtmosFxtrControlConfig,
   normAtmosTriggerChConfig,
 } from '../../shared/atmospherics'
+import {
+  clampOscPort,
+  DEFAULT_OSC_PORT,
+  DEFAULT_OSC_SEND_HOST,
+  DEFAULT_OSC_SEND_PORT,
+} from '../../shared/osc'
+import {
+  normalizeLinkRole,
+  type LinkRole,
+} from '../../shared/controlBus'
+
+export type { LinkRole }
 
 interface Range {
   min: number
@@ -116,9 +127,16 @@ interface SetActivePageAction {
   page: Page
 }
 
-interface LaserToolAction {
-  type: 'laserTool'
-  tool: LaserTool
+/** MIDI/OSC/slider learn target → performance bank control value (0..1). */
+interface SetPerformanceValue {
+  type: 'setPerformanceValue'
+  controlId: string
+}
+
+/** Pad/button learn target → fire a performance bank pad. */
+interface FirePerformancePad {
+  type: 'firePerformancePad'
+  controlId: string
 }
 
 interface ConnectionSettings {
@@ -135,10 +153,29 @@ interface ConnectionSettings {
   audioInput: AudioInputSettings
   /** Follow MIDI timing clock (0xF8) from enabled MIDI inputs for master BPM. */
   midiClockBpmEnabled: boolean
+  /** Emit MIDI timing clock (0xF8) + start/stop on enabled MIDI outputs. */
+  midiClockOutEnabled: boolean
+  /** Listen for Open Sound Control (UDP) on `oscPort`. Off by default. */
+  oscEnabled: boolean
+  /** UDP port for OSC input when `oscEnabled` is true. */
+  oscPort: number
+  /** Auto-publish control-bus namespace over OSC UDP. Off by default. */
+  oscSendEnabled: boolean
+  /** Destination host for OSC auto-publish. */
+  oscSendHost: string
+  /** Destination UDP port for OSC auto-publish (default 9001). */
+  oscSendPort: number
   /** Join an Ableton Link session for wireless tempo sync. Off by default. */
   linkEnabled: boolean
   /** When Link is on, follow other Link apps' transport when supported. */
   linkStartStopSyncEnabled: boolean
+  /**
+   * Tempo authorship in a Link session:
+   * - full: Captivate both follows peers and may push local tempo (default)
+   * - leader: Captivate pushes tempo; still uses Link beats/phase
+   * - follow: only Link session tempo drives BPM (UI/MIDI/OSC/audio clock do not setTempo)
+   */
+  linkRole: LinkRole
   atmos: AtmosSettings
 }
 
@@ -149,7 +186,7 @@ export const buttonMidiActionTypes: Set<MidiAction['type']> = new Set([
   'toggleBlackout',
   'triggerAtmosFixture',
   'setActivePage',
-  'laserTool',
+  'firePerformancePad',
 ])
 
 export type MidiAction =
@@ -164,7 +201,98 @@ export type MidiAction =
   | ToggleBlackout
   | TriggerAtmosFixture
   | SetActivePageAction
-  | LaserToolAction
+  | SetPerformanceValue
+  | FirePerformancePad
+
+/** Slider-style actions published as MIDI CC out. */
+export const midiOutSliderActionTypes: Set<MidiAction['type']> = new Set([
+  'setMaster',
+  'setBaseParam',
+  'setBpm',
+  'setGroupIntensity',
+  'setAutoSceneBombacity',
+  'setPerformanceValue',
+])
+
+/** Stateful button actions published as MIDI note on/off out. */
+export const midiOutNoteActionTypes: Set<MidiAction['type']> = new Set([
+  'toggleBlackout',
+  'setActiveSceneIndex',
+  'setActivePage',
+  'toggleAutoScene',
+])
+
+export function supportsMidiOut(action: MidiAction): boolean {
+  return (
+    midiOutSliderActionTypes.has(action.type) ||
+    midiOutNoteActionTypes.has(action.type)
+  )
+}
+
+export function midiOutBindingKind(
+  action: MidiAction
+): 'cc' | 'note' | null {
+  if (midiOutSliderActionTypes.has(action.type)) return 'cc'
+  if (midiOutNoteActionTypes.has(action.type)) return 'note'
+  return null
+}
+
+export interface MidiOutBinding {
+  action: MidiAction
+  channel: number
+  /** CC number (0–127) when type is `cc`; note number when type is `note`. */
+  cc: number
+  type: 'cc' | 'note'
+}
+
+export function clampMidiChannel(channel: number): number {
+  if (!Number.isFinite(channel)) return 0
+  return Math.min(15, Math.max(0, Math.round(channel)))
+}
+
+export function clampMidiCc(cc: number): number {
+  if (!Number.isFinite(cc)) return 0
+  return Math.min(127, Math.max(0, Math.round(cc)))
+}
+
+/** Next unused CC/note on a channel among existing out bindings. */
+export function nextFreeMidiOutNumber(
+  actions: { [actionID: string]: MidiOutBinding },
+  type: 'cc' | 'note',
+  channel = 0
+): number {
+  const used = new Set<number>()
+  for (const binding of Object.values(actions)) {
+    if (
+      binding &&
+      binding.type === type &&
+      clampMidiChannel(binding.channel) === channel
+    ) {
+      used.add(clampMidiCc(binding.cc))
+    }
+  }
+  for (let i = 0; i < 128; i++) {
+    if (!used.has(i)) return i
+  }
+  return 0
+}
+
+export function normalizeMidiOutBinding(
+  raw: Partial<MidiOutBinding> | undefined,
+  fallbackAction?: MidiAction
+): MidiOutBinding | null {
+  if (!raw || typeof raw !== 'object') return null
+  const action = (raw.action ?? fallbackAction) as MidiAction | undefined
+  if (!action || typeof action.type !== 'string') return null
+  const kind = midiOutBindingKind(action)
+  if (!kind) return null
+  return {
+    action,
+    channel: clampMidiChannel(Number(raw.channel)),
+    cc: clampMidiCc(Number(raw.cc)),
+    type: kind,
+  }
+}
 
 export function getMidiSliderBounds(action: MidiAction): MidiSliderBounds {
   switch (action.type) {
@@ -264,8 +392,8 @@ export function getActionID(action: MidiAction) {
   if (action.type === 'setActivePage') {
     return action.type + action.page
   }
-  if (action.type === 'laserTool') {
-    return action.type + action.tool
+  if (action.type === 'setPerformanceValue' || action.type === 'firePerformancePad') {
+    return action.type + action.controlId
   }
   return action.type
 }
@@ -300,16 +428,21 @@ export interface DeviceState {
   isEditing: boolean
   /** When true, MIDI learn is off and overlays assign keyboard chords instead. */
   keyboardLearnMode: boolean
+  /** When true, overlays assign MIDI CC/note + channel for output bindings. */
+  midiOutLearnMode: boolean
   keyboardListening?: MidiAction
   keyboardShortcuts: { [chordId: string]: KeyboardShortcutBinding }
   connectable: {
     midi: ConnectionId[]
+    midiOut: ConnectionId[]
     dmx: ConnectionId[]
     artNet: ConnectionId[]
   }
   connectionSettings: ConnectionSettings
   buttonActions: { [actionID: string]: ButtonAction }
   sliderActions: { [actionID: string]: SliderAction }
+  /** Params/buttons published as MIDI CC or note on enabled output ports. */
+  midiOutActions: { [actionID: string]: MidiOutBinding }
 }
 
 export function clampUniverseIndex(universe: number, maxUniverse: number) {
@@ -355,11 +488,14 @@ export function initDeviceState(): DeviceState {
   return {
     isEditing: false,
     keyboardLearnMode: false,
+    midiOutLearnMode: false,
     keyboardShortcuts: {},
     buttonActions: {},
     sliderActions: {},
+    midiOutActions: {},
     connectable: {
       midi: [],
+      midiOut: [],
       dmx: [],
       artNet: [],
     },
@@ -371,8 +507,15 @@ export function initDeviceState(): DeviceState {
       artNetIpByUniverse: {},
       audioInput: initAudioInputSettings(),
       midiClockBpmEnabled: false,
+      midiClockOutEnabled: false,
+      oscEnabled: false,
+      oscPort: DEFAULT_OSC_PORT,
+      oscSendEnabled: false,
+      oscSendHost: DEFAULT_OSC_SEND_HOST,
+      oscSendPort: DEFAULT_OSC_SEND_PORT,
       linkEnabled: false,
       linkStartStopSyncEnabled: false,
+      linkRole: 'full',
       atmos: initAtmosSettings(),
     },
   }
@@ -477,11 +620,13 @@ export const midiActions = {
   listen: (state: DeviceState, { payload }: PayloadAction<MidiAction>) => {
     state.listening = payload
     state.keyboardLearnMode = false
+    state.midiOutLearnMode = false
     delete state.keyboardListening
   },
   keyboardListen: (state: DeviceState, { payload }: PayloadAction<MidiAction>) => {
     state.keyboardListening = payload
     state.keyboardLearnMode = true
+    state.midiOutLearnMode = false
     delete state.listening
   },
   clearKeyboardListening: (state: DeviceState) => {
@@ -494,8 +639,35 @@ export const midiActions = {
     }
     if (state.keyboardLearnMode) {
       state.isEditing = false
+      state.midiOutLearnMode = false
       delete state.listening
     }
+  },
+  setMidiOutLearnMode: (
+    state: DeviceState,
+    { payload }: PayloadAction<boolean>
+  ) => {
+    state.midiOutLearnMode = payload === true
+    if (state.midiOutLearnMode) {
+      state.isEditing = false
+      state.keyboardLearnMode = false
+      delete state.listening
+      delete state.keyboardListening
+    }
+  },
+  setMidiOutAction: (
+    state: DeviceState,
+    { payload }: PayloadAction<MidiOutBinding>
+  ) => {
+    const normalized = normalizeMidiOutBinding(payload)
+    if (!normalized) return
+    state.midiOutActions[getActionID(normalized.action)] = normalized
+  },
+  removeMidiOutAction: (
+    state: DeviceState,
+    { payload }: PayloadAction<MidiAction>
+  ) => {
+    delete state.midiOutActions[getActionID(payload)]
   },
   setKeyboardShortcut: (
     state: DeviceState,
@@ -526,6 +698,7 @@ export const midiActions = {
     delete state.listening
     state.isEditing = payload
     state.keyboardLearnMode = false
+    state.midiOutLearnMode = false
     delete state.keyboardListening
   },
   setMidiConnectable: (
@@ -533,6 +706,12 @@ export const midiActions = {
     { payload }: PayloadAction<ConnectionId[]>
   ) => {
     state.connectable.midi = payload
+  },
+  setMidiOutConnectable: (
+    state: DeviceState,
+    { payload }: PayloadAction<ConnectionId[]>
+  ) => {
+    state.connectable.midiOut = payload
   },
   setDmxConnectable: (
     state: DeviceState,
@@ -677,7 +856,42 @@ export const midiActions = {
         ...current,
         useBeatClock: false,
       }
+      // Avoid MIDI clock feedback loops.
+      state.connectionSettings.midiClockOutEnabled = false
     }
+  },
+  setMidiClockOutEnabled: (
+    state: DeviceState,
+    { payload }: PayloadAction<boolean>
+  ) => {
+    state.connectionSettings.midiClockOutEnabled = payload === true
+    if (payload === true) {
+      state.connectionSettings.midiClockBpmEnabled = false
+    }
+  },
+  setOscEnabled: (
+    state: DeviceState,
+    { payload }: PayloadAction<boolean>
+  ) => {
+    state.connectionSettings.oscEnabled = payload === true
+  },
+  setOscPort: (state: DeviceState, { payload }: PayloadAction<number>) => {
+    state.connectionSettings.oscPort = clampOscPort(payload)
+  },
+  setOscSendEnabled: (
+    state: DeviceState,
+    { payload }: PayloadAction<boolean>
+  ) => {
+    state.connectionSettings.oscSendEnabled = payload === true
+  },
+  setOscSendHost: (state: DeviceState, { payload }: PayloadAction<string>) => {
+    state.connectionSettings.oscSendHost =
+      typeof payload === 'string' && payload.trim().length > 0
+        ? payload.trim()
+        : DEFAULT_OSC_SEND_HOST
+  },
+  setOscSendPort: (state: DeviceState, { payload }: PayloadAction<number>) => {
+    state.connectionSettings.oscSendPort = clampOscPort(payload)
   },
   setLinkEnabled: (state: DeviceState, { payload }: PayloadAction<boolean>) => {
     state.connectionSettings.linkEnabled = payload === true
@@ -687,6 +901,9 @@ export const midiActions = {
     { payload }: PayloadAction<boolean>
   ) => {
     state.connectionSettings.linkStartStopSyncEnabled = payload === true
+  },
+  setLinkRole: (state: DeviceState, { payload }: PayloadAction<LinkRole>) => {
+    state.connectionSettings.linkRole = normalizeLinkRole(payload)
   },
   setAudioBeatSensitivity: (
     state: DeviceState,

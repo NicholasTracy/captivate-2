@@ -4,6 +4,18 @@ import type { SceneGroups } from './sceneGroups'
 /** Virtual group: every physical fixture / LED (not Visualizer). */
 export const ALL_GROUP_NAME = 'All'
 
+/** Laser DAC/authoring was removed; these names linger in old project splits. */
+export function isObsoleteLaserGroupName(raw: string): boolean {
+  const name = raw.trim().toLowerCase()
+  return (
+    name === 'main lasers' ||
+    name === 'lasers' ||
+    name === 'laser' ||
+    name === 'ilda' ||
+    name === 'helios'
+  )
+}
+
 /** Names reserved for virtual / system groups (not user smart-group targets). */
 export const RESERVED_FIXTURE_GROUP_NAMES = new Set([
   ALL_GROUP_NAME,

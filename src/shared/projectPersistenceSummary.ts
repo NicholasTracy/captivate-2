@@ -7,7 +7,6 @@ export interface ProjectContentCounts {
   universeFixtures: number
   fixtureTypes: number
   ledFixtures: number
-  laserFixtures: number
 }
 
 export interface CleanReduxStateCountsSource {
@@ -20,7 +19,6 @@ export interface CleanReduxStateCountsSource {
     light: { ids: unknown[] }
     visual: { ids: unknown[] }
   }
-  laser?: { units?: unknown[]; fixtures?: unknown[] }
 }
 
 export function countProjectContent(
@@ -29,7 +27,6 @@ export function countProjectContent(
   const dmx = 'dmx' in source ? source.dmx : undefined
   const light = 'light' in source ? source.light : undefined
   const visual = 'visual' in source ? source.visual : undefined
-  const laser = 'laser' in source ? source.laser : undefined
 
   if ('control' in source) {
     return {
@@ -38,11 +35,8 @@ export function countProjectContent(
       universeFixtures: source.dmx.universe.length,
       fixtureTypes: source.dmx.fixtureTypes.length,
       ledFixtures: source.dmx.led?.ledFixtures?.length ?? 0,
-      laserFixtures: source.laser?.units?.length ?? 0,
     }
   }
-
-  const laserCounts = laser as { units?: unknown[]; fixtures?: unknown[] } | undefined
 
   return {
     lightScenes: light?.ids?.length ?? 0,
@@ -50,8 +44,6 @@ export function countProjectContent(
     universeFixtures: dmx?.universe?.length ?? 0,
     fixtureTypes: dmx?.fixtureTypes?.length ?? 0,
     ledFixtures: dmx?.led?.ledFixtures?.length ?? 0,
-    laserFixtures:
-      laserCounts?.units?.length ?? laserCounts?.fixtures?.length ?? 0,
   }
 }
 
@@ -78,6 +70,6 @@ export function formatProjectContentCounts(counts: ProjectContentCounts): string
   return (
     `scenes=${counts.lightScenes}/${counts.visualScenes} ` +
     `fixtures=${counts.universeFixtures} types=${counts.fixtureTypes} ` +
-    `led=${counts.ledFixtures} laser=${counts.laserFixtures}`
+    `led=${counts.ledFixtures}`
   )
 }

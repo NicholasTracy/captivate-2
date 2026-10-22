@@ -34,7 +34,6 @@ import {
 import {
   DefaultParam,
   initBaseParams,
-  paramDisplayName,
   visualSliderParams,
 } from '../../shared/params'
 import { sumVisSliders } from '../visualizer/visualSliderAssignments'
@@ -44,8 +43,7 @@ import {
   dmxFixtureMatchesSceneGroups,
   ledFixtureMatchesSceneGroups,
 } from '../../shared/sceneGroups'
-import { isDedicatedGroupSplit, visSplitIdx } from '../scenes/splitUiVisibility'
-import { LASER_SPLIT_PARAM_KEYS } from '../laser/laserSplitLink'
+import { visSplitIdx } from '../scenes/splitUiVisibility'
 import { getSplitAuxColorGates, type AuxColorGates } from '../../shared/splitAuxColorGates'
 import {
   getSplitColorCapabilities,
@@ -794,24 +792,6 @@ export default function ParamsControl({ splitIndex }: Params) {
     (param) => baseParams[param] !== undefined
   )
 
-  const laserGroupName = useMemo(() => {
-    const entries = Object.entries(splitGroups).filter(
-      ([, included]) => included === true
-    )
-    return entries.length === 1 ? entries[0]![0] : null
-  }, [splitGroups])
-
-  const showLaserSliders =
-    laserGroupName !== null &&
-    isDedicatedGroupSplit(splitGroups, laserGroupName) &&
-    !['Movers', 'Atmosphere', 'LEDs', 'Pixels', 'Visualizer'].includes(
-      laserGroupName
-    )
-
-  const activeLaserSplitParams = LASER_SPLIT_PARAM_KEYS.filter(
-    (param) => baseParams[param] !== undefined
-  )
-
   const showHsvPad = splitUsesHsvPanel
   const showColorWheelControl =
     splitUsesColorWheelPanel && splitColorCapabilities.slots.length > 0
@@ -947,19 +927,6 @@ export default function ParamsControl({ splitIndex }: Params) {
           ))}
         </VisualizerSliderRow>
       )}
-      {showLaserSliders && activeLaserSplitParams.length > 0 && (
-        <LaserSliderRow>
-          {activeLaserSplitParams.map((param) => (
-            <ParamSlider
-              key={param}
-              param={param}
-              splitIndex={splitIndex}
-              hideRemoveButton
-              label={paramDisplayName(param)}
-            />
-          ))}
-        </LaserSliderRow>
-      )}
       <ParamAddButton splitIndex={splitIndex} />
     </Root>
   )
@@ -983,11 +950,6 @@ const AuxColorRoot = styled.div`
 `
 
 const VisualizerSliderRow = styled.div`
-  display: flex;
-  align-items: flex-start;
-`
-
-const LaserSliderRow = styled.div`
   display: flex;
   align-items: flex-start;
 `

@@ -11,6 +11,11 @@ interface Props {
   verticalPadRem?: number
   /** Replaces default track fill (`#0006`) when set — e.g. aux color vertical gradients. */
   trackBackground?: string
+  /**
+   * When true, the drag track fills the cross-axis (full width for vertical).
+   * Default false keeps the classic radius-based skinny fader.
+   */
+  fillCrossAxis?: boolean
   /** Measure drags against this element instead of the drag surface. */
   containerRef?: React.RefObject<HTMLElement | null>
   /** Optional drag threshold before capture (helps nested scroll views). */
@@ -27,6 +32,7 @@ export default function SliderBase({
   ariaLabel,
   verticalPadRem,
   trackBackground,
+  fillCrossAxis = false,
   containerRef: externalContainerRef,
   dragThresholdPx,
 }: Props) {
@@ -34,6 +40,7 @@ export default function SliderBase({
   const d = `${radius * 2}rem`
   const v = orientation === 'vertical'
   const vPad = v ? (verticalPadRem ?? radius) : radius
+  const crossFill = fillCrossAxis === true
 
   const [dragContainer, onPointerDown] = useDragMapped(
     ({ x, y }) => {
@@ -58,17 +65,17 @@ export default function SliderBase({
     },
     dragArea: {
       position: 'relative',
-      width: v ? d : '100%',
-      height: v ? '100%' : d,
+      width: v ? (crossFill ? '100%' : d) : '100%',
+      height: v ? '100%' : crossFill ? '100%' : d,
       margin: 0,
     },
     track: {
       position: 'absolute',
-      top: v ? `-${r}` : 0,
-      right: v ? 0 : `-${r}`,
-      bottom: v ? `-${r}` : 0,
-      left: v ? 0 : `-${r}`,
-      borderRadius: r,
+      top: v ? (crossFill ? 0 : `-${r}`) : 0,
+      right: v ? 0 : crossFill ? 0 : `-${r}`,
+      bottom: v ? (crossFill ? 0 : `-${r}`) : 0,
+      left: v ? 0 : crossFill ? 0 : `-${r}`,
+      borderRadius: crossFill ? '0.25rem' : r,
       backgroundColor: '#0006',
       backgroundImage: trackBackground,
       backgroundRepeat: 'no-repeat',

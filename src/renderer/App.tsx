@@ -4,12 +4,12 @@ import styled from 'styled-components'
 import Video from './pages/VisualizerPage'
 import VisualizerProxy from './pages/VisualizerProxy'
 import Modulation from './pages/Scenes'
+import Performance from './pages/Performance'
 import Universe from './pages/Universe'
 import Movers from './pages/Movers'
 import Lighting3DPage from './pages/Lighting3D'
 import Lighting3DProxy from './pages/Lighting3DProxy'
 import AtmosphericsPage from './pages/Atmospherics'
-import LaserProxy, { LaserAlphaPage } from './pages/Laser'
 import Share from './pages/Share'
 import Mixer from './pages/Mixer'
 import MenuBar from './menu/MenuBar'
@@ -65,18 +65,17 @@ export default function App() {
   }, [activePage, dispatch, ledSidebarEnabled])
   const detachedPage = new URLSearchParams(window.location.search).get('page')
   const isDedicatedLighting3DWindow = detachedPage === 'Lighting3D'
-  const isDedicatedLaserWindow = detachedPage === 'Laser'
   const isDedicatedVisualizerWindow =
     detachedPage === 'Video' || detachedPage === 'Streaming'
   const isDedicatedVisualizerViewportWindow = detachedPage === 'VideoViewport'
 
   function getActivePage() {
     if (activePage == 'Modulation') return <Modulation />
+    if (activePage == 'Performance') return <Performance />
     if (activePage == 'Universe') return <Universe />
     if (activePage == 'Movers') return <Movers />
     if (activePage == 'Lighting3D') return <Lighting3DProxy />
     if (activePage == 'Atmospherics') return <AtmosphericsPage />
-    if (activePage == 'Laser') return <LaserProxy />
     if (activePage == 'Video') return <VisualizerProxy />
     if (activePage == 'VideoViewport') return <VisualizerProxy />
     if (activePage == 'Streaming') return <VisualizerProxy />
@@ -95,29 +94,6 @@ export default function App() {
           <Col>
             <PageWrapper>
               <Lighting3DPage standalonePreview />
-            </PageWrapper>
-          </Col>
-          <FullscreenOverlay />
-        </ErrorBoundary>
-      </Root>
-    )
-  }
-
-  if (isDedicatedLaserWindow) {
-    return (
-      <Root>
-        <KeyboardMappingFocus />
-        <ErrorBoundary FallbackComponent={ErrorBoundaryFallback}>
-          <Col>
-            <PageWrapper
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-                overflow: 'hidden',
-              }}
-            >
-              <LaserAlphaPage standalone />
             </PageWrapper>
           </Col>
           <FullscreenOverlay />

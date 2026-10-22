@@ -211,8 +211,8 @@ function isKnownPage(value: Page) {
     value === 'Movers' ||
     value === 'Lighting3D' ||
     value === 'Atmospherics' ||
-    value === 'Laser' ||
     value === 'Modulation' ||
+    value === 'Performance' ||
     value === 'Video' ||
     value === 'VideoViewport' ||
     value === 'Streaming' ||

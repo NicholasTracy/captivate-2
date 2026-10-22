@@ -14,15 +14,23 @@ import {
   initAtmosSettings,
   normAtmosSettings,
 } from './atmospherics'
+import {
+  clampOscPort,
+  DEFAULT_OSC_PORT,
+  DEFAULT_OSC_SEND_HOST,
+  DEFAULT_OSC_SEND_PORT,
+} from './osc'
+import { normalizeLinkRole } from './controlBus'
+import {
+  normalizeMidiOutBinding,
+  type MidiOutBinding,
+} from 'renderer/redux/deviceState'
 import { DmxState, normalizeLighting3DSettings } from 'renderer/redux/dmxSlice'
 import { initLedState } from 'renderer/redux/ledState'
 import { normalizeAppSettings } from './appSettings'
 import { normalizeGroupIntensityMap } from './groupIntensity'
+import { normalizePerformanceBank } from './performance'
 import type { CleanReduxState } from '../renderer/redux/store'
-import {
-  initLaserState,
-  migrateLaserProjectState,
-} from '../renderer/laser/laserProjectState'
 import { MixerState } from 'renderer/redux/mixerSlice'
 import { ColorChannel, inferColorKind } from './dmxColors'
 import {
@@ -53,6 +61,7 @@ import {
   MoverMountOrientation,
 } from './dmxFixtures'
 import {
+  isObsoleteLaserGroupName,
   normalizeFixtureGroupList,
   syncFixtureGroupCatalog,
 } from './fixtureGroups'
@@ -453,6 +462,14 @@ export default function fixState(state: CleanReduxState): CleanReduxState {
   state.control.groupIntensity = normalizeGroupIntensityMap(
     state.control.groupIntensity
   )
+  for (const key of Object.keys(state.control.groupIntensity)) {
+    if (isObsoleteLaserGroupName(key)) {
+      delete state.control.groupIntensity[key]
+    }
+  }
+  state.control.performance = normalizePerformanceBank(
+    state.control.performance
+  )
   fixGuiState(state.gui)
   fixLightScenes(state.control.light)
   fixVisualScenes(state.control.visual)
@@ -498,8 +515,6 @@ export default function fixState(state: CleanReduxState): CleanReduxState {
     }
   }
 
-  state.laser = migrateLaserProjectState(state.laser ?? initLaserState())
-
   state.gui.appSettings = normalizeAppSettings(state.gui.appSettings)
 
   return state
@@ -523,6 +538,23 @@ function remapLegacySubFixtureLabelsInLightScenes(
   }
 }
 
+function stripObsoleteLaserGroupKeys(groups: {
+  [key: string]: boolean | undefined
+}): boolean {
+  let removed = false
+  for (const key of Object.keys(groups)) {
+    if (isObsoleteLaserGroupName(key)) {
+      delete groups[key]
+      removed = true
+    }
+  }
+  return removed
+}
+
+function stripObsoleteLaserNamesFromList(groups: string[]): string[] {
+  return groups.filter((name) => !isObsoleteLaserGroupName(name))
+}
+
 export function fixLightScenes(light: LightScenes_t) {
   if (light.ids.length === 0) {
     const id = nanoid()
@@ -538,10 +570,16 @@ export function fixLightScenes(light: LightScenes_t) {
     if (scene === undefined) {
       continue
     }
+    if (!scene.performanceRoutes || typeof scene.performanceRoutes !== 'object') {
+      scene.performanceRoutes = {}
+    }
     if (!Array.isArray(scene.splitScenes) || scene.splitScenes.length === 0) {
       scene.splitScenes = [initSplitScene()]
     }
     for (const split of scene.splitScenes) {
+      if (split.groups === undefined || typeof split.groups !== 'object') {
+        split.groups = {}
+      }
       if (split.randomizer === undefined || typeof split.randomizer !== 'object') {
         split.randomizer = initRandomizerOptions()
       } else {
@@ -551,6 +589,24 @@ export function fixLightScenes(light: LightScenes_t) {
         split.chase = initChaseOptions()
       } else {
         split.chase = normalizeChaseOptions(split.chase)
+      }
+    }
+
+    // Drop leftover laser-only splits (blank after the DAC/authoring wipe).
+    for (let i = scene.splitScenes.length - 1; i >= 0; i--) {
+      const split = scene.splitScenes[i]
+      if (split === undefined) continue
+      const hadObsolete = stripObsoleteLaserGroupKeys(split.groups)
+      if (!hadObsolete || i === 0) continue
+      const remaining = Object.entries(split.groups).filter(
+        ([, included]) => included !== undefined
+      )
+      if (remaining.length > 0) continue
+      scene.splitScenes.splice(i, 1)
+      for (const modulator of scene.modulators) {
+        if (Array.isArray(modulator.splitModulations)) {
+          modulator.splitModulations.splice(i, 1)
+        }
       }
     }
   }
@@ -852,6 +908,7 @@ export function fixDmxState(dmx: DmxState) {
     if (!Array.isArray(fixtureType.groups)) {
       fixtureType.groups = []
     }
+    fixtureType.groups = stripObsoleteLaserNamesFromList(fixtureType.groups)
 
     fixtureType.model = normalizeFixtureModelConfig(
       fixtureType.model,
@@ -882,7 +939,9 @@ export function fixDmxState(dmx: DmxState) {
     if (!Array.isArray(fixture.groups)) {
       fixture.groups = []
     }
-    fixture.groups = remapLegacySubFixtureGroupNames(fixture.groups, subLabelRemap)
+    fixture.groups = stripObsoleteLaserNamesFromList(
+      remapLegacySubFixtureGroupNames(fixture.groups, subLabelRemap)
+    )
     const fixtureTypeForGroups = dmx.fixtureTypesByID[fixture.type]
     if (
       fixtureTypeForGroups !== undefined &&
@@ -1117,6 +1176,23 @@ export function fixDeviceState(deviceState: DeviceState) {
   if (deviceState.connectable.artNet === undefined) {
     deviceState.connectable.artNet = []
   }
+  if (deviceState.connectable.midiOut === undefined) {
+    deviceState.connectable.midiOut = []
+  }
+
+  if (deviceState.midiOutActions === undefined) {
+    deviceState.midiOutActions = {}
+  } else {
+    const normalizedOut: { [actionID: string]: MidiOutBinding } = {}
+    for (const [actionId, raw] of Object.entries(deviceState.midiOutActions)) {
+      const binding = normalizeMidiOutBinding(raw)
+      if (binding) normalizedOut[actionId] = binding
+    }
+    deviceState.midiOutActions = normalizedOut
+  }
+
+  deviceState.midiOutLearnMode = deviceState.midiOutLearnMode === true
+  delete (deviceState as { midiOutListening?: unknown }).midiOutListening
 
   // Add ConnectionSettings
   if (deviceState.connectionSettings === undefined) {
@@ -1128,18 +1204,56 @@ export function fixDeviceState(deviceState: DeviceState) {
       artNetIpByUniverse: {},
       audioInput: initAudioInputSettings(),
       midiClockBpmEnabled: false,
+      midiClockOutEnabled: false,
+      oscEnabled: false,
+      oscPort: DEFAULT_OSC_PORT,
+      oscSendEnabled: false,
+      oscSendHost: DEFAULT_OSC_SEND_HOST,
+      oscSendPort: DEFAULT_OSC_SEND_PORT,
       linkEnabled: false,
       linkStartStopSyncEnabled: false,
+      linkRole: 'full',
       atmos: initAtmosSettings(),
     }
   }
 
   deviceState.connectionSettings.midiClockBpmEnabled =
     deviceState.connectionSettings.midiClockBpmEnabled === true
+  deviceState.connectionSettings.midiClockOutEnabled =
+    deviceState.connectionSettings.midiClockOutEnabled === true
+  if (
+    deviceState.connectionSettings.midiClockBpmEnabled &&
+    deviceState.connectionSettings.midiClockOutEnabled
+  ) {
+    // Prefer clock-in when both somehow persisted; avoids feedback.
+    deviceState.connectionSettings.midiClockOutEnabled = false
+  }
+  deviceState.connectionSettings.oscEnabled =
+    deviceState.connectionSettings.oscEnabled === true
+  deviceState.connectionSettings.oscPort = clampOscPort(
+    typeof deviceState.connectionSettings.oscPort === 'number'
+      ? deviceState.connectionSettings.oscPort
+      : DEFAULT_OSC_PORT
+  )
+  deviceState.connectionSettings.oscSendEnabled =
+    deviceState.connectionSettings.oscSendEnabled === true
+  deviceState.connectionSettings.oscSendHost =
+    typeof deviceState.connectionSettings.oscSendHost === 'string' &&
+    deviceState.connectionSettings.oscSendHost.trim().length > 0
+      ? deviceState.connectionSettings.oscSendHost.trim()
+      : DEFAULT_OSC_SEND_HOST
+  deviceState.connectionSettings.oscSendPort = clampOscPort(
+    typeof deviceState.connectionSettings.oscSendPort === 'number'
+      ? deviceState.connectionSettings.oscSendPort
+      : DEFAULT_OSC_SEND_PORT
+  )
   deviceState.connectionSettings.linkEnabled =
     deviceState.connectionSettings.linkEnabled === true
   deviceState.connectionSettings.linkStartStopSyncEnabled =
     deviceState.connectionSettings.linkStartStopSyncEnabled === true
+  deviceState.connectionSettings.linkRole = normalizeLinkRole(
+    deviceState.connectionSettings.linkRole
+  )
 
   if (deviceState.connectionSettings.universeCount === undefined) {
     deviceState.connectionSettings.universeCount = 1

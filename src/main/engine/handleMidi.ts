@@ -20,8 +20,11 @@ import {
   setBaseParams,
   setGroupIntensity,
 } from '../../renderer/redux/controlSlice'
+import {
+  commitPerformancePad,
+  commitPerformanceValue,
+} from '../../renderer/redux/performanceControl'
 import { getGroupIntensityLevel } from '../../shared/groupIntensity'
-import NodeLink from 'node-link'
 import { PayloadAction } from '@reduxjs/toolkit'
 
 const buttonThresholdState = new Map<string, boolean>()
@@ -77,12 +80,17 @@ export function handleMessage(
   message: MidiMessage,
   state: CleanReduxState,
   rt_state: RealtimeState,
-  nodeLink: NodeLink,
+  setTempo: (bpm: number) => void,
   dispatch: (action: PayloadAction<any>) => void,
   tapTempo: () => void
 ) {
   const input = getInput(message)
   const midiState = state.control.device
+
+  // MIDI out assignment is configured manually on overlays (not learned from input).
+  if (midiState.midiOutLearnMode) {
+    return
+  }
 
   if (midiState.isEditing && midiState.listening) {
     const listenType = midiState.listening.type
@@ -134,7 +142,19 @@ export function handleMessage(
     const actionKey = `${input.id}:${getActionID(buttonAction.action)}`
 
     const fireButtonAction = () => {
-      fireMidiButtonAction(dispatch, state, rt_state, buttonAction.action, tapTempo)
+      const action = buttonAction.action
+      if (action.type === 'firePerformancePad') {
+        commitPerformancePad(
+          dispatch,
+          () => state,
+          action.controlId,
+          tapTempo,
+          rt_state,
+          setTempo
+        )
+        return
+      }
+      fireMidiButtonAction(dispatch, state, rt_state, action, tapTempo)
     }
 
     if (input.message.type === 'CC') {
@@ -177,6 +197,8 @@ export function handleMessage(
       return state.control.master
     } else if (action.type === 'setGroupIntensity') {
       return getGroupIntensityLevel(state.control.groupIntensity, action.group)
+    } else if (action.type === 'setPerformanceValue') {
+      return state.control.performance.controls[action.controlId]?.value ?? 0
     }
 
     return 0
@@ -195,6 +217,7 @@ export function handleMessage(
     } else if (action.type === 'setMaster') {
       dispatch(setMaster(bounded))
     } else if (action.type === 'setBaseParam') {
+      // Active light scene only (setBaseParams → modifyActiveLightScene).
       dispatch(
         setBaseParams({
           splitIndex: getSetBaseParamSplitIndex(action),
@@ -206,7 +229,16 @@ export function handleMessage(
     } else if (action.type === 'setGroupIntensity') {
       dispatch(setGroupIntensity({ group: action.group, intensity: bounded }))
     } else if (action.type === 'setBpm') {
-      nodeLink.setTempo(bounded)
+      setTempo(bounded)
+    } else if (action.type === 'setPerformanceValue') {
+      // Value → performance bank, then active-scene route only.
+      commitPerformanceValue(
+        dispatch,
+        () => state,
+        action.controlId,
+        bounded,
+        setTempo
+      )
     } else if (action.type === 'tapTempo') {
       tapTempo()
     }

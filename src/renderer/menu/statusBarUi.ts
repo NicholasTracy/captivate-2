@@ -384,23 +384,26 @@ export const StatusBarMeterSegment = styled.div<{ $active: number }>`
 `
 
 export const StatusBarConnectionRow = styled.div`
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  padding: 0.05rem 0.15rem;
+  padding: 0.12rem 0.2rem;
   font-size: 0.68rem;
   line-height: 1;
-  gap: 0.35rem;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
 `
 
 export const StatusBarConnectionLabel = styled.span`
   color: ${(p) => p.theme.colors.text.secondary};
   letter-spacing: 0.03em;
   text-transform: lowercase;
+  flex-shrink: 0;
 `
 
 export const StatusBarStatusDot = styled.div<{ $color: string }>`
-  width: 0.48rem;
-  height: 0.48rem;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 0.12rem;
   background-color: ${(p) => p.$color};
   box-shadow: 0 0 0 1px ${(p) => p.theme.colors.bg.darker};

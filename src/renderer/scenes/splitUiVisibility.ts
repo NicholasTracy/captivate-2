@@ -30,23 +30,6 @@ export function showVisGroupUi(videoEnabled: boolean): boolean {
   return videoEnabled === true
 }
 
-/** Hide laser fixture-group splits when the detached Laser window is closed. */
-export function hideLaserSplitUi(
-  laserWindowOpen: boolean,
-  groups: SplitScene_t['groups'] | undefined,
-  laserGroupNames: ReadonlySet<string>
-): boolean {
-  if (laserWindowOpen || !groups || laserGroupNames.size === 0) {
-    return false
-  }
-  for (const name of laserGroupNames) {
-    if (isDedicatedGroupSplit(groups, name)) {
-      return true
-    }
-  }
-  return false
-}
-
 /** Hide Movers-only splits from lighting UI when the project has no movers. */
 export function hideMoversSplitUi(
   hasMoverFixturesInProject: boolean,
@@ -81,7 +64,7 @@ export function formatSplitGroupsLabel(
     .join(', ')
 }
 
-/** True when this split targets exactly one included group (auto-managed / laser splits). */
+/** True when this split targets exactly one included group (auto-managed splits). */
 export function isDedicatedGroupSplit(
   groups: SplitScene_t['groups'] | undefined,
   group: string
@@ -112,15 +95,12 @@ export function splitDisplayName(
 export function firstModUiSplitIx(
   videoEnabled: boolean,
   hasMoverFixturesInProject: boolean,
-  splitScenes: readonly { groups?: SplitScene_t['groups'] }[],
-  laserWindowOpen = true,
-  laserGroupNames: ReadonlySet<string> = new Set<string>()
+  splitScenes: readonly { groups?: SplitScene_t['groups'] }[]
 ): number {
   for (let i = 0; i < splitScenes.length; i++) {
     const groups = splitScenes[i]?.groups
     if (hideVisSplitUi(videoEnabled, groups)) continue
     if (hideMoversSplitUi(hasMoverFixturesInProject, groups)) continue
-    if (hideLaserSplitUi(laserWindowOpen, groups, laserGroupNames)) continue
     return i
   }
   return 0

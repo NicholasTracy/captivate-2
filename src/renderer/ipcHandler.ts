@@ -3,6 +3,7 @@ import type { Lighting3dRealtimeTick } from '../shared/lighting3dPreviewTranspor
 import { CleanReduxState } from './redux/store'
 import { RealtimeState } from './redux/realtimeStore'
 import * as midiConnection from '../main/engine/midiConnection'
+import * as oscConnection from '../main/engine/oscConnection'
 import { PayloadAction } from '@reduxjs/toolkit'
 import { DmxConnectionInfo } from 'shared/connection'
 import type { Page } from '../shared/pages'
@@ -49,15 +50,6 @@ import type {
   TelemetrySnapshot,
 } from '../shared/telemetry'
 import { AppAboutInfo } from '../shared/about'
-import type {
-  LaserDacConnectRequest,
-  LaserDacConnectResult,
-  LaserDacDeviceInfo,
-  LaserDacListDevicesRequest,
-  LaserDacListDevicesResult,
-  LaserDacPushFramePayload,
-  LaserDacStatus,
-} from '../shared/laserDac'
 import {
   sendDispatchToHost,
   sendUserCommandToHost,
@@ -68,6 +60,8 @@ const PROJECTM_PRESET_SCAN_IPC_TIMEOUT_MS = 12000
 interface Config {
   on_dmx_connection_update: (payload: DmxConnectionInfo) => void
   on_midi_connection_update: (payload: midiConnection.UpdatePayload) => void
+  on_midi_out_connection_update: (payload: import('../shared/connection').MidiOutConnections) => void
+  on_osc_connection_update: (payload: oscConnection.UpdatePayload) => void
   on_time_state: (time_state: RealtimeState) => void
   on_dispatch: (action: PayloadAction) => void
   on_main_command: (command: MainCommand) => void
@@ -113,6 +107,18 @@ export function ipc_setup(config: Config) {
     ipc_channels.midi_connection_update,
     (payload: midiConnection.UpdatePayload) =>
       _config.on_midi_connection_update(payload)
+  )
+
+  ipcRenderer.on(
+    ipc_channels.midi_out_connection_update,
+    (payload: import('../shared/connection').MidiOutConnections) =>
+      _config.on_midi_out_connection_update(payload)
+  )
+
+  ipcRenderer.on(
+    ipc_channels.osc_connection_update,
+    (payload: oscConnection.UpdatePayload) =>
+      _config.on_osc_connection_update(payload)
   )
 
   ipcRenderer.on(ipc_channels.new_time_state, (realtimeState: RealtimeState) =>
@@ -179,90 +185,6 @@ export function send_open_page_window(
 export async function listScreenDisplays(): Promise<ScreenDisplayChoice[]> {
   const raw = await ipcRenderer.invoke(ipc_channels.list_screen_displays)
   return Array.isArray(raw) ? (raw as ScreenDisplayChoice[]) : []
-}
-
-export async function laserDacGetStatus(): Promise<LaserDacStatus | null> {
-  try {
-    return (await ipcRenderer.invoke(
-      ipc_channels.laser_dac_status
-    )) as LaserDacStatus
-  } catch {
-    return null
-  }
-}
-
-export async function laserDacConnectRequest(
-  req: LaserDacConnectRequest
-): Promise<LaserDacConnectResult> {
-  try {
-    return (await ipcRenderer.invoke(
-      ipc_channels.laser_dac_connect,
-      req
-    )) as LaserDacConnectResult
-  } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : String(e),
-    }
-  }
-}
-
-export async function laserDacDisconnectRequest(
-  sessionId?: string
-): Promise<void> {
-  try {
-    await ipcRenderer.invoke(ipc_channels.laser_dac_disconnect, sessionId ?? null)
-  } catch {
-    /* non-Electron or IPC failure */
-  }
-}
-
-export async function laserDacStopOutputRequest(
-  sessionId?: string
-): Promise<void> {
-  try {
-    await ipcRenderer.invoke(ipc_channels.laser_dac_stop_output, sessionId ?? null)
-  } catch {
-    /* non-Electron or IPC failure */
-  }
-}
-
-export async function laserDacListDevicesRequest(
-  backend: LaserDacListDevicesRequest['backend']
-): Promise<LaserDacListDevicesResult> {
-  try {
-    const raw = await ipcRenderer.invoke(ipc_channels.laser_dac_list_devices, {
-      backend,
-    })
-    if (
-      raw &&
-      typeof raw === 'object' &&
-      Array.isArray((raw as LaserDacListDevicesResult).devices)
-    ) {
-      const result = raw as LaserDacListDevicesResult
-      return {
-        devices: result.devices,
-        message: result.message,
-      }
-    }
-    if (Array.isArray(raw)) {
-      return { devices: raw as LaserDacDeviceInfo[] }
-    }
-    return { devices: [] }
-  } catch (e) {
-    return {
-      devices: [],
-      message: e instanceof Error ? e.message : String(e),
-    }
-  }
-}
-
-export function sendLaserDacPushFrame(payload: LaserDacPushFramePayload): void {
-  try {
-    ipcRenderer.send(ipc_channels.laser_dac_push_frame, payload)
-  } catch {
-    /* ignore */
-  }
 }
 
 /** Tell main to set `videoEnabled` from detached visualizer windows (e.g. after loading a project). */

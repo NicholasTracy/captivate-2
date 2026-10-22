@@ -13,4 +13,14 @@ declare module 'midi' {
     isPortOpen: () => boolean
     constructor()
   }
+
+  export class Output {
+    getPortCount: () => number
+    getPortName: (portIndex: number) => string
+    openPort: (portIndex: number) => void
+    closePort: () => void
+    sendMessage: (message: number[]) => void
+    isPortOpen: () => boolean
+    constructor()
+  }
 }

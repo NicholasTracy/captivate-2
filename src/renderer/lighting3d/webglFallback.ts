@@ -41,7 +41,7 @@ export const WEBGL1_FALLBACK_DIFFERENCES: ReadonlyArray<{
 ]
 
 export const WEBGL1_FALLBACK_RECOVERY_HINT =
-  'For full quality, update your GPU drivers, turn on hardware acceleration in Windows, and (on laptops) set Captivate to use the dedicated GPU.'
+  'For full quality, update your GPU drivers, turn on hardware acceleration in Windows, set Captivate → Settings → Graphics to “Force hardware GPU” (restart required), and (on laptops) set Captivate to use the dedicated GPU.'
 
 export function readWebgl1BannerDismissed(): boolean {
   try {

@@ -45,10 +45,48 @@ export interface MidiConnections {
   available: MidiDevice_t[]
 }
 
+export interface MidiOutConnections {
+  connected: ConnectionId[]
+  available: MidiDevice_t[]
+}
+
+export interface OscConnections {
+  enabled: boolean
+  listening: boolean
+  port: number
+  error: string | null
+  sendEnabled: boolean
+  sendHost: string
+  sendPort: number
+  sending: boolean
+  sendError: string | null
+}
+
 export function initMidiConnections(): MidiConnections {
   return {
     connected: [],
     available: [],
+  }
+}
+
+export function initMidiOutConnections(): MidiOutConnections {
+  return {
+    connected: [],
+    available: [],
+  }
+}
+
+export function initOscConnections(): OscConnections {
+  return {
+    enabled: false,
+    listening: false,
+    port: 9000,
+    error: null,
+    sendEnabled: false,
+    sendHost: '127.0.0.1',
+    sendPort: 9001,
+    sending: false,
+    sendError: null,
   }
 }
 

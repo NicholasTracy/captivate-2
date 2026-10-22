@@ -57,7 +57,7 @@ export async function buildProjectSaveState(
     device: config.device ? control.device : undefined,
     gui: config.gui ? guiProfile : undefined,
     mixer: config.mixer ? state.mixer : undefined,
-    laser: config.laser ? state.laser : undefined,
+    performance: config.performance ? control.performance : undefined,
   }
 }
 

@@ -244,6 +244,5 @@ export function snapshotCurrentProjectCounts(state: ReduxState): ProjectContentC
   return countProjectContent({
     dmx: state.dmx.present,
     control: state.control.present,
-    laser: state.laser,
   })
 }

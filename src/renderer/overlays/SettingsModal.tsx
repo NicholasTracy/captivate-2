@@ -7,7 +7,9 @@ import { setAppSettings, setSettingsOpen, pushStatusMessage } from '../redux/gui
 import {
   BUILTIN_LANGUAGE_PACKS,
   BUILTIN_THEME_PACKS,
+  GPU_ACCELERATION_OPTIONS,
   type AppSettings,
+  type GpuAccelerationMode,
   type LanguagePackId,
   type ThemePackId,
 } from '../../shared/appSettings'
@@ -45,9 +47,20 @@ export default function SettingsModal() {
   const customPath = draft.customTheme?.path
 
   async function onSave() {
+    const gpuChanged =
+      draft.gpuAccelerationMode !== stored.gpuAccelerationMode
     const next = await persistAppSettings(draft)
     dispatch(setAppSettings(next))
     dispatch(setSettingsOpen(false))
+    if (gpuChanged) {
+      dispatch(
+        pushStatusMessage({
+          level: 'info',
+          message:
+            'Graphics setting saved. Restart Captivate for GPU acceleration changes to take effect.',
+        })
+      )
+    }
   }
 
   async function onLoadThemeFile() {
@@ -285,6 +298,35 @@ export default function SettingsModal() {
             )?.description
           }{' '}
           Additional language packs will plug in here when available.
+        </Hint>
+      </Section>
+
+      <Section>
+        <SectionTitle>Graphics</SectionTitle>
+        <FieldLabel htmlFor="settings-gpu-mode">GPU acceleration</FieldLabel>
+        <Select
+          id="settings-gpu-mode"
+          value={draft.gpuAccelerationMode}
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              gpuAccelerationMode: event.target.value as GpuAccelerationMode,
+            }))
+          }
+        >
+          {GPU_ACCELERATION_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        <Hint>
+          {
+            GPU_ACCELERATION_OPTIONS.find(
+              (option) => option.id === draft.gpuAccelerationMode
+            )?.description
+          }{' '}
+          Changing this requires a full app restart.
         </Hint>
       </Section>
     </AppModal>

@@ -113,18 +113,8 @@ function assertReleaseAppNatives() {
     errors.push('Missing midi native (build/Release/midi.node or prebuilds/)')
   }
 
-  // usb + serialport: vendor universal darwin prebuilds (must not be deleted)
+  // serialport: vendor universal darwin prebuilds (must not be deleted)
   if (process.platform === 'darwin' || process.env.CI === 'true') {
-    assertExists(
-      path.join(
-        appNodeModules,
-        'usb',
-        'prebuilds',
-        'darwin-x64+arm64',
-        'node.napi.node'
-      ),
-      'Missing usb prebuilds/darwin-x64+arm64 (do not wipe usb/prebuilds)'
-    )
     assertExists(
       path.join(
         appNodeModules,

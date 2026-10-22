@@ -12,6 +12,8 @@ import ipcChannelsVisualizer from '../../visualizer/ipcChannels'
 import { CleanReduxState } from '../../renderer/redux/store'
 import { RealtimeState } from '../../renderer/redux/realtimeStore'
 import * as midiConnection from './midiConnection'
+import * as midiOutputConnection from './midiOutputConnection'
+import * as OscConnection from './oscConnection'
 import { PayloadAction } from '@reduxjs/toolkit'
 import { promises } from 'fs'
 import type { VisualizerResource } from '../../visualizer/threejs/VisualizerManager'
@@ -71,16 +73,6 @@ import {
   ingestStageLightMapFrame,
   getStageLightMapPreviewPayload,
 } from './stageLightMapRuntime'
-import {
-  laserDacConnect,
-  laserDacDisconnect,
-  laserDacListDevices,
-  laserDacStatus,
-  laserDacPushFrame,
-  laserDacStopOutput,
-} from './laserDacSession'
-import type { LaserDacConnectResult, LaserDacListDevicesRequest } from '../../shared/laserDac'
-import { normalizeLaserDacConnectRequest } from '../../shared/laserDac'
 import path from 'path'
 import os from 'os'
 import {
@@ -533,7 +525,7 @@ async function getAppAboutInfo(): Promise<AppAboutInfo> {
     tagline: 'Visual & Lighting Synth',
     description:
       pkg?.description ??
-      'Live DMX lighting, visuals, and laser control synchronized to music.',
+      'Live DMX lighting and visuals synchronized to music.',
     copyright: `© ${year} ${author}`,
     license,
     author,
@@ -910,11 +902,6 @@ export function ipcSetup(config: Config) {
     }
   )
 
-  ipcMain.on(ipcChannels.laser_dac_push_frame, (_event, raw: unknown) => {
-    telemetryCounter('ipc', 'laser_dac_push_frame')
-    void laserDacPushFrame(raw)
-  })
-
   ipcMain.handle(ipcChannels.list_screen_displays, () => {
     telemetryCounter('ipc', 'list_screen_displays')
     return getScreenDisplayChoices()
@@ -976,61 +963,6 @@ export function ipcSetup(config: Config) {
   ipcMain.handle(ipcChannels.remote_control_regenerate_pin, async () => {
     const pin = await regenerateRemotePin()
     return { pin, status: getRemoteControlStatus() }
-  })
-
-  ipcMain.handle(ipcChannels.laser_dac_connect, async (_event, raw: unknown) => {
-    telemetryCounter('ipc', 'laser_dac_connect')
-    const req = normalizeLaserDacConnectRequest(raw)
-    if (req === null) {
-      const bad: LaserDacConnectResult = {
-        ok: false,
-        message: 'Invalid laser DAC connect payload.',
-      }
-      return bad
-    }
-    return await laserDacConnect(req)
-  })
-
-  ipcMain.handle(
-    ipcChannels.laser_dac_disconnect,
-    async (_event, sessionId: unknown) => {
-      telemetryCounter('ipc', 'laser_dac_disconnect')
-      const sid =
-        typeof sessionId === 'string' && sessionId.trim().length > 0
-          ? sessionId.trim()
-          : undefined
-      await laserDacDisconnect(sid)
-      return null
-    }
-  )
-
-  ipcMain.handle(
-    ipcChannels.laser_dac_stop_output,
-    async (_event, sessionId: unknown) => {
-      telemetryCounter('ipc', 'laser_dac_stop_output')
-      const sid =
-        typeof sessionId === 'string' && sessionId.trim().length > 0
-          ? sessionId.trim()
-          : undefined
-      await laserDacStopOutput(sid)
-      return null
-    }
-  )
-
-  ipcMain.handle(ipcChannels.laser_dac_status, () => {
-    telemetryCounter('ipc', 'laser_dac_status')
-    return laserDacStatus()
-  })
-
-  ipcMain.handle(ipcChannels.laser_dac_list_devices, (_event, raw: unknown) => {
-    telemetryCounter('ipc', 'laser_dac_list_devices')
-    const backend =
-      raw !== null &&
-      typeof raw === 'object' &&
-      typeof (raw as LaserDacListDevicesRequest).backend === 'string'
-        ? (raw as LaserDacListDevicesRequest).backend
-        : 'helios'
-    return laserDacListDevices({ backend: backend as LaserDacListDevicesRequest['backend'] })
   })
 
   ipcMain.handle(
@@ -1168,6 +1100,11 @@ export function ipcSetup(config: Config) {
       broadcast(ipcChannels.dmx_connection_update, payload),
     send_midi_connection_update: (payload: midiConnection.UpdatePayload) =>
       broadcast(ipcChannels.midi_connection_update, payload),
+    send_midi_out_connection_update: (
+      payload: midiOutputConnection.UpdatePayload
+    ) => broadcast(ipcChannels.midi_out_connection_update, payload),
+    send_osc_connection_update: (payload: OscConnection.UpdatePayload) =>
+      broadcast(ipcChannels.osc_connection_update, payload),
     send_time_state: (time_state: RealtimeState, master: number) => {
       _config.renderers.forEach((renderer) => {
         if (renderer.isDestroyed()) {

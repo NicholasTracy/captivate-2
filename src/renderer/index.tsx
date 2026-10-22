@@ -13,6 +13,8 @@ import {
 import {
   setDmx,
   setMidi,
+  setMidiOut,
+  setOsc,
   setSaving,
   setLoading,
   setNewProjectDialog,
@@ -160,6 +162,7 @@ const LOCAL_ONLY_ACTION_TYPES = new Set<string>([
   'gui/setActivePage',
   'gui/setConnectionsMenu',
   'gui/setMidi',
+  'gui/setMidiOut',
   'gui/setDmx',
   'gui/setSaving',
   'gui/setLoading',
@@ -236,7 +239,6 @@ function shouldForwardActionToPrimary(action: unknown) {
   if (LOCAL_ONLY_ACTION_TYPES.has(type)) return false
   if (type.startsWith('dmx/')) return true
   if (type.startsWith('scenes/')) return true
-  if (type.startsWith('laser/')) return true
   if (SHARED_GUI_ACTION_TYPES.has(type)) return true
   if (SHARED_MIXER_ACTION_TYPES.has(type)) return true
   return false
@@ -265,7 +267,6 @@ function parsePageFromLocation(): Page | null {
     'Movers',
     'Lighting3D',
     'Atmospherics',
-    'Laser',
     'Modulation',
     'Video',
     'VideoViewport',
@@ -379,6 +380,12 @@ ipc_setup({
   },
   on_midi_connection_update: (payload) => {
     store.dispatch(setMidi(payload))
+  },
+  on_midi_out_connection_update: (payload) => {
+    store.dispatch(setMidiOut(payload))
+  },
+  on_osc_connection_update: (payload) => {
+    store.dispatch(setOsc(payload))
   },
   on_time_state: (newRealtimeState) => {
     _frequentlyUpdatedRealtimeState = newRealtimeState

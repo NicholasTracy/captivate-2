@@ -7,7 +7,6 @@ import {
 import { useSelector, TypedUseSelectorHook } from 'react-redux'
 import dmxReducer, { DmxState } from './dmxSlice'
 import guiReducer, { GuiState } from './guiSlice'
-import laserReducer from './laserSlice'
 import controlReducer, { ControlState } from './controlSlice'
 import { LightScene_t, VisualScene_t, SceneType, initLightScene } from '../../shared/Scenes'
 import mixerReducer, { initMixerState } from './mixerSlice'
@@ -15,16 +14,18 @@ import undoable, { StateWithHistory } from 'redux-undo'
 import { DeviceState, initDeviceState } from './deviceState'
 import fixState, { fixDeviceState } from '../../shared/fixState'
 import { normalizeGroupIntensityMap } from '../../shared/groupIntensity'
+import { normalizePerformanceBank } from '../../shared/performance'
 import { DefaultParam, initBaseParams, Params } from '../../shared/params'
 import { SaveInfo } from 'shared/save'
 import { normalizeAppSettings } from '../../shared/appSettings'
-import {
-  initLaserState,
-  migrateLaserProjectState,
-} from '../laser/laserProjectState'
 import { FixtureType } from 'shared/dmxFixtures'
 import cloneDeep from 'lodash.clonedeep'
 import { projectPersistenceMiddleware } from './projectPersistenceStoreMiddleware'
+import {
+  initMidiConnections,
+  initMidiOutConnections,
+  initOscConnections,
+} from '../../shared/connection'
 
 export interface UndoActionTypes {
   undo: string
@@ -64,7 +65,6 @@ const baseReducer = combineReducers({
     redoType: undoActionTypes.control.redo,
   }),
   mixer: mixerReducer,
-  laser: laserReducer,
 })
 
 export type ReduxState = ReturnType<typeof baseReducer>
@@ -145,16 +145,16 @@ export function mergeProjectSave(
         info.config.gui && info.state.gui?.groupIntensity !== undefined
           ? normalizeGroupIntensityMap(info.state.gui.groupIntensity)
           : normalizeGroupIntensityMap(control.groupIntensity),
+      performance:
+        info.config.performance && info.state.performance !== undefined
+          ? normalizePerformanceBank(info.state.performance)
+          : normalizePerformanceBank(control.performance),
     },
     gui: sanitizeGuiTransientState(loadedGui),
     mixer:
       info.config.mixer && info.state.mixer
         ? { ...initMixerState(), ...cloneDeep(info.state.mixer) }
         : cloneDeep(state.mixer),
-    laser:
-      info.config.laser && info.state.laser
-        ? migrateLaserProjectState(cloneDeep(info.state.laser))
-        : cloneDeep(state.laser),
   }
   return fixState(cleanState)
 }
@@ -195,6 +195,12 @@ function sanitizeGuiTransientState(gui: GuiState): GuiState {
   return {
     ...gui,
     appSettings: normalizeAppSettings(gui?.appSettings),
+    midi: gui?.midi ?? initMidiConnections(),
+    midiOut: gui?.midiOut ?? initMidiOutConnections(),
+    osc: {
+      ...initOscConnections(),
+      ...(gui?.osc ?? {}),
+    },
     connectionMenu: false,
     saving: false,
     loading: null,
@@ -235,7 +241,6 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
       gui: sanitizeGuiTransientState(cleanState.gui),
       control: initUndoState(cleanState.control),
       mixer: cleanState.mixer,
-      laser: migrateLaserProjectState(cleanState.laser ?? initLaserState()),
     }
   } else if (action.type === RESET_REMOTE_STATE) {
     const cleanState: CleanReduxState = action.payload
@@ -246,6 +251,7 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
       (localDevice.keyboardListening !== undefined ||
         localDevice.listening !== undefined ||
         localDevice.keyboardLearnMode === true ||
+        localDevice.midiOutLearnMode === true ||
         localDevice.isEditing === true)
     ) {
       cleanState.control.device = {
@@ -253,6 +259,7 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         keyboardListening: localDevice.keyboardListening,
         listening: localDevice.listening,
         keyboardLearnMode: localDevice.keyboardLearnMode,
+        midiOutLearnMode: localDevice.midiOutLearnMode,
         isEditing: localDevice.isEditing,
       }
     }
@@ -264,6 +271,8 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         // Connection lists are owned by the main process (IPC), not peer renderers.
         dmx: localGui.dmx,
         midi: localGui.midi,
+        midiOut: localGui.midiOut,
+        osc: localGui.osc,
         activePage: localGui.activePage,
         connectionMenu: localGui.connectionMenu,
         saving: localGui.saving,
@@ -287,7 +296,6 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
       },
       control: initUndoState(cleanState.control),
       mixer: cleanState.mixer,
-      laser: migrateLaserProjectState(cleanState.laser ?? initLaserState()),
     }
   } else if (action.type === RESET_UNIVERSE) {
     const us: DmxState = action.payload
@@ -316,11 +324,12 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         ...cleanState.gui,
         dmx: state.gui.dmx,
         midi: state.gui.midi,
+        midiOut: state.gui.midiOut,
+        osc: state.gui.osc,
         appSettings: state.gui.appSettings,
         projectWorkspace: state.gui.projectWorkspace,
       },
       mixer: cleanState.mixer,
-      laser: cleanState.laser,
     }
   }
   return baseReducer(state, action)
@@ -346,7 +355,6 @@ export function getCleanReduxState(state: ReduxState) {
     gui: sanitizeGuiTransientState(state.gui),
     control: state.control.present,
     mixer: state.mixer,
-    laser: state.laser,
   }
 }
 

@@ -1,6 +1,6 @@
 # Captivate remote control (LAN)
 
-Optional **web UI** for phones and tablets on the same network. The show computer runs full Captivate; remotes control **scenes / modulation** and the **DMX mixer**, and can view **connections** and **audio** status.
+Optional **web UI** for phones and tablets on the same network. The show computer runs full Captivate; remotes control **scenes / modulation**, the **performance** bank, and the **DMX mixer**, and can view **connections** and **audio** status.
 
 ## Enable on the show computer
 
@@ -17,7 +17,9 @@ Optional **web UI** for phones and tablets on the same network. The show compute
 
 ![Remote control sign-in](screenshots/Captivate_Remote_Login.png)
 
-4. Use **Scenes & modulation** or **DMX mixer** tabs; open **Connections** from the status bar for DMX/MIDI/Link settings.
+4. Use **Scenes & modulation**, **Performance**, or **DMX mixer** tabs; open **Connections** from the status bar for DMX/MIDI/Link settings.
+
+The **Performance** tab shares the host snap-grid bank: unlock **Edit** to add/remove/move pads and sliders; when locked, only drag values and press pads. Destination routes are per active light scene (same as the host Performance page).
 
 ## Security
 
@@ -27,4 +29,4 @@ Optional **web UI** for phones and tablets on the same network. The show compute
 
 ## Not available on remote
 
-Visualizer, fixture editor, Laser ILDA, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs. Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host. MIDI/keyboard mapping on the show computer: [MIDI and keyboard mapping](midi-mapping.md).
+Visualizer, fixture editor, Lighting 3D, wLED, MIDI learn, keyboard shortcuts, save/load dialogs. Audio **capture** stays on the show computer; remotes see **meters** and can change audio **settings** that sync to the host. MIDI/keyboard mapping on the show computer: [MIDI and keyboard mapping](midi-mapping.md).

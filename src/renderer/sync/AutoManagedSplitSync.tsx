@@ -19,7 +19,7 @@ import { listAtmosFxtrs, universeHasAtmospherics } from '../../shared/atmospheri
 import { LightScene_t, SplitScene_t } from '../../shared/Scenes'
 import { normalizeChaseOptions } from '../../shared/chase'
 import { isDedicatedGroupSplit } from '../scenes/splitUiVisibility'
-import { collectLaserLightingGroupNames } from '../laser/laserSplitLink'
+import { isObsoleteLaserGroupName } from '../../shared/fixtureGroups'
 
 type AutoManagedGroupState = {
   group: string
@@ -70,12 +70,6 @@ export default function AutoManagedSplitSync() {
   const activeScene = useControlSelector((scenes) => scenes.light.active)
   const activeLightScene = useActiveLightScene((scene) => scene)
   const videoEnabled = useTypedSelector((state) => state.gui.videoEnabled)
-  const laserWindowOpen = useTypedSelector((state) => state.gui.laserWindowOpen)
-  const laser = useTypedSelector((state) => state.laser)
-  const laserGroupNames = useMemo(
-    () => new Set(collectLaserLightingGroupNames(laser)),
-    [laser.groupSlots, laser.units]
-  )
   const dmx = useDmxSelector((state) => state)
   const atmosSettings = useDeviceSelector(
     (state) => state.connectionSettings.atmos
@@ -94,13 +88,6 @@ export default function AutoManagedSplitSync() {
   )
 
   const autoManagedGroupStates = useMemo((): AutoManagedGroupState[] => {
-    const laserGroups: AutoManagedGroupState[] = [...laserGroupNames].map(
-      (group) => ({
-        group,
-        present: laserWindowOpen,
-        autoCreate: false,
-      })
-    )
     return [
       {
         group: 'Movers',
@@ -139,20 +126,33 @@ export default function AutoManagedSplitSync() {
         group: 'Visualizer',
         present: videoEnabled,
       },
-      ...laserGroups,
     ]
   }, [
     hasAtmospherics,
     hasLedFixtures,
     hasMovers,
-    laserGroupNames,
-    laserWindowOpen,
     videoEnabled,
   ])
 
   useEffect(() => {
     const scene = activeLightScene
     if (scene === undefined) return
+
+    // Laser authoring was removed; drop blank dedicated splits left in old projects.
+    for (let i = scene.splitScenes.length - 1; i >= 1; i--) {
+      const split = scene.splitScenes[i]
+      if (split === undefined) continue
+      const includes = Object.entries(split.groups).filter(
+        ([, included]) => included === true
+      )
+      if (
+        includes.length === 1 &&
+        isObsoleteLaserGroupName(includes[0]![0])
+      ) {
+        dispatch(removeSplitSceneByIndex(i))
+        return
+      }
+    }
 
     const cacheByGroup =
       autoSplitSessionCache[activeScene] ??

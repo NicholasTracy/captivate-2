@@ -8,7 +8,7 @@
  *
  * Do NOT wipe or lipo vendor multi-arch layouts:
  * - koffi ships prebuilds under build/koffi/<platform>_<arch>/ (cnoke, not node-gyp)
- * - usb / @serialport/bindings-cpp ship prebuilds/darwin-x64+arm64 (already fat)
+ * - @serialport/bindings-cpp ships prebuilds/darwin-x64+arm64 (already fat)
  */
 const { spawnSync } = require('child_process')
 const fs = require('fs')
@@ -219,17 +219,6 @@ function assertCriticalNativesPresent(nodeModulesRoot) {
   )
   if (!fs.existsSync(midiRelease) && (!fs.existsSync(midiPreArm) || !fs.existsSync(midiPreX64))) {
     errors.push('midi native missing (need build/Release/midi.node or both darwin prebuilds)')
-  }
-
-  const usbUniv = path.join(
-    nodeModulesRoot,
-    'usb',
-    'prebuilds',
-    'darwin-x64+arm64',
-    'node.napi.node'
-  )
-  if (!fs.existsSync(usbUniv)) {
-    errors.push('usb universal darwin prebuild missing')
   }
 
   const serialUniv = path.join(

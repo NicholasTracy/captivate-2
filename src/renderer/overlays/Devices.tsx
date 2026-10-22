@@ -6,13 +6,22 @@ import { useDispatch } from 'react-redux'
 import {
   setDmxConnectable,
   setMidiConnectable,
+  setMidiOutConnectable,
   setMidiClockBpmEnabled,
+  setMidiClockOutEnabled,
+  setOscEnabled,
+  setOscPort,
+  setOscSendEnabled,
+  setOscSendHost,
+  setOscSendPort,
+  setLinkRole,
   setOpenDmxRefreshRateHz,
   setUniverseCount,
   setDmxDeviceUniverse,
   setDmxUsbWidgetProtocol,
   setArtNetUniverseRoute,
 } from '../redux/controlSlice'
+import type { LinkRole } from '../redux/deviceState'
 import CloseIcon from '@mui/icons-material/Close'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
@@ -22,6 +31,14 @@ import {
   MidiDevice_t,
   ConnectionId,
 } from '../../shared/connection'
+import {
+  clampOscPort,
+  DEFAULT_OSC_PORT,
+  DEFAULT_OSC_SEND_HOST,
+  DEFAULT_OSC_SEND_PORT,
+  OSC_PORT_MAX,
+  OSC_PORT_MIN,
+} from '../../shared/osc'
 import DmxTroubleShoot from './DmxTroubleshoot'
 import RemoteControlSection from './RemoteControlSection'
 import Input from 'renderer/base/Input'
@@ -53,6 +70,8 @@ export default function Devices({
   const connectable = deviceSetup.connectable
   const dmx = useTypedSelector((state) => state.gui.dmx)
   const midi = useTypedSelector((state) => state.gui.midi)
+  const midiOut = useTypedSelector((state) => state.gui.midiOut)
+  const osc = useTypedSelector((state) => state.gui.osc)
 
   const hasOpenDmx =
     dmx.available.find((device) => device.type === 'OpenDmxUsb') !== undefined
@@ -159,32 +178,92 @@ export default function Devices({
           <ArtNetDevices />
         </ConnectionSection>
         <ConnectionSection>
-          <SectionHeader title="MIDI" helpAriaLabel="How to set up MIDI input">
-            <HelpTitle>How to set up MIDI input</HelpTitle>
+          <SectionHeader title="MIDI" helpAriaLabel="How to set up MIDI">
+            <HelpTitle>How to set up MIDI</HelpTitle>
             <HelpIntro>
-              Enable MIDI ports you want Captivate to listen to for control and
-              optional tempo sync.
+              Enable MIDI inputs for control / clock-in, and outputs for CC publish
+              and MIDI clock out. Use the piano icon for input learn and the upload
+              icon for MIDI out assign.
             </HelpIntro>
             <HelpList>
               <li>
-                To enable or disable a port, click it in the list below.
+                Click a port under Inputs or Outputs to enable or disable it.
               </li>
               <li>
-                When at least one input is on, you can optionally drive master
-                BPM from MIDI clock using the toggle below.
+                Clock in and clock out are mutually exclusive (loop guard).
               </li>
             </HelpList>
           </SectionHeader>
+          <DeviceSubLabel>Inputs</DeviceSubLabel>
           {midi.available.map((device) => (
             <MidiDevice
-              key={device.name}
+              key={`in-${device.name}`}
               device={device}
               connected={midi.connected}
               connectable={connectable.midi}
+              direction="in"
             />
           ))}
           {midi.available.length === 0 && <NoneFound />}
+          <DeviceSubLabel style={{ marginTop: '0.85rem' }}>Outputs</DeviceSubLabel>
+          {midiOut.available.map((device) => (
+            <MidiDevice
+              key={`out-${device.name}`}
+              device={device}
+              connected={midiOut.connected}
+              connectable={connectable.midiOut ?? []}
+              direction="out"
+            />
+          ))}
+          {midiOut.available.length === 0 && <NoneFound />}
           <MidiClockBpmControl midiConnected={midi.connected.length > 0} />
+          <MidiClockOutControl midiOutConnected={midiOut.connected.length > 0} />
+        </ConnectionSection>
+        <ConnectionSection>
+          <SectionHeader title="OSC" helpAriaLabel="How to set up OSC">
+            <HelpTitle>How to set up OSC</HelpTitle>
+            <HelpIntro>
+              Listen for Open Sound Control over UDP and/or auto-publish Captivate
+              control-bus values to another host. Mapped input controls use the same
+              learn/action system as MIDI.
+            </HelpIntro>
+            <HelpList>
+              <li>
+                Turn <strong>Listen for OSC</strong> on to bind the UDP listen port.
+              </li>
+              <li>
+                Turn <strong>Send OSC</strong> on to auto-publish
+                <code> /captivate/… </code> at ~30 Hz (changed values only).
+              </li>
+              <li>
+                Send host/port default to {DEFAULT_OSC_SEND_HOST}:{DEFAULT_OSC_SEND_PORT}.
+                Sending to the same localhost listen port is blocked (loop guard).
+              </li>
+            </HelpList>
+          </SectionHeader>
+          <OscListenControl
+            enabled={deviceSetup.connectionSettings.oscEnabled === true}
+            port={
+              typeof deviceSetup.connectionSettings.oscPort === 'number'
+                ? deviceSetup.connectionSettings.oscPort
+                : DEFAULT_OSC_PORT
+            }
+            listening={osc.listening}
+            error={osc.error}
+            sendEnabled={deviceSetup.connectionSettings.oscSendEnabled === true}
+            sendHost={
+              typeof deviceSetup.connectionSettings.oscSendHost === 'string'
+                ? deviceSetup.connectionSettings.oscSendHost
+                : DEFAULT_OSC_SEND_HOST
+            }
+            sendPort={
+              typeof deviceSetup.connectionSettings.oscSendPort === 'number'
+                ? deviceSetup.connectionSettings.oscSendPort
+                : DEFAULT_OSC_SEND_PORT
+            }
+            sending={osc.sending === true}
+            sendError={osc.sendError ?? null}
+          />
         </ConnectionSection>
         <ConnectionSection>
           <SectionHeader title="Ableton Link" helpAriaLabel="How to use Ableton Link">
@@ -351,8 +430,7 @@ function MidiClockBpmControl({ midiConnected }: { midiConnected: boolean }) {
             When this is on, master BPM follows MIDI timing clock (24 pulses per
             quarter note) from any enabled MIDI input above. Your DAW or hardware
             must send clock on that port. Only one external BPM source can be active
-            at a time — this disables audio beat clock as the tempo source. Common
-            in Ableton Live, Reaper, and hardware sequencers (0xF8 clock messages).
+            at a time — this disables audio beat clock and MIDI clock out (loop guard).
           </FieldHelpButton>
         </MidiClockLabelGroup>
         <ToggleSwitch
@@ -364,6 +442,181 @@ function MidiClockBpmControl({ midiConnected }: { midiConnected: boolean }) {
     </MidiClockBlock>
   )
 }
+
+function MidiClockOutControl({
+  midiOutConnected,
+}: {
+  midiOutConnected: boolean
+}) {
+  const dispatch = useDispatch()
+  const enabled = useControlSelector(
+    (state) => state.device.connectionSettings.midiClockOutEnabled === true
+  )
+  const clockInEnabled = useControlSelector(
+    (state) => state.device.connectionSettings.midiClockBpmEnabled === true
+  )
+
+  if (!midiOutConnected) {
+    return null
+  }
+
+  return (
+    <MidiClockBlock>
+      <MidiClockRow>
+        <MidiClockLabelGroup>
+          <MidiClockLabel>Send MIDI clock</MidiClockLabel>
+          <FieldHelpButton ariaLabel="How MIDI clock out works">
+            When on, Captivate sends MIDI timing clock (0xF8 at 24 PPQ) plus start
+            (0xFA) / stop (0xFC) on all enabled MIDI outputs. Disabled automatically
+            while Drive BPM from MIDI clock is on, to avoid feedback loops.
+          </FieldHelpButton>
+        </MidiClockLabelGroup>
+        <ToggleSwitch
+          checked={enabled && !clockInEnabled}
+          onChange={(next) => dispatch(setMidiClockOutEnabled(next))}
+          aria-label="Send MIDI clock"
+        />
+      </MidiClockRow>
+      {clockInEnabled ? (
+        <OscStatusText $ok={false} $error={false}>
+          Clock out off while following MIDI clock in
+        </OscStatusText>
+      ) : null}
+    </MidiClockBlock>
+  )
+}
+
+function OscListenControl({
+  enabled,
+  port,
+  listening,
+  error,
+  sendEnabled,
+  sendHost,
+  sendPort,
+  sending,
+  sendError,
+}: {
+  enabled: boolean
+  port: number
+  listening: boolean
+  error: string | null
+  sendEnabled: boolean
+  sendHost: string
+  sendPort: number
+  sending: boolean
+  sendError: string | null
+}) {
+  const dispatch = useDispatch()
+  const statusText = !enabled
+    ? 'Listen off'
+    : listening
+      ? `Listening on UDP ${port}`
+      : error
+        ? `Listen error: ${error}`
+        : 'Listen starting…'
+
+  const sendStatusText = !sendEnabled
+    ? 'Send off'
+    : sendError
+      ? `Send error: ${sendError}`
+      : sending
+        ? `Sending to ${sendHost}:${sendPort}`
+        : 'Send ready…'
+
+  return (
+    <MidiClockBlock>
+      <MidiClockRow>
+        <MidiClockLabelGroup>
+          <MidiClockLabel>Listen for OSC</MidiClockLabel>
+          <FieldHelpButton ariaLabel="How OSC listening works">
+            When on, Captivate opens a UDP socket for Open Sound Control messages.
+            Use the piano learn button (same as MIDI) to bind an OSC address to a
+            control, then send that address from TouchOSC, QLab, Max, or similar.
+          </FieldHelpButton>
+        </MidiClockLabelGroup>
+        <ToggleSwitch
+          checked={enabled}
+          onChange={(next) => dispatch(setOscEnabled(next))}
+          aria-label="Listen for OSC"
+        />
+      </MidiClockRow>
+      <SettingRow>
+        <SettingLabel>Listen port</SettingLabel>
+        <Tooltip title={`OSC listen port (${OSC_PORT_MIN}–${OSC_PORT_MAX})`}>
+          <div>
+            <DraggableNumber
+              value={clampOscPort(port)}
+              min={OSC_PORT_MIN}
+              max={OSC_PORT_MAX}
+              onChange={(newVal) => dispatch(setOscPort(newVal))}
+            />
+          </div>
+        </Tooltip>
+      </SettingRow>
+      <OscStatusText $ok={listening && enabled} $error={Boolean(error)}>
+        {statusText}
+      </OscStatusText>
+
+      <MidiClockRow style={{ marginTop: '0.85rem' }}>
+        <MidiClockLabelGroup>
+          <MidiClockLabel>Send OSC</MidiClockLabel>
+          <FieldHelpButton ariaLabel="How OSC send works">
+            When on, Captivate auto-publishes the /captivate control-bus namespace
+            (~30 Hz, change-detected) to the host and port below. See docs/osc-mapping.md.
+          </FieldHelpButton>
+        </MidiClockLabelGroup>
+        <ToggleSwitch
+          checked={sendEnabled}
+          onChange={(next) => dispatch(setOscSendEnabled(next))}
+          aria-label="Send OSC"
+        />
+      </MidiClockRow>
+      <SettingRow>
+        <SettingLabel>Send host</SettingLabel>
+        <Tooltip title="OSC send destination host">
+          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+            <Input
+              value={sendHost}
+              onChange={(newVal) => dispatch(setOscSendHost(newVal))}
+              placeholder={DEFAULT_OSC_SEND_HOST}
+            />
+          </div>
+        </Tooltip>
+      </SettingRow>
+      <SettingRow>
+        <SettingLabel>Send port</SettingLabel>
+        <Tooltip title={`OSC send port (${OSC_PORT_MIN}–${OSC_PORT_MAX})`}>
+          <div>
+            <DraggableNumber
+              value={clampOscPort(sendPort)}
+              min={OSC_PORT_MIN}
+              max={OSC_PORT_MAX}
+              onChange={(newVal) => dispatch(setOscSendPort(newVal))}
+            />
+          </div>
+        </Tooltip>
+      </SettingRow>
+      <OscStatusText
+        $ok={sending && sendEnabled && !sendError}
+        $error={Boolean(sendError)}
+      >
+        {sendStatusText}
+      </OscStatusText>
+    </MidiClockBlock>
+  )
+}
+
+const OscStatusText = styled.div<{ $ok: boolean; $error: boolean }>`
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: ${(p) =>
+    p.$error
+      ? '#e05a5a'
+      : p.$ok
+        ? '#78dc82'
+        : p.theme.colors.text.secondary};
+`
 
 const MidiClockBlock = styled.div`
   margin-top: 1.1rem;
@@ -441,37 +694,71 @@ const SyncTransportState = styled.div`
 `
 
 function AbletonLinkConnections() {
+  const dispatch = useDispatch()
   const linkEnabled = useControlSelector(
     (state) => state.device.connectionSettings.linkEnabled === true
+  )
+  const linkRole = useControlSelector(
+    (state) => state.device.connectionSettings.linkRole ?? 'full'
   )
   const startStopSyncEnabled = useRealtimeSelector(
     (state) => state.time.isStartStopSyncEnabled
   )
 
   return (
-    <LinkControlsGrid $linkOn={linkEnabled}>
-      <LinkControlCol>
-        <LinkButton layout="connections" />
-      </LinkControlCol>
+    <>
+      <LinkControlsGrid $linkOn={linkEnabled}>
+        <LinkControlCol>
+          <LinkButton layout="connections" />
+        </LinkControlCol>
+        {linkEnabled ? (
+          <SyncControlCol>
+            <Tooltip
+              title="When supported, play and stop follow other Link apps in the session. Click the icon to turn sync on or off."
+              placement="top"
+            >
+              <SyncTransportRow>
+                <StartStopSyncButton mode="menu" />
+                <SyncTransportText>
+                  <SyncTransportTitle>Start/stop sync</SyncTransportTitle>
+                  <SyncTransportState>
+                    {startStopSyncEnabled
+                      ? 'On — follows Link transport'
+                      : 'Off'}
+                  </SyncTransportState>
+                </SyncTransportText>
+              </SyncTransportRow>
+            </Tooltip>
+          </SyncControlCol>
+        ) : null}
+      </LinkControlsGrid>
       {linkEnabled ? (
-        <SyncControlCol>
-          <Tooltip
-            title="When supported, play and stop follow other Link apps in the session. Click the icon to turn sync on or off."
-            placement="top"
+        <MidiClockBlock>
+          <MidiClockLabel style={{ marginBottom: '0.35rem' }}>
+            Link role (tempo)
+          </MidiClockLabel>
+          <TextField
+            select
+            size="small"
+            fullWidth
+            value={linkRole}
+            onChange={(e) =>
+              dispatch(setLinkRole(e.target.value as LinkRole))
+            }
+            SelectProps={{ native: true }}
+            inputProps={{ 'aria-label': 'Ableton Link tempo role' }}
           >
-            <SyncTransportRow>
-              <StartStopSyncButton mode="menu" />
-              <SyncTransportText>
-                <SyncTransportTitle>Start/stop sync</SyncTransportTitle>
-                <SyncTransportState>
-                  {startStopSyncEnabled ? 'On — follows Link transport' : 'Off'}
-                </SyncTransportState>
-              </SyncTransportText>
-            </SyncTransportRow>
-          </Tooltip>
-        </SyncControlCol>
+            <option value="full">Full — follow peers and push local tempo</option>
+            <option value="leader">Leader — Captivate owns tempo</option>
+            <option value="follow">Follow — only Link session tempo</option>
+          </TextField>
+          <OscStatusText $ok={false} $error={false}>
+            Role mainly affects tempo authorship; start/stop still uses the toggle
+            above.
+          </OscStatusText>
+        </MidiClockBlock>
       ) : null}
-    </LinkControlsGrid>
+    </>
   )
 }
 
@@ -669,7 +956,12 @@ function DmxDevice({ device, connected, connectable }: Props2<DmxDevice_t>) {
   )
 }
 
-function MidiDevice({ device, connected, connectable }: Props2<MidiDevice_t>) {
+function MidiDevice({
+  device,
+  connected,
+  connectable,
+  direction = 'in',
+}: Props2<MidiDevice_t> & { direction?: 'in' | 'out' }) {
   const dispatch = useDispatch()
   const status = getMidiStatus(device, connected, connectable)
 
@@ -680,19 +972,37 @@ function MidiDevice({ device, connected, connectable }: Props2<MidiDevice_t>) {
     } else {
       connectableSet.add(device.connectionId)
     }
-    dispatch(setMidiConnectable(Array.from(connectableSet)))
+    const next = Array.from(connectableSet)
+    if (direction === 'out') {
+      dispatch(setMidiOutConnectable(next))
+    } else {
+      dispatch(setMidiConnectable(next))
+    }
   }
 
   return (
     <DeviceRoot
       {...status}
       onClick={onClick}
-      title="Click to enable or disable this MIDI device"
+      title={
+        direction === 'out'
+          ? 'Click to enable or disable this MIDI output'
+          : 'Click to enable or disable this MIDI input'
+      }
     >
       {device.name}
     </DeviceRoot>
   )
 }
+
+const DeviceSubLabel = styled.div`
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: ${(p) => p.theme.colors.text.secondary};
+  margin: 0.15rem 0 0.35rem;
+`
 
 const DmxUsbDeviceBlock = styled.div`
   margin-bottom: 0.45rem;

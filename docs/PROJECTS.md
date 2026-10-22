@@ -66,7 +66,6 @@ sections:
 | Serial Device Settings (MIDI & DMX) | MIDI/DMX connection state, audio input settings (including Advanced Music Energy), MIDI learn maps (`buttonActions` / `sliderActions`), keyboard shortcuts, and MIDI clock / Link flags. |
 | App UI Settings | A profile subset: active page, blackout, LED/video toggles, depth view, and LED sidebar visibility. |
 | DMX Mixer State | Mixer values and related live mixer state. |
-| Laser Engine | Laser fixtures, zones, scenes, and laser project state. |
 
 The paired `.cfx` file contains serialized fixture definitions from the current
 fixture library.

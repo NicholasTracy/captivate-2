@@ -140,16 +140,6 @@
       "openWindow": "Lighting3D",
       "readme": false,
       "wiki": true
-    },
-    {
-      "id": "laser-window",
-      "file": "Captivate_Laser.png",
-      "title": "Laser",
-      "caption": "Laser control window",
-      "page": "Modulation",
-      "openWindow": "Laser",
-      "readme": false,
-      "wiki": true
     }
   ]
 }

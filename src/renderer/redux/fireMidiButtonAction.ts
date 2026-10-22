@@ -10,7 +10,6 @@ import {
   setBlackout,
   fireAtmosManualTrigger,
   setActivePage,
-  setLaserToolFromMidiMapping,
 } from './guiSlice'
 import type { SceneType } from '../../shared/Scenes'
 import { msUntilNextBeatBoundary } from '../../shared/sceneBeatQuantize'
@@ -58,7 +57,5 @@ export function fireMidiButtonAction(
     dispatch(fireAtmosManualTrigger(action.fixtureId))
   } else if (action.type === 'setActivePage') {
     dispatch(setActivePage(action.page))
-  } else if (action.type === 'laserTool') {
-    dispatch(setLaserToolFromMidiMapping({ tool: action.tool }))
   }
 }

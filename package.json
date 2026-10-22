@@ -243,7 +243,11 @@
       "release/app/dist/main/**",
       "!captivate-diagnostics.log",
       "!captivate-diagnostics.log.*",
-      "!**/*.log"
+      "!**/*.log",
+      "!**/*.cap",
+      "!**/*.cfx",
+      "!tools/screenshots/**",
+      "!tools/screenshots/fixtures/**"
     ],
     "logLevel": "quiet"
   },

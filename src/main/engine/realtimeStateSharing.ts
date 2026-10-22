@@ -85,11 +85,25 @@ function chaseStateEqual(a: ChaseState, b: ChaseState): boolean {
   )
 }
 
+function modulatorValuesEqual(
+  a: number[] | undefined,
+  b: number[] | undefined
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return !a && !b
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
 function splitStateEqual(a: SplitState, b: SplitState): boolean {
   return (
     outputParamsEqual(a.outputParams, b.outputParams) &&
     randomizerStateEqual(a.randomizer, b.randomizer) &&
-    chaseStateEqual(a.chase, b.chase)
+    chaseStateEqual(a.chase, b.chase) &&
+    modulatorValuesEqual(a.modulatorValues, b.modulatorValues)
   )
 }
 

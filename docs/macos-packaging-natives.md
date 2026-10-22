@@ -1,7 +1,7 @@
 # macOS packaging and native modules
 
 Developer runbook for building Captivate 2 DMGs without wiping per-arch natives
-(koffi, usb/serialport prebuilds, midi, node-link, ffmpeg-static, projectM).
+(koffi, serialport prebuilds, midi, node-link, ffmpeg-static, projectM).
 
 User-facing install / Gatekeeper steps live in [MACOS-INSTALL.md](MACOS-INSTALL.md).
 This page covers **packaging internals**.
@@ -20,7 +20,7 @@ startup errors like `Cannot find the native Koffi module` (fixed in 1.1.3).
 | `npm run package:mac` | Full macOS path: sets universal-native + ad-hoc sign env, runs bundle, builds arm64 then x64 DMGs |
 | `npm run package:bundle` / `__package:bundle:inner` | Clean → prepare natives → rebuild → darwin universal lipo → webpack build → verify |
 | `npm run rebuild` | `electron-rebuild` for the host Electron ABI |
-| `npm run verify:release-assets` | Asserts koffi / midi / usb / serialport / node-link / ffmpeg / projectM assets |
+| `npm run verify:release-assets` | Asserts koffi / midi / serialport / node-link / ffmpeg / projectM assets |
 
 `package:mac` sets:
 
@@ -60,8 +60,7 @@ Skip with `CAPTIVATE_SKIP_DARWIN_UNIVERSAL_NATIVE=1`.
 | Package | Layout | Rule |
 |---------|--------|------|
 | **koffi** | `build/koffi/<platform>_<arch>/koffi.node` (cnoke) | Never delete the whole `build/` tree; keep both `darwin_arm64` and `darwin_x64` |
-| **usb** | `prebuilds/darwin-x64+arm64/` | Already fat — do not lipo or delete |
-| **@serialport/bindings-cpp** | `prebuilds/darwin-x64+arm64/` | Same as usb |
+| **@serialport/bindings-cpp** | `prebuilds/darwin-x64+arm64/` | Already fat — do not lipo or delete |
 | **node-gyp modules** (e.g. midi, node-link) | `build/Release|Debug` | Safe to wipe **only** those Release/Debug dirs, then rebuild + lipo |
 
 ## afterPack arch fixups
@@ -79,9 +78,9 @@ the opposite architecture.
   still boots)
 - `getKoffi()` — throws with a rebuild/reinstall message when required
 
-Consumers include NDI (`VisualizerNdiSender.ts`), projectM runtime helpers, and
-Pangolin BEYOND SDK bindings. A missing koffi binary should not brick app start,
-but those features will fail until natives are restored.
+Consumers include NDI (`VisualizerNdiSender.ts`) and projectM runtime helpers.
+A missing koffi binary should not brick app start, but those features will fail
+until natives are restored.
 
 ## Verification
 
@@ -90,15 +89,15 @@ On darwin (or CI) it especially asserts:
 
 - `release/app/node_modules/koffi/build/koffi/darwin_arm64/koffi.node`
 - `…/darwin_x64/koffi.node`
-- usb + `@serialport/bindings-cpp` `prebuilds/darwin-x64+arm64/node.napi.node`
+- `@serialport/bindings-cpp` `prebuilds/darwin-x64+arm64/node.napi.node`
 - midi Release or prebuilds, node-link native, ffmpeg-static binary
 - projectM bridge / runtime when CI or the corresponding `CAPTIVATE_BUILD_*` flags are set
 
 ## Common pitfalls
 
 1. **Clearing `node_modules/*/build` wholesale** — deletes koffi cnoke prebuilds.
-2. **Lipoing vendor `prebuilds/`** — usb/serialport are already universal; treat
-   them as opaque.
+2. **Lipoing vendor `prebuilds/`** — serialport prebuilds are already universal;
+   treat them as opaque.
 3. **Packaging only on one arch without the universal script** — the other DMG
    (or Rosetta) may load the wrong `.node`.
 4. **Skipping `verify:release-assets`** — packaging can look “successful” while
@@ -123,4 +122,3 @@ On darwin (or CI) it especially asserts:
 - [macOS install guide](MACOS-INSTALL.md) — end-user DMG / Gatekeeper steps
 - [RELEASE-NOTES-1.1.3](RELEASE-NOTES-1.1.3.md) — packaging fix summary
 - [Visualizer streaming](visualizer-streaming.md) — NDI path that uses koffi
-- [Laser FB4 / Pangolin BEYOND](laser-fb4-beyond.md) — BEYOND SDK also loads via koffi

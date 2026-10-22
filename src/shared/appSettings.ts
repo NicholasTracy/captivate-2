@@ -19,6 +19,14 @@ export type ThemePackId = 'light' | 'captivate' | 'black'
 
 export type LanguagePackId = 'en'
 
+/**
+ * Chromium/Electron GPU policy (applied at process start; requires restart).
+ * - `default` — Chromium defaults (hardware accel on when available)
+ * - `force` — ignore GPU blocklist / prefer discrete GPU (recovery for WebGL1/software GL)
+ * - `off` — disable hardware acceleration (last resort for crashy drivers)
+ */
+export type GpuAccelerationMode = 'default' | 'force' | 'off'
+
 /** Last loaded custom theme (document is cached so the UI works if the file moves). */
 export type CustomThemeState = {
   /** Absolute path to the theme file, when known. */
@@ -47,6 +55,8 @@ export interface AppSettings {
   useCustomTheme: boolean
   /** Loaded custom theme (null when none). */
   customTheme: CustomThemeState | null
+  /** GPU / Chromium acceleration policy. Restart required after change. */
+  gpuAccelerationMode: GpuAccelerationMode
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -58,6 +68,41 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   firstRunTutorialCompleted: false,
   useCustomTheme: false,
   customTheme: null,
+  gpuAccelerationMode: 'default',
+}
+
+export type GpuAccelerationOption = {
+  id: GpuAccelerationMode
+  label: string
+  description: string
+}
+
+export const GPU_ACCELERATION_OPTIONS: GpuAccelerationOption[] = [
+  {
+    id: 'default',
+    label: 'Automatic',
+    description:
+      'Use Chromium’s normal hardware acceleration. Best for most machines.',
+  },
+  {
+    id: 'force',
+    label: 'Force hardware GPU',
+    description:
+      'Ignore the GPU blocklist and prefer a discrete GPU. Try this if Lighting 3D or the visualizer falls back to WebGL 1 / software rendering.',
+  },
+  {
+    id: 'off',
+    label: 'Disable GPU',
+    description:
+      'Force software rendering. Only use if the app crashes or flickers with GPU on.',
+  },
+]
+
+export function normalizeGpuAccelerationMode(raw: unknown): GpuAccelerationMode {
+  if (raw === 'default' || raw === 'force' || raw === 'off') {
+    return raw
+  }
+  return DEFAULT_APP_SETTINGS.gpuAccelerationMode
 }
 
 export type ThemePackOption = {
@@ -163,6 +208,9 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
   if (typeof source.useCustomTheme === 'boolean') {
     base.useCustomTheme = source.useCustomTheme && base.customTheme !== null
   }
+  base.gpuAccelerationMode = normalizeGpuAccelerationMode(
+    source.gpuAccelerationMode
+  )
   return base
 }
 
