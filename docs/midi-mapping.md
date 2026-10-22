@@ -130,7 +130,7 @@ CC/note numbers. Captivate does **not** learn out mappings from MIDI input
 
 ### Sliders → CC
 
-`setMaster`, `setBaseParam`, `setBpm`, `setGroupIntensity`, `setAutoSceneBombacity`.
+`setMaster`, `setBaseParam`, `setBpm`, `setGroupIntensity`, `setAutoSceneBombacity`, `setPerformanceValue`, `setModulationAmount` (modulation-matrix depth on the active scene).
 
 1. Enable at least one MIDI **output** in Connections.
 2. Click the status-bar **upload** icon (orange overlays).
@@ -143,7 +143,7 @@ CC/note numbers. Captivate does **not** learn out mappings from MIDI input
 
 Stateful buttons publish note on/off on all enabled outputs:
 
-`toggleBlackout`, `setActiveSceneIndex`, `setActivePage`, `toggleAutoScene`.
+`toggleBlackout`, `setActiveSceneIndex`, `setActivePage`, `toggleAutoScene`, `firePerformancePad` (note on while the pad value is high).
 
 Same assign flow with **Assign note** → **ch** + **note**. Note On (vel 127)
 when the state is active; Note Off when inactive.

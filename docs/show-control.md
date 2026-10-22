@@ -67,12 +67,44 @@ affects **tempo authorship**.
 
 The **Performance** page (sidebar) holds a snap-grid of pads and sliders. MIDI/OSC
 can learn directly onto a performance control (`setPerformanceValue` /
-`firePerformancePad`). Each **active light scene** can route that control to a
-destination (master, base param, group intensity, bombacity, etc.).
+`firePerformancePad`). Each **light scene** stores a **list** of destinations for
+a control (master, base param, group intensity, bombacity, and so on). Moving a
+slider writes every continuous destination on the **active** scene only. Firing
+a pad runs every button destination on the active scene only. Inactive scenes
+keep their own lists and are not written. Older saves that stored a single
+destination object are wrapped into a one-element list on load.
+
+Pads also publish **MIDI note out** when a note is assigned in upload mode
+(note on while the pad value is high, note off when it returns to 0). Sliders
+still publish MIDI CC via `setPerformanceValue`.
+
+A control can additionally send its **own OSC address** (inspector: OSC out
+enabled + a path starting with `/`). That value (sliders 0..1, pads 0 or 1) is
+published on the same OSC send socket as the auto bus, and only when OSC send
+is on and the send-to-self loop guard is not blocking. The `/captivate/…` bus
+is unchanged.
+
+Modulation-matrix depth sliders assign MIDI CC out with `setModulationAmount`
+(active scene, `splitModulations` or `lfoInterModulation`).
 
 Direct `setBaseParam` MIDI still writes the **active scene only**. To use the
 same CC for **different** params per scene, bind MIDI → a performance control,
-then set a different route on each light scene.
+then add a different destination on each light scene.
+
+## OSC clock
+
+The OSC clock for this release is the existing `/captivate/time` namespace,
+published with the rest of the auto bus:
+
+| Address | Meaning |
+|---------|---------|
+| `/captivate/time/bpm` | Master BPM |
+| `/captivate/time/beats` | Beat counter |
+| `/captivate/time/phase` | Phase in the beat |
+| `/captivate/time/playing` | 1 playing / 0 stopped |
+
+These sit beside **MIDI clock out** (`0xFA` start, `0xFC` stop, `0xF8` at 24 PPQ).
+There is no discrete OSC tick protocol.
 
 ## Related
 

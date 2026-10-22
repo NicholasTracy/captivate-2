@@ -52,9 +52,10 @@ export interface LightScene_t extends SceneBase {
   modulators: Modulator[]
   splitScenes: SplitScene_t[]
   /**
-   * Per-scene routing from performance bank control id → destination action.
-   * Only the active scene's routes are applied when a performance value changes.
-   * Values are stored as plain objects compatible with MidiAction (see deviceState).
+   * Per-scene routing from performance bank control id → destination actions.
+   * Each value is a list of MidiAction objects (see deviceState). Legacy saves
+   * stored a single action object; `fixLightScenes` wraps that in a one-element array.
+   * Only the active scene's list is applied when a performance value changes.
    */
   performanceRoutes?: { [controlId: string]: unknown }
 }

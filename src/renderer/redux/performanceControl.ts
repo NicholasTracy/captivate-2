@@ -10,16 +10,18 @@ import {
   getMidiSliderBounds,
 } from './deviceState'
 import { fireMidiButtonAction } from './fireMidiButtonAction'
-import { getActivePerformanceRoute } from './performanceRouteApply'
+import { getActivePerformanceRoutes } from './performanceRouteApply'
 import type { CleanReduxState } from './store'
 import type { RealtimeState } from './realtimeStore'
 
 export {
   applyPerformanceRouteToControlState,
   getActivePerformanceRoute,
+  getActivePerformanceRoutes,
   midiActionLabel,
   autoLabelForRoute,
   isContinuousPerformanceRoute,
+  readPerformanceRoutes,
 } from './performanceRouteApply'
 
 function mapPerformanceValueToBpm(value: number): number {
@@ -43,8 +45,8 @@ export function commitPerformanceValue(
 ): void {
   dispatch(setPerformanceControlValue({ id: controlId, value }))
   const state = getState()
-  const route = getActivePerformanceRoute(state.control, controlId)
-  if (!route || route.type !== 'setBpm') return
+  const routes = getActivePerformanceRoutes(state.control, controlId)
+  if (!routes.some((route) => route.type === 'setBpm')) return
   const bpm = mapPerformanceValueToBpm(clampNormalized(value))
   if (setTempo) {
     setTempo(bpm)
@@ -56,8 +58,8 @@ export function commitPerformanceValue(
 const padResetTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
- * Fire a performance pad: value → 1, apply continuous route if any, then
- * button destinations via fireMidiButtonAction. Briefly resets value to 0.
+ * Fire a performance pad: value → 1, apply every continuous route on the
+ * active scene, then every button route on that scene. Briefly resets to 0.
  */
 export function commitPerformancePad(
   dispatch: DispatchFn,
@@ -69,9 +71,12 @@ export function commitPerformancePad(
 ): void {
   dispatch(firePerformancePad(controlId))
   const state = getState()
-  const route = getActivePerformanceRoute(state.control, controlId)
-  if (route) {
+  const routes = getActivePerformanceRoutes(state.control, controlId)
+  let sentBpm = false
+  for (const route of routes) {
     if (route.type === 'setBpm') {
+      if (sentBpm) continue
+      sentBpm = true
       if (setTempo) {
         setTempo(mapPerformanceValueToBpm(1))
       } else {

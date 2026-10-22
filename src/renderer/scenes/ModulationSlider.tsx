@@ -17,6 +17,7 @@ import {
   splitDisplayName,
 } from './splitUiVisibility'
 import { setModulation } from '../redux/controlSlice'
+import { SliderMidiOverlay } from '../base/MidiOverlay'
 import useDragMapped from '../hooks/useDragMapped'
 import styled from 'styled-components'
 import Popup from 'renderer/base/Popup'
@@ -152,21 +153,31 @@ export default function ModulationSlider({
   const left = modVal > 0.5 ? 0.5 : modVal
 
   return (
-    <Root
-      ref={dragContainer}
-      onPointerDown={onPointerDown}
-      title="Drag sideways: middle = off, farther = stronger up or down"
+    <SliderMidiOverlay
+      action={{
+        type: 'setModulationAmount',
+        modIndex,
+        splitIndex,
+        param: String(param),
+      }}
+      style={{ width: '100%', position: 'relative' }}
     >
-      <StripHeader>
-        <span>{stripTitle}</span>
-      </StripHeader>
-      <Amount
-        style={{
-          left: `${left * 100}%`,
-          width: `${width * 100}%`,
-        }}
-      ></Amount>
-    </Root>
+      <Root
+        ref={dragContainer}
+        onPointerDown={onPointerDown}
+        title="Drag sideways: middle = off, farther = stronger up or down"
+      >
+        <StripHeader>
+          <span>{stripTitle}</span>
+        </StripHeader>
+        <Amount
+          style={{
+            left: `${left * 100}%`,
+            width: `${width * 100}%`,
+          }}
+        ></Amount>
+      </Root>
+    </SliderMidiOverlay>
   )
 }
 
