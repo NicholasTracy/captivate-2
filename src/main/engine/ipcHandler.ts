@@ -73,6 +73,16 @@ import {
   ingestStageLightMapFrame,
   getStageLightMapPreviewPayload,
 } from './stageLightMapRuntime'
+import {
+  heliosConnect,
+  heliosDisconnect,
+  heliosGetStatus,
+  heliosScan,
+  heliosSendTestPattern,
+  heliosSetArmed,
+  heliosSetLivePoints,
+} from './laser/heliosSession'
+import type { HeliosPoint } from '../../shared/heliosOutput'
 import path from 'path'
 import os from 'os'
 import {
@@ -1156,6 +1166,39 @@ export function ipcSetup(config: Config) {
       broadcast(ipcChannels.main_command, command)
     },
   }
+
+  ipcMain.handle(ipcChannels.helios_scan, () => {
+    telemetryCounter('ipc', 'helios_scan')
+    return heliosScan()
+  })
+
+  ipcMain.handle(ipcChannels.helios_status, () => {
+    return heliosGetStatus()
+  })
+
+  ipcMain.handle(ipcChannels.helios_connect, async (_event, deviceIndex: number) => {
+    telemetryCounter('ipc', 'helios_connect')
+    return heliosConnect(Number(deviceIndex))
+  })
+
+  ipcMain.handle(ipcChannels.helios_disconnect, async () => {
+    telemetryCounter('ipc', 'helios_disconnect')
+    return heliosDisconnect()
+  })
+
+  ipcMain.handle(ipcChannels.helios_set_armed, async (_event, armed: boolean) => {
+    telemetryCounter('ipc', 'helios_set_armed')
+    return heliosSetArmed(armed === true)
+  })
+
+  ipcMain.handle(ipcChannels.helios_test_pattern, async () => {
+    telemetryCounter('ipc', 'helios_test_pattern')
+    return heliosSendTestPattern()
+  })
+
+  ipcMain.handle(ipcChannels.helios_set_points, (_event, points: HeliosPoint[]) => {
+    return heliosSetLivePoints(points)
+  })
 
   setRemoteControlIpcBridge({
     broadcastDispatch: (action) =>

@@ -20,12 +20,25 @@ import {
   setAllVisualScenesProjectionMapping,
   setVisualSceneConfig,
 } from '../redux/controlSlice'
-import { sendDiagnosticsEvent, sendTelemetryMark } from '../ipcHandler'
+import { heliosSetPoints, sendDiagnosticsEvent, sendTelemetryMark } from '../ipcHandler'
 import type {
   ProjectionMappingConfig,
   ProjectionMappingOutput,
 } from '../../visualizer/threejs/layers/LayerConfig'
 import { ProjectionMappingGpuCompositor } from './ProjectionMappingGpuCompositor'
+import HeliosOutputPanel, {
+  type HeliosTraceConfig,
+} from './HeliosOutputPanel'
+import {
+  placeTracePoints,
+  traceVisualizerFrame,
+  type TraceWarp,
+} from './traceVisualizerFrame'
+import {
+  cssMatrix3dFromCorners,
+  homographyFromCorners,
+  projectNormalizedPoint,
+} from '../../shared/projectionHomography'
 
 interface VisualizerProps {
   viewportOnly?: boolean
@@ -193,77 +206,11 @@ function makeOutputId() {
   return `pm-out-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function solve8x8(matrix: number[][], vector: number[]): number[] | null {
-  const n = 8
-  for (let p = 0; p < n; p++) {
-    let max = p
-    for (let r = p + 1; r < n; r++) {
-      if (Math.abs(matrix[r][p]) > Math.abs(matrix[max][p])) max = r
-    }
-    if (Math.abs(matrix[max][p]) < 1e-9) return null
-    if (max !== p) {
-      const tr = matrix[p]
-      matrix[p] = matrix[max]
-      matrix[max] = tr
-      const tv = vector[p]
-      vector[p] = vector[max]
-      vector[max] = tv
-    }
-    const pv = matrix[p][p]
-    for (let c = p; c < n; c++) matrix[p][c] /= pv
-    vector[p] /= pv
-    for (let r = 0; r < n; r++) {
-      if (r === p) continue
-      const f = matrix[r][p]
-      if (Math.abs(f) < 1e-9) continue
-      for (let c = p; c < n; c++) matrix[r][c] -= f * matrix[p][c]
-      vector[r] -= f * vector[p]
-    }
-  }
-  return vector
-}
-
-function computeHomography(corners: ProjectionMappingOutput['corners'], width: number, height: number): string | null {
-  if (width <= 0 || height <= 0) return null
-  const src = [
-    { x: 0, y: 0 },
-    { x: width, y: 0 },
-    { x: width, y: height },
-    { x: 0, y: height },
-  ]
-  const dst = corners.map((c) => ({ x: c.x * width, y: c.y * height }))
-  const m: number[][] = []
-  const v: number[] = []
-  for (let i = 0; i < 4; i++) {
-    const x = src[i].x
-    const y = src[i].y
-    const u = dst[i].x
-    const w = dst[i].y
-    m.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); v.push(u)
-    m.push([0, 0, 0, x, y, 1, -w * x, -w * y]); v.push(w)
-  }
-  const s = solve8x8(m, v)
-  if (s === null) return null
-  const [h11, h12, h13, h21, h22, h23, h31, h32] = s
-  return `matrix3d(${[h11,h21,0,h31,h12,h22,0,h32,0,0,1,0,h13,h23,0,1].map((x) => Number(x.toFixed(8))).join(',')})`
-}
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t
-}
-
-function bilinear(corners: ProjectionMappingOutput['corners'], u: number, v: number) {
-  const topX = lerp(corners[0].x, corners[1].x, u)
-  const topY = lerp(corners[0].y, corners[1].y, u)
-  const botX = lerp(corners[3].x, corners[2].x, u)
-  const botY = lerp(corners[3].y, corners[2].y, u)
-  return { x: lerp(topX, botX, v), y: lerp(topY, botY, v) }
-}
-
 function split2x2(output: ProjectionMappingOutput): ProjectionMappingOutput[] {
   const next: ProjectionMappingOutput[] = []
   const halfW = output.sourceRect.width * 0.5
   const halfH = output.sourceRect.height * 0.5
+  const warp = homographyFromCorners(output.corners)
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 2; col++) {
       const u0 = col * 0.5
@@ -281,10 +228,10 @@ function split2x2(output: ProjectionMappingOutput): ProjectionMappingOutput[] {
           height: halfH,
         },
         corners: [
-          bilinear(output.corners, u0, v0),
-          bilinear(output.corners, u1, v0),
-          bilinear(output.corners, u1, v1),
-          bilinear(output.corners, u0, v1),
+          projectNormalizedPoint(warp, output.corners, u0, v0),
+          projectNormalizedPoint(warp, output.corners, u1, v0),
+          projectNormalizedPoint(warp, output.corners, u1, v1),
+          projectNormalizedPoint(warp, output.corners, u0, v1),
         ],
       })
     }
@@ -298,6 +245,17 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const viewportFrameRef = useRef<null | HTMLDivElement>(null)
   const sourceHostRef = useRef<null | HTMLDivElement>(null)
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  /** 2D copy of the visualizer frame, taken in the same turn as the WebGL render. */
+  const frameSnapshotRef = useRef<HTMLCanvasElement | null>(null)
+  const traceConfigRef = useRef<HeliosTraceConfig>({
+    enabled: false,
+    effect: 'edges',
+    armed: false,
+  })
+  const traceWarpRef = useRef<TraceWarp | null>(null)
+  const onTraceConfig = useCallback((config: HeliosTraceConfig) => {
+    traceConfigRef.current = config
+  }, [])
   const outputCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({})
   const mappingGpuCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const mappingGpuRef = useRef<ProjectionMappingGpuCompositor | null>(null)
@@ -346,6 +304,14 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       null
     )
   }, [mappingDraft.activeOutputId, mappingDraft.outputs])
+
+  traceWarpRef.current =
+    mappingDraft.enabled && activeOutput
+      ? {
+          corners: activeOutput.corners,
+          sourceRect: activeOutput.sourceRect,
+        }
+      : null
 
   useEffect(() => {
     setSelectedOutputIds((current) => {
@@ -895,6 +861,50 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       cancelAnimationFrame(frameHandle)
       frameHandle = null
     }
+    let lastTraceAt = 0
+    let traceWasLive = false
+    const copyVisualizerFrame = (source: HTMLCanvasElement) => {
+      if (source.width < 2 || source.height < 2) return
+      let snap = frameSnapshotRef.current
+      if (snap === null) {
+        snap = document.createElement('canvas')
+        frameSnapshotRef.current = snap
+      }
+      if (snap.width !== source.width || snap.height !== source.height) {
+        snap.width = source.width
+        snap.height = source.height
+      }
+      const ctx = snap.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(source, 0, 0)
+    }
+    const publishHeliosTrace = (source: HTMLCanvasElement) => {
+      const cfg = traceConfigRef.current
+      if (!cfg.armed || !cfg.enabled) {
+        if (traceWasLive) {
+          traceWasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      const tracedAt = performance.now()
+      if (tracedAt - lastTraceAt < 70) return
+      lastTraceAt = tracedAt
+      const placed = placeTracePoints(
+        traceVisualizerFrame(source, cfg.effect),
+        traceWarpRef.current
+      )
+      if (placed.length === 0) {
+        if (traceWasLive) {
+          traceWasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      traceWasLive = true
+      void heliosSetPoints(placed)
+    }
+
     const animate = () => {
       frameHandle = null
       if (disposed || document.visibilityState !== 'visible') return
@@ -916,6 +926,12 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       const updateStartMs = performance.now()
       vm.update(dt.current, framePayloadRef.current)
       const updateDurationMs = Math.max(0, performance.now() - updateStartMs)
+      // Copy and trace before this turn yields. A later animation frame sees
+      // a cleared WebGL drawing buffer, so the projection and the laser go blank.
+      if (mappingDraftRef.current.enabled) {
+        copyVisualizerFrame(sourceCanvas)
+      }
+      publishHeliosTrace(sourceCanvas)
 
       const perf = perfSampleRef.current
       const fps = elapsed > 0 ? 1000 / elapsed : 0
@@ -1084,6 +1100,10 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       mappingGpuRef.current?.dispose()
       mappingGpuRef.current = null
       if (sourceCanvasRef.current === sourceCanvas) sourceCanvasRef.current = null
+      if (traceWasLive) {
+        traceWasLive = false
+        void heliosSetPoints([])
+      }
       sendTelemetryMark({
         source: 'visualizer-renderer',
         subsystem: 'visualizer',
@@ -1115,7 +1135,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
     const draw = () => {
       frameHandle = null
       if (disposed || document.visibilityState !== 'visible') return
-      const source = sourceCanvasRef.current
+      const source = frameSnapshotRef.current ?? sourceCanvasRef.current
       if (source !== null && source.width > 0 && source.height > 0) {
         if (useGpu && gpu !== null) {
           gpu.resize(viewportSize.width, viewportSize.height)
@@ -1159,13 +1179,14 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
 
   const keystoneH = useMemo(() => {
     if (!activeOutput) return []
+    const warp = homographyFromCorners(activeOutput.corners)
     const lines: string[] = []
     for (let i = 0; i <= KEYSTONE_DIV; i++) {
       const v = i / KEYSTONE_DIV
       const points: string[] = []
       for (let j = 0; j <= KEYSTONE_DIV; j++) {
         const u = j / KEYSTONE_DIV
-        const p = bilinear(activeOutput.corners, u, v)
+        const p = projectNormalizedPoint(warp, activeOutput.corners, u, v)
         points.push(`${p.x * 100},${p.y * 100}`)
       }
       lines.push(points.join(' '))
@@ -1175,13 +1196,14 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
 
   const keystoneV = useMemo(() => {
     if (!activeOutput) return []
+    const warp = homographyFromCorners(activeOutput.corners)
     const lines: string[] = []
     for (let i = 0; i <= KEYSTONE_DIV; i++) {
       const u = i / KEYSTONE_DIV
       const points: string[] = []
       for (let j = 0; j <= KEYSTONE_DIV; j++) {
         const v = j / KEYSTONE_DIV
-        const p = bilinear(activeOutput.corners, u, v)
+        const p = projectNormalizedPoint(warp, activeOutput.corners, u, v)
         points.push(`${p.x * 100},${p.y * 100}`)
       }
       lines.push(points.join(' '))
@@ -1207,7 +1229,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
                       key={output.id}
                       style={{
                         transform:
-                          computeHomography(
+                          cssMatrix3dFromCorners(
                             output.corners,
                             viewportSize.width,
                             viewportSize.height
@@ -1434,6 +1456,8 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       {!viewportOnly ? (
         <VisualizerStreamingModal open={streamingOpen} onClose={() => setStreamingOpen(false)} />
       ) : null}
+
+      {!viewportOnly ? <HeliosOutputPanel onTraceConfig={onTraceConfig} /> : null}
     </Root>
   )
 }

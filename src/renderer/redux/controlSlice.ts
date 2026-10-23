@@ -21,7 +21,12 @@ import {
 } from '../../shared/chase'
 import cloneDeep from 'lodash.clonedeep'
 import { LayerConfig } from '../../visualizer/threejs/layers/LayerConfig'
-import { DeviceState, initDeviceState, midiActions } from './deviceState'
+import {
+  DeviceState,
+  getActionID,
+  initDeviceState,
+  midiActions,
+} from './deviceState'
 import {
   AtmosFxtrConfig,
   AtmosLevelChConfig,
@@ -56,9 +61,9 @@ import {
   initPerformanceBank,
   normalizeGridCell,
   normalizePerformanceColor,
+  normalizePerformanceOscAddress,
+  normalizePerformanceRouteList,
   PERFORMANCE_COLOR_PRESETS,
-  PERFORMANCE_DEFAULT_COLS,
-  PERFORMANCE_DEFAULT_ROWS,
   type PerformanceBank,
   type PerformanceControlKind,
 } from '../../shared/performance'
@@ -421,12 +426,15 @@ const scenesSlice = createSlice({
     },
     setPerformanceControlValue: (
       state,
-      { payload }: PayloadAction<{ id: string; value: number }>
+      {
+        payload,
+      }: PayloadAction<{ id: string; value: number; applyRoutes?: boolean }>
     ) => {
       const control = state.performance.controls[payload.id]
       if (!control) return
       const value = clampNormalized(payload.value)
       control.value = value
+      if (payload.applyRoutes === false) return
       applyPerformanceRouteToControlState(state, payload.id, value)
     },
     firePerformancePad: (state, { payload }: PayloadAction<string>) => {
@@ -435,25 +443,67 @@ const scenesSlice = createSlice({
       control.value = 1
       applyPerformanceRouteToControlState(state, payload, 1)
     },
-    setPerformanceRoute: (
+    setPerformanceOscOut: (
       state,
       {
         payload,
-      }: PayloadAction<{ controlId: string; action: MidiAction | null }>
+      }: PayloadAction<{
+        id: string
+        enabled?: boolean
+        address?: string
+      }>
+    ) => {
+      const control = state.performance.controls[payload.id]
+      if (!control) return
+      if (payload.enabled !== undefined) {
+        control.oscSendEnabled = payload.enabled === true
+      }
+      if (payload.address !== undefined) {
+        control.oscAddress = normalizePerformanceOscAddress(payload.address)
+      }
+    },
+    addPerformanceRoute: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ controlId: string; action: MidiAction }>
     ) => {
       const scene = state.light.byId[state.light.active]
       if (!scene) return
       if (!scene.performanceRoutes) {
         scene.performanceRoutes = {}
       }
-      const control = state.performance.controls[payload.controlId]
-      if (payload.action === null) {
-        delete scene.performanceRoutes[payload.controlId]
+      const list = normalizePerformanceRouteList(
+        scene.performanceRoutes[payload.controlId]
+      ) as MidiAction[]
+      const nextId = getActionID(payload.action)
+      if (list.some((action) => getActionID(action) === nextId)) {
         return
       }
-      scene.performanceRoutes[payload.controlId] = payload.action
-      if (control && !control.manuallyRenamed) {
+      list.push(payload.action)
+      scene.performanceRoutes[payload.controlId] = list
+      const control = state.performance.controls[payload.controlId]
+      if (control && !control.manuallyRenamed && list.length === 1) {
         control.label = autoLabelForRoute(payload.action)
+      }
+    },
+    removePerformanceRoute: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ controlId: string; index: number }>
+    ) => {
+      const scene = state.light.byId[state.light.active]
+      if (!scene?.performanceRoutes) return
+      const list = normalizePerformanceRouteList(
+        scene.performanceRoutes[payload.controlId]
+      ) as MidiAction[]
+      if (payload.index < 0 || payload.index >= list.length) return
+      list.splice(payload.index, 1)
+      if (list.length === 0) {
+        delete scene.performanceRoutes[payload.controlId]
+      } else {
+        scene.performanceRoutes[payload.controlId] = list
       }
     },
     clearPerformanceRoute: (state, { payload }: PayloadAction<string>) => {
@@ -1406,7 +1456,9 @@ export const {
   setPerformanceControlColor,
   setPerformanceControlValue,
   firePerformancePad,
-  setPerformanceRoute,
+  setPerformanceOscOut,
+  addPerformanceRoute,
+  removePerformanceRoute,
   clearPerformanceRoute,
 
   // LIGHT & VISUAL SCENES

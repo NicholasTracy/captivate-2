@@ -82,6 +82,13 @@ export default {
   remote_control_regenerate_pin: 'remote_control_regenerate_pin',
   submit_fixture_to_community_library: 'submit_fixture_to_community_library',
   fixture_library_submit_progress: 'fixture_library_submit_progress',
+  helios_scan: 'helios_scan',
+  helios_status: 'helios_status',
+  helios_connect: 'helios_connect',
+  helios_disconnect: 'helios_disconnect',
+  helios_set_armed: 'helios_set_armed',
+  helios_test_pattern: 'helios_test_pattern',
+  helios_set_points: 'helios_set_points',
 } as const
 
 export interface SetLinkEnabled {

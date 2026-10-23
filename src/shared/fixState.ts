@@ -29,7 +29,10 @@ import { DmxState, normalizeLighting3DSettings } from 'renderer/redux/dmxSlice'
 import { initLedState } from 'renderer/redux/ledState'
 import { normalizeAppSettings } from './appSettings'
 import { normalizeGroupIntensityMap } from './groupIntensity'
-import { normalizePerformanceBank } from './performance'
+import {
+  normalizePerformanceBank,
+  normalizePerformanceRouteList,
+} from './performance'
 import type { CleanReduxState } from '../renderer/redux/store'
 import { MixerState } from 'renderer/redux/mixerSlice'
 import { ColorChannel, inferColorKind } from './dmxColors'
@@ -572,6 +575,17 @@ export function fixLightScenes(light: LightScenes_t) {
     }
     if (!scene.performanceRoutes || typeof scene.performanceRoutes !== 'object') {
       scene.performanceRoutes = {}
+    } else {
+      for (const controlId of Object.keys(scene.performanceRoutes)) {
+        const list = normalizePerformanceRouteList(
+          scene.performanceRoutes[controlId]
+        )
+        if (list.length === 0) {
+          delete scene.performanceRoutes[controlId]
+        } else {
+          scene.performanceRoutes[controlId] = list
+        }
+      }
     }
     if (!Array.isArray(scene.splitScenes) || scene.splitScenes.length === 0) {
       scene.splitScenes = [initSplitScene()]

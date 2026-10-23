@@ -31,6 +31,7 @@ import { readAppSettings, writeAppSettings } from './appSettingsStorage'
 import { applyGpuAccelerationFlags } from './gpuAcceleration'
 import { resolveHtmlPath } from './util'
 import * as engine from './engine/engine'
+import { heliosShutdown } from './engine/laser/heliosSession'
 import {
   bootstrapRemoteControlIpc,
   registerLighting3dPreviewPage,
@@ -914,9 +915,7 @@ let appShutdownCleanupPromise: Promise<void> | null = null
 
 function runAppShutdownCleanup(): Promise<void> {
   if (appShutdownCleanupPromise) return appShutdownCleanupPromise
-  appShutdownCleanupPromise = (async () => {
-    /* reserved for future shutdown teardown */
-  })()
+  appShutdownCleanupPromise = heliosShutdown()
   return appShutdownCleanupPromise
 }
 

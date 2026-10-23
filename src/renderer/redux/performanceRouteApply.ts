@@ -1,5 +1,8 @@
 import { clampNormalized } from '../../math/util'
-import { autoLabelFromDestinationHint } from '../../shared/performance'
+import {
+  autoLabelFromDestinationHint,
+  normalizePerformanceRouteList,
+} from '../../shared/performance'
 import { paramDisplayName } from '../../shared/params'
 import type { GroupIntensityMap } from '../../shared/groupIntensity'
 import type { LightScenes_t } from '../../shared/Scenes'
@@ -47,9 +50,15 @@ export function midiActionLabel(action: MidiAction): string {
       return 'Performance slider'
     case 'firePerformancePad':
       return 'Performance pad'
+    case 'setModulationAmount':
+      return `Mod ${action.modIndex + 1} ${action.param}`
     default:
       return 'Control'
   }
+}
+
+export function readPerformanceRoutes(raw: unknown): MidiAction[] {
+  return normalizePerformanceRouteList(raw) as MidiAction[]
 }
 
 export function isContinuousPerformanceRoute(action: MidiAction): boolean {
@@ -88,9 +97,9 @@ function applyGroupIntensity(
 }
 
 /**
- * Apply the active light scene's performance route for `controlId` at `value`
- * (0..1). Continuous destinations only; skips setBpm (needs engine tempo path).
- * Never writes inactive scenes — setBaseParam uses the active scene only.
+ * Apply every continuous route on the active light scene for `controlId`.
+ * Skips setBpm (needs the engine tempo path) and button routes.
+ * Inactive scenes keep their own lists and are not written.
  */
 export function applyPerformanceRouteToControlState(
   state: PerformanceRouteHost,
@@ -101,48 +110,53 @@ export function applyPerformanceRouteToControlState(
   if (!scene) return
   const routes = scene.performanceRoutes
   if (!routes || typeof routes !== 'object') return
-  const raw = routes[controlId]
-  if (!raw || typeof raw !== 'object') return
-  const action = raw as MidiAction
-  if (typeof action.type !== 'string') return
+  const actions = readPerformanceRoutes(routes[controlId])
+  if (actions.length === 0) return
 
   const v = clampNormalized(value)
 
-  switch (action.type) {
-    case 'setMaster':
-      state.master = v
-      break
-    case 'setBaseParam': {
-      const splitIndex = getSetBaseParamSplitIndex(action)
-      const split = scene.splitScenes[splitIndex]
-      if (split === undefined) return
-      split.baseParams[action.paramKey] = v
-      break
+  for (const action of actions) {
+    if (!isContinuousPerformanceRoute(action)) continue
+    switch (action.type) {
+      case 'setMaster':
+        state.master = v
+        break
+      case 'setBaseParam': {
+        const splitIndex = getSetBaseParamSplitIndex(action)
+        const split = scene.splitScenes[splitIndex]
+        if (split === undefined) break
+        split.baseParams[action.paramKey] = v
+        break
+      }
+      case 'setGroupIntensity':
+        applyGroupIntensity(state, action.group, v)
+        break
+      case 'setAutoSceneBombacity':
+        state.light.auto.epicness = v
+        break
+      case 'setBpm':
+        // Tempo lives outside ControlState; handled by commitPerformanceValue.
+        break
+      default:
+        break
     }
-    case 'setGroupIntensity':
-      applyGroupIntensity(state, action.group, v)
-      break
-    case 'setAutoSceneBombacity':
-      state.light.auto.epicness = v
-      break
-    case 'setBpm':
-      // Tempo lives outside ControlState; handled by commitPerformanceValue.
-      break
-    default:
-      break
   }
+}
+
+/** Active light scene's route list for a performance control. */
+export function getActivePerformanceRoutes(
+  state: PerformanceRouteHost,
+  controlId: string
+): MidiAction[] {
+  const scene = state.light.byId[state.light.active]
+  return readPerformanceRoutes(scene?.performanceRoutes?.[controlId])
 }
 
 export function getActivePerformanceRoute(
   state: PerformanceRouteHost,
   controlId: string
 ): MidiAction | null {
-  const scene = state.light.byId[state.light.active]
-  const raw = scene?.performanceRoutes?.[controlId]
-  if (!raw || typeof raw !== 'object') return null
-  const action = raw as MidiAction
-  if (typeof action.type !== 'string') return null
-  return action
+  return getActivePerformanceRoutes(state, controlId)[0] ?? null
 }
 
 export function autoLabelForRoute(action: MidiAction): string {

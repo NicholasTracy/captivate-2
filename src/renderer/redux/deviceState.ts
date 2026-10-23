@@ -127,6 +127,18 @@ interface SetActivePageAction {
   page: Page
 }
 
+/**
+ * Modulation-matrix depth (0..1, 0.5 = off) on the active light scene.
+ * `param` is a key of `modulators[modIndex].splitModulations[splitIndex]`,
+ * or an `intermod:lfo:` key of `modulators[modIndex].lfoInterModulation`.
+ */
+interface SetModulationAmount {
+  type: 'setModulationAmount'
+  modIndex: number
+  splitIndex: number
+  param: string
+}
+
 /** MIDI/OSC/slider learn target → performance bank control value (0..1). */
 interface SetPerformanceValue {
   type: 'setPerformanceValue'
@@ -201,6 +213,7 @@ export type MidiAction =
   | ToggleBlackout
   | TriggerAtmosFixture
   | SetActivePageAction
+  | SetModulationAmount
   | SetPerformanceValue
   | FirePerformancePad
 
@@ -212,6 +225,7 @@ export const midiOutSliderActionTypes: Set<MidiAction['type']> = new Set([
   'setGroupIntensity',
   'setAutoSceneBombacity',
   'setPerformanceValue',
+  'setModulationAmount',
 ])
 
 /** Stateful button actions published as MIDI note on/off out. */
@@ -220,6 +234,7 @@ export const midiOutNoteActionTypes: Set<MidiAction['type']> = new Set([
   'setActiveSceneIndex',
   'setActivePage',
   'toggleAutoScene',
+  'firePerformancePad',
 ])
 
 export function supportsMidiOut(action: MidiAction): boolean {
@@ -394,6 +409,9 @@ export function getActionID(action: MidiAction) {
   }
   if (action.type === 'setPerformanceValue' || action.type === 'firePerformancePad') {
     return action.type + action.controlId
+  }
+  if (action.type === 'setModulationAmount') {
+    return `${action.type}:${action.modIndex}:${action.splitIndex}:${action.param}`
   }
   return action.type
 }
