@@ -136,8 +136,13 @@ export default function HeliosOutputPanel({
         </Btn>
         <Btn
           type="button"
-          disabled={busy || !status.connected || !status.armed}
+          disabled={busy || !status.connected || !status.armed || traceEnabled}
           onClick={() => void onTest()}
+          title={
+            traceEnabled
+              ? 'Turn trace off to send the test pattern'
+              : 'Send a square. Trace replaces this while it is on.'
+          }
         >
           Test pattern
         </Btn>

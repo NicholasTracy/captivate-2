@@ -93,7 +93,15 @@ export function commitPerformancePad(
     controlId,
     setTimeout(() => {
       padResetTimers.delete(controlId)
-      dispatch(setPerformanceControlValue({ id: controlId, value: 0 }))
+      // Note and OSC outs follow the pad back to 0. Destinations stay at the
+      // value the press wrote; releasing the pad must not zero master or params.
+      dispatch(
+        setPerformanceControlValue({
+          id: controlId,
+          value: 0,
+          applyRoutes: false,
+        })
+      )
     }, 120)
   )
 }

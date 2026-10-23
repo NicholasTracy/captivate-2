@@ -426,12 +426,15 @@ const scenesSlice = createSlice({
     },
     setPerformanceControlValue: (
       state,
-      { payload }: PayloadAction<{ id: string; value: number }>
+      {
+        payload,
+      }: PayloadAction<{ id: string; value: number; applyRoutes?: boolean }>
     ) => {
       const control = state.performance.controls[payload.id]
       if (!control) return
       const value = clampNormalized(payload.value)
       control.value = value
+      if (payload.applyRoutes === false) return
       applyPerformanceRouteToControlState(state, payload.id, value)
     },
     firePerformancePad: (state, { payload }: PayloadAction<string>) => {
