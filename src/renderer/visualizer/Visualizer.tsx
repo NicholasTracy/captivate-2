@@ -245,6 +245,8 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const viewportFrameRef = useRef<null | HTMLDivElement>(null)
   const sourceHostRef = useRef<null | HTMLDivElement>(null)
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  /** 2D copy of the visualizer frame, taken in the same turn as the WebGL render. */
+  const frameSnapshotRef = useRef<HTMLCanvasElement | null>(null)
   const traceConfigRef = useRef<HeliosTraceConfig>({
     enabled: false,
     effect: 'edges',
@@ -859,6 +861,50 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       cancelAnimationFrame(frameHandle)
       frameHandle = null
     }
+    let lastTraceAt = 0
+    let traceWasLive = false
+    const copyVisualizerFrame = (source: HTMLCanvasElement) => {
+      if (source.width < 2 || source.height < 2) return
+      let snap = frameSnapshotRef.current
+      if (snap === null) {
+        snap = document.createElement('canvas')
+        frameSnapshotRef.current = snap
+      }
+      if (snap.width !== source.width || snap.height !== source.height) {
+        snap.width = source.width
+        snap.height = source.height
+      }
+      const ctx = snap.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(source, 0, 0)
+    }
+    const publishHeliosTrace = (source: HTMLCanvasElement) => {
+      const cfg = traceConfigRef.current
+      if (!cfg.armed || !cfg.enabled) {
+        if (traceWasLive) {
+          traceWasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      const tracedAt = performance.now()
+      if (tracedAt - lastTraceAt < 70) return
+      lastTraceAt = tracedAt
+      const placed = placeTracePoints(
+        traceVisualizerFrame(source, cfg.effect),
+        traceWarpRef.current
+      )
+      if (placed.length === 0) {
+        if (traceWasLive) {
+          traceWasLive = false
+          void heliosSetPoints([])
+        }
+        return
+      }
+      traceWasLive = true
+      void heliosSetPoints(placed)
+    }
+
     const animate = () => {
       frameHandle = null
       if (disposed || document.visibilityState !== 'visible') return
@@ -880,6 +926,12 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       const updateStartMs = performance.now()
       vm.update(dt.current, framePayloadRef.current)
       const updateDurationMs = Math.max(0, performance.now() - updateStartMs)
+      // Copy and trace before this turn yields. A later animation frame sees
+      // a cleared WebGL drawing buffer, so the projection and the laser go blank.
+      if (mappingDraftRef.current.enabled) {
+        copyVisualizerFrame(sourceCanvas)
+      }
+      publishHeliosTrace(sourceCanvas)
 
       const perf = perfSampleRef.current
       const fps = elapsed > 0 ? 1000 / elapsed : 0
@@ -1048,6 +1100,10 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       mappingGpuRef.current?.dispose()
       mappingGpuRef.current = null
       if (sourceCanvasRef.current === sourceCanvas) sourceCanvasRef.current = null
+      if (traceWasLive) {
+        traceWasLive = false
+        void heliosSetPoints([])
+      }
       sendTelemetryMark({
         source: 'visualizer-renderer',
         subsystem: 'visualizer',
@@ -1079,7 +1135,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
     const draw = () => {
       frameHandle = null
       if (disposed || document.visibilityState !== 'visible') return
-      const source = sourceCanvasRef.current
+      const source = frameSnapshotRef.current ?? sourceCanvasRef.current
       if (source !== null && source.width > 0 && source.height > 0) {
         if (useGpu && gpu !== null) {
           gpu.resize(viewportSize.width, viewportSize.height)
@@ -1120,47 +1176,6 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       if (frameHandle !== null) cancelAnimationFrame(frameHandle)
     }
   }, [mappingDraft.enabled, mappingDraft.outputs, viewportSize.height, viewportSize.width])
-
-  useEffect(() => {
-    let frameHandle = 0
-    let lastAt = 0
-    let wasLive = false
-    const tick = () => {
-      frameHandle = requestAnimationFrame(tick)
-      const cfg = traceConfigRef.current
-      if (!cfg.armed) {
-        wasLive = false
-        return
-      }
-      if (!cfg.enabled) {
-        if (wasLive) {
-          wasLive = false
-          void heliosSetPoints([])
-        }
-        return
-      }
-      const source = sourceCanvasRef.current
-      if (source === null) return
-      const now = performance.now()
-      if (now - lastAt < 70) return
-      lastAt = now
-      const placed = placeTracePoints(
-        traceVisualizerFrame(source, cfg.effect),
-        traceWarpRef.current
-      )
-      if (placed.length === 0) {
-        if (wasLive) {
-          wasLive = false
-          void heliosSetPoints([])
-        }
-        return
-      }
-      wasLive = true
-      void heliosSetPoints(placed)
-    }
-    frameHandle = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frameHandle)
-  }, [])
 
   const keystoneH = useMemo(() => {
     if (!activeOutput) return []
