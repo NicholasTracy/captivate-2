@@ -37,6 +37,11 @@ Entry points:
 | USB DMX Pro | 40 Hz |
 | Art-Net send period | ~44 Hz (`1000/44` ms), UDP port `0x1936` (6454) |
 
+Adapter assignment, Art-Net targets, and the compute clock are in
+[DMX connections](dmx-connections.md). The ~44 Hz Art-Net figure above is the
+packet timer. It is also the compute rate only when legacy `connectable.artNet[0]`
+is set.
+
 ## Movers: pad → DMX
 
 ### Basic (Advanced off)
@@ -113,5 +118,6 @@ Values are saved into `moverBounds`. Completing enables kinematics for that grou
 
 ## Related
 
+- [DMX connections (USB and Art-Net)](dmx-connections.md)
 - [Project files and autosave](PROJECTS.md)
 - [Atmospherics](atmospherics.md)
