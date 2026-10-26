@@ -65,7 +65,9 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Community fixture library](docs/CAPTIVATE-FIXTURE-LIBRARY.md)** — browse and share Captivate fixture definitions (no git required to contribute).
 
-**[DMX output and movers](docs/dmx-movers.md)** — universe composition, USB / Art-Net routing, and mover fine-channel pathing.
+**[DMX connections](docs/dmx-connections.md)** — universe count, USB adapter assignment, and Art-Net unicast routing.
+
+**[DMX output and movers](docs/dmx-movers.md)** — universe composition, mover aim, and fine-channel pathing.
 
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
 
@@ -163,6 +165,7 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Laser FB4 / Pangolin BEYOND](docs/laser-fb4-beyond.md)
 - [Visualizer streaming (RTSP / NDI)](docs/visualizer-streaming.md)
 - [WLED fixtures](docs/wled-fixtures.md)
+- [DMX connections (USB and Art-Net)](docs/dmx-connections.md)
 - [DMX output and movers](docs/dmx-movers.md)
 - [Atmospherics](docs/atmospherics.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
