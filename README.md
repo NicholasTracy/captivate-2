@@ -65,6 +65,8 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[Community fixture library](docs/CAPTIVATE-FIXTURE-LIBRARY.md)** — browse and share Captivate fixture definitions (no git required to contribute).
 
+**[Fixture types, segments, and patching](docs/fixture-authoring.md)** — channel maps, subfixtures, and how universe addresses overlap.
+
 **[DMX output and movers](docs/dmx-movers.md)** — universe composition, USB / Art-Net routing, and mover fine-channel pathing.
 
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
@@ -158,6 +160,7 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Project files and autosave](docs/PROJECTS.md)
 - [Audio input and music energy](docs/audio-input.md)
 - [Community fixture library](docs/CAPTIVATE-FIXTURE-LIBRARY.md)
+- [Fixture types, segments, and patching](docs/fixture-authoring.md)
 - [Remote control (LAN)](docs/remote-control.md)
 - [Audio input, beat clock, and music energy](docs/audio-input-sync.md)
 - [Laser FB4 / Pangolin BEYOND](docs/laser-fb4-beyond.md)
