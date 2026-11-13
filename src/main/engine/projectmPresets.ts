@@ -229,7 +229,9 @@ function extractZip(archivePath: string, destination: string) {
         ])
       )
     }
-    return runCommand('tar', ['-xf', archivePath, '-C', destination])
+    return runCommand('unzip', ['-q', archivePath, '-d', destination]).catch(() =>
+      runCommand('tar', ['-xf', archivePath, '-C', destination])
+    )
   })
 }
 

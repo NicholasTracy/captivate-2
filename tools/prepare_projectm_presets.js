@@ -77,16 +77,52 @@ function download(url, destination) {
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, stdio: 'ignore' })
+    const child = spawn(command, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
     child.once('error', reject)
     child.once('exit', (code) => {
       if (code === 0) {
         resolve()
         return
       }
-      reject(new Error(`${command} exited with code ${code}`))
+      const detail = stderr.trim()
+      reject(new Error(detail ? `${command} exited with code ${code}: ${detail}` : `${command} exited with code ${code}`))
     })
   })
+}
+
+async function extractZip(archivePath, extractDir) {
+  const header = Buffer.alloc(2)
+  const fd = fs.openSync(archivePath, 'r')
+  try {
+    fs.readSync(fd, header, 0, 2, 0)
+  } finally {
+    fs.closeSync(fd)
+  }
+  const size = fs.statSync(archivePath).size
+  if (header.toString() !== 'PK') {
+    throw new Error(`Downloaded preset pack is not a zip (${size} bytes).`)
+  }
+  const attempts =
+    process.platform === 'win32'
+      ? [['tar', ['-xf', archivePath, '-C', extractDir]]]
+      : [
+          ['unzip', ['-q', archivePath, '-d', extractDir]],
+          ['tar', ['-xf', archivePath, '-C', extractDir]],
+        ]
+  const errors = []
+  for (const [command, args] of attempts) {
+    try {
+      await run(command, args)
+      return
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  throw new Error(`Could not extract preset pack (${size} bytes): ${errors.join('; ')}`)
 }
 
 function hasMilk(root, limit = 500) {
@@ -128,7 +164,7 @@ async function main() {
     fs.mkdirSync(extractDir, { recursive: true })
     console.log('[captivate] Downloading projectM preset pack...')
     await download(PRESET_PACK_URL, archivePath)
-    await run('tar', ['-xf', archivePath, '-C', extractDir])
+    await extractZip(archivePath, extractDir)
     const entries = fs.readdirSync(extractDir, { withFileTypes: true })
     const packRoot =
       entries.length === 1 && entries[0].isDirectory()
