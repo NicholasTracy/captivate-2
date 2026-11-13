@@ -29,6 +29,7 @@ import { effectiveMasterForFixture } from '../../shared/groupIntensity'
 import { indexArray, zip } from '../../shared/util'
 import { TimeState, beatsWithPhaseOffset } from '../../shared/TimeState'
 import { SplitState } from 'renderer/redux/realtimeStore'
+import { applyOneShotOverrides } from './oneShotDmx'
 import { getUniverseOverwrites } from '../../renderer/redux/mixerSlice'
 import { clampNormalized } from '../../math/util'
 import { getParam, getMoverPhaseParams, type Params } from '../../shared/params'
@@ -864,6 +865,16 @@ function calculateDmxForUniverse(
     }
     }
   }
+
+  applyOneShotOverrides({
+    channels,
+    state,
+    splitStates,
+    timeState,
+    fixtures: all_fixtures,
+    syntheticStrobeFrameRateHz,
+    placementDepth2DOnly,
+  })
 
   // Apply any overwrites last.
   const overwrites = getUniverseOverwrites(state.mixer, universeIndex)

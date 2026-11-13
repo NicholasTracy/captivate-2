@@ -6,6 +6,22 @@ import UpdateResource from '../UpdateResource'
 import { loadImage, loadVideo, releaseVideo, visVideoReady } from '../util/loaders'
 import { fallbackFont, fonts } from '../fonts/fonts'
 import {
+  createGenerativeMaterial,
+  createGenerativePlate,
+  createParticleSim,
+  createTextMaterial,
+  createWaterSim,
+  isGenerativePlate,
+  stepParticleSim,
+  stepWaterSim,
+  syncGenerativeMaterial,
+  writeParticleUniforms,
+  type ParticleSimScratch,
+  type WaterSim,
+} from './generativeShaders'
+
+export { generativeFieldGenerators, fullFrameGenerators } from './generativeShaders'
+import {
   initProjectMBridgeSession,
   pushProjectMBridgeAudio,
   renderProjectMBridgeFrame,
@@ -40,6 +56,19 @@ export type BuiltinGeneratorType =
   | 'legacyTextParticles'
   | 'legacyTextSpin'
   | 'legacySpaceTunnel'
+  | 'fractal'
+  | 'kaleidoscope'
+  | 'oilWater'
+  | 'fluid'
+  | 'solid'
+  | 'plasma'
+  | 'lightTunnel'
+  | 'aurora'
+  | 'hexGrid'
+  | 'vortex'
+  | 'clouds'
+  | 'rays'
+  | 'text'
   | 'customModule'
 
 export type BuiltinEffectType =
@@ -54,6 +83,10 @@ export type BuiltinEffectType =
   | 'chromaShift'
   | 'invert'
   | 'posterize'
+  | 'pixelate'
+  | 'radialBlur'
+  | 'edge'
+  | 'beatFlash'
   | 'hueShift'
   | 'mirror'
   | 'bpmSync'
@@ -80,11 +113,19 @@ export type BuiltinEffectLinkSource =
 
 export type BuiltinCameraEffectType =
   | 'zoom'
+  | 'dolly'
+  | 'beatPunch'
   | 'orbit'
+  | 'spiral'
+  | 'flyAround'
   | 'pan'
   | 'tilt'
-  | 'flyAround'
+  | 'crane'
+  | 'whip'
+  | 'dutch'
+  | 'roll'
   | 'shake'
+  | 'handheld'
 
 export type BuiltinBlendMode =
   | 'alpha'
@@ -194,6 +235,19 @@ export const builtinGeneratorTypeList: BuiltinGeneratorType[] = [
   'legacyTextParticles',
   'legacyTextSpin',
   'legacySpaceTunnel',
+  'fractal',
+  'kaleidoscope',
+  'oilWater',
+  'fluid',
+  'solid',
+  'plasma',
+  'lightTunnel',
+  'aurora',
+  'hexGrid',
+  'vortex',
+  'clouds',
+  'rays',
+  'text',
   'customModule',
 ]
 
@@ -202,27 +256,40 @@ export const proceduralLayerControlSupport: Record<
   BuiltinGeneratorType,
   { density: boolean; speed: boolean; scale: boolean }
 > = {
-  spheres: { density: true, speed: false, scale: true },
-  cubes: { density: true, speed: false, scale: true },
-  triangles: { density: true, speed: false, scale: true },
-  beatGrid: { density: true, speed: false, scale: true },
+  spheres: { density: true, speed: true, scale: true },
+  cubes: { density: true, speed: true, scale: true },
+  triangles: { density: true, speed: true, scale: true },
+  beatGrid: { density: true, speed: true, scale: true },
   waves: { density: true, speed: true, scale: true },
   stars: { density: true, speed: true, scale: true },
   particles: { density: true, speed: true, scale: true },
   nebula: { density: true, speed: true, scale: true },
   spikeBall: { density: true, speed: true, scale: true },
-  geodesic: { density: false, speed: false, scale: true },
+  geodesic: { density: false, speed: true, scale: true },
   spectrograph: { density: true, speed: false, scale: true },
   audioRing: { density: true, speed: true, scale: true },
   audioTunnel: { density: true, speed: true, scale: true },
   oscilloscope3D: { density: true, speed: true, scale: true },
-  torusKnot: { density: true, speed: false, scale: true },
+  torusKnot: { density: true, speed: true, scale: true },
   fftRibbon: { density: true, speed: true, scale: true },
-  voxelPulse: { density: true, speed: false, scale: true },
-  importedModel: { density: false, speed: false, scale: true },
+  voxelPulse: { density: true, speed: true, scale: true },
+  importedModel: { density: false, speed: true, scale: true },
   legacyTextParticles: { density: true, speed: true, scale: true },
   legacyTextSpin: { density: true, speed: true, scale: true },
   legacySpaceTunnel: { density: true, speed: true, scale: true },
+  fractal: { density: true, speed: true, scale: true },
+  kaleidoscope: { density: true, speed: true, scale: true },
+  oilWater: { density: true, speed: true, scale: true },
+  fluid: { density: true, speed: true, scale: true },
+  solid: { density: true, speed: true, scale: true },
+  plasma: { density: true, speed: true, scale: true },
+  lightTunnel: { density: true, speed: true, scale: true },
+  aurora: { density: true, speed: true, scale: true },
+  hexGrid: { density: true, speed: true, scale: true },
+  vortex: { density: true, speed: true, scale: true },
+  clouds: { density: true, speed: true, scale: true },
+  rays: { density: true, speed: true, scale: true },
+  text: { density: false, speed: false, scale: true },
   customModule: { density: true, speed: true, scale: true },
 }
 
@@ -248,7 +315,105 @@ export const builtinGeneratorDisplayName: Record<BuiltinGeneratorType, string> =
   legacyTextParticles: 'Classic 1.03: Particle Text',
   legacyTextSpin: 'Classic 1.03: Text Spin',
   legacySpaceTunnel: 'Classic 1.03: Space Tunnel',
+  fractal: 'Living Fractal',
+  kaleidoscope: 'Kaleidoscope',
+  oilWater: 'Oil & Water',
+  fluid: 'Fluid',
+  solid: 'Soft Solid',
+  plasma: 'Plasma',
+  lightTunnel: 'Light Tunnel',
+  aurora: 'Aurora',
+  hexGrid: 'Hex Grid',
+  vortex: 'Vortex',
+  clouds: 'Clouds',
+  rays: 'Light Rays',
+  text: 'Text',
   customModule: 'Custom Module',
+}
+
+export const builtinGeneratorGroups: {
+  label: string
+  types: BuiltinGeneratorType[]
+}[] = [
+  {
+    label: 'Generative',
+    types: [
+      'fractal',
+      'kaleidoscope',
+      'oilWater',
+      'plasma',
+      'lightTunnel',
+      'aurora',
+      'hexGrid',
+      'vortex',
+      'clouds',
+      'rays',
+      'fluid',
+      'solid',
+      'text',
+    ],
+  },
+  {
+    label: 'Shapes',
+    types: [
+      'spheres',
+      'cubes',
+      'triangles',
+      'beatGrid',
+      'waves',
+      'stars',
+      'particles',
+      'nebula',
+      'spikeBall',
+      'geodesic',
+      'torusKnot',
+      'voxelPulse',
+    ],
+  },
+  {
+    label: 'Audio',
+    types: [
+      'spectrograph',
+      'audioRing',
+      'audioTunnel',
+      'oscilloscope3D',
+      'fftRibbon',
+    ],
+  },
+  {
+    label: 'Classic',
+    types: [
+      'importedModel',
+      'legacyTextParticles',
+      'legacyTextSpin',
+      'legacySpaceTunnel',
+      'customModule',
+    ],
+  },
+]
+
+export const generativeLayerHelp: Partial<Record<BuiltinGeneratorType, string>> = {
+  fractal: 'Loops one turn of a spiral in the fractal itself. Arms that leave the frame are dropped, and the next turn continues from the center, so the zoom never stops. Density is detail, Scale frames the turn, Speed is the fall, Variety changes the bands.',
+  kaleidoscope: 'A folded pattern. Variety is how many mirrors.',
+  oilWater: 'Two slow colors with a bright edge, like oil on water. Fills the frame behind 3D layers.',
+  plasma: 'Full-frame color waves. Density is detail, Scale zooms, Variety changes the mix.',
+  lightTunnel: 'A rushing tunnel that fills the frame. Variety is how many spokes.',
+  aurora: 'Curtains of light across the whole frame. Variety bends them.',
+  hexGrid: 'A honeycomb that fills the frame and pulses. Density is how many cells.',
+  vortex: 'A spinning spiral that fills the frame. Variety is how many arms.',
+  clouds: 'A slow sky that fills the frame. Density is the grain of the clouds.',
+  rays: 'Beams from the center that fill the frame. Density is how many rays.',
+  fluid: 'A body of water that sloshes in the frame. The beat drops into it and each hit spreads as ripples. Density is how many drops, Speed is the slosh, Scale is the wave size, Variety is how long the ripples last.',
+  solid: 'A soft body held by springs. Variety is stiffness.',
+  text: 'A text plate. Mix, color, and place it with the other layers.',
+  spheres: 'A glowing swarm. Speed orbits it. The beat swells each sphere.',
+  cubes: 'A tumbling field of light cubes. Speed orbits and rolls them.',
+  triangles: 'A swarm of glowing pyramids. Speed orbits them with the beat.',
+  geodesic: 'A glowing polyhedron with a bright wire shell. Speed spins it.',
+  stars: 'A warp starfield. The beat kicks the rush.',
+  torusKnot: 'A glowing knot. Speed spins it. The beat and the spectrum swell it.',
+  legacyTextSpin: 'Glowing text that tumbles. The beat pulses the size.',
+  legacySpaceTunnel: 'A ring tunnel rushing toward you. The beat throws you forward.',
 }
 
 export const builtinEffectTypeList: BuiltinEffectType[] = [
@@ -263,6 +428,10 @@ export const builtinEffectTypeList: BuiltinEffectType[] = [
   'chromaShift',
   'invert',
   'posterize',
+  'pixelate',
+  'radialBlur',
+  'edge',
+  'beatFlash',
   'hueShift',
   'mirror',
   'bpmSync',
@@ -289,6 +458,10 @@ export const builtinEffectDisplayName: Record<BuiltinEffectType, string> = {
   chromaShift: 'Chroma Shift',
   invert: 'Invert',
   posterize: 'Posterize',
+  pixelate: 'Pixelate',
+  radialBlur: 'Radial Blur',
+  edge: 'Edge',
+  beatFlash: 'Beat Flash',
   hueShift: 'Hue Shift',
   mirror: 'Mirror',
   bpmSync: 'BPM Sync',
@@ -336,20 +509,36 @@ export const builtinEffectLinkSourceDisplayName: Record<
 
 export const builtinCameraEffectTypeList: BuiltinCameraEffectType[] = [
   'zoom',
+  'dolly',
+  'beatPunch',
   'orbit',
+  'spiral',
+  'flyAround',
   'pan',
   'tilt',
-  'flyAround',
+  'crane',
+  'whip',
+  'dutch',
+  'roll',
   'shake',
+  'handheld',
 ]
 
 export const builtinCameraEffectDisplayName: Record<BuiltinCameraEffectType, string> = {
   zoom: 'Zoom',
+  dolly: 'Dolly',
+  beatPunch: 'Beat Punch',
   orbit: 'Orbit',
+  spiral: 'Spiral',
+  flyAround: 'Fly Around',
   pan: 'Pan',
   tilt: 'Tilt',
-  flyAround: 'Fly Around',
+  crane: 'Crane',
+  whip: 'Whip Pan',
+  dutch: 'Dutch',
+  roll: 'Barrel Roll',
   shake: 'Shake',
+  handheld: 'Handheld',
 }
 
 export const builtinBlendModeList: BuiltinBlendMode[] = [
@@ -459,10 +648,18 @@ export function createBuiltinEffect(type: BuiltinEffectType): BuiltinEffectItem 
         ? 1
         : type === 'bpmSync' || type === 'audioReact'
         ? 0.7
-        : type === 'ascii' || type === 'anaglyph' || type === 'parallaxBarrier'
+        : type === 'glitch'
+        ? 0.65
+        : type === 'ascii' ||
+          type === 'anaglyph' ||
+          type === 'parallaxBarrier' ||
+          type === 'pixelate' ||
+          type === 'radialBlur' ||
+          type === 'edge' ||
+          type === 'beatFlash'
         ? 0.45
         : type === 'rimLight'
-        ? 0
+        ? 0.7
         : 0.3,
   }
 }
@@ -695,8 +892,6 @@ export default class BuiltinVisualizer extends LayerBase {
   private clockSec = 0
   private disposed = false
   private readonly tmpPositionTarget = new THREE.Vector3()
-  private readonly tmpProjectMForward = new THREE.Vector3()
-  private readonly tmpProjectMTarget = new THREE.Vector3()
   private readonly tmpScanlineForward = new THREE.Vector3()
   private readonly tmpScanlineTarget = new THREE.Vector3()
   private readonly tmpEmptyStateForward = new THREE.Vector3()
@@ -877,31 +1072,19 @@ export default class BuiltinVisualizer extends LayerBase {
 
     const bloom = effectValues.bloom
     const vignette = effectValues.vignette
-    const scanlines = effectValues.scanlines
-    const strobe = effectValues.strobe
-    const chroma = effectValues.chromaShift
-    // Invert is applied as a full-frame compositor pass in VisualizerManager.
+    // Picture effects (mirror, grain, scanlines, chroma, hue, strobe, invert)
+    // run in the compositor so they hit every layer, including shader plates.
     const invert = 0
     const posterize = effectValues.posterize
-    const hueFx = effectValues.hueShift
-    const mirror = effectValues.mirror
-    const filmGrain = effectValues.filmGrain
 
-    // Mirror amount should be continuous instead of switching at 50%.
-    this.root.scale.x = mix(1, -1, mirror) * syncedWidthScale
-    this.root.scale.y = syncedHeightScale
-    this.root.scale.z = syncedWidthScale
+    this.root.scale.set(syncedWidthScale, syncedHeightScale, syncedWidthScale)
 
     if (this.overlayMaterial !== null) {
-      this.overlayMaterial.opacity = filmGrain * 0.38
+      this.overlayMaterial.opacity = 0
     }
-    if (this.scanlineOverlayMaterial !== null && this.scanlineOverlay !== null) {
-      this.scanlineOverlayMaterial.uniforms.uAmount.value = scanlines
-      this.scanlineOverlayMaterial.uniforms.uTime.value = this.clockSec
-      this.scanlineOverlay.visible = scanlines > 0.001
+    if (this.scanlineOverlay !== null) {
+      this.scanlineOverlay.visible = false
     }
-
-    const strobeGate = mix(1, clamp01(beatPulse * 1.3 + energy * 0.7, 0.08), strobe)
 
     for (let layerIndex = 0; layerIndex < this.layers.length; layerIndex++) {
       const runtimeLayer = this.layers[layerIndex]
@@ -975,8 +1158,13 @@ export default class BuiltinVisualizer extends LayerBase {
       const supportsReactiveInput = generatorSupportsReactiveInput(runtimeLayer)
       const layerBpmSync = supportsReactiveInput ? bpmSync : 0
       const layerAudioReact = supportsReactiveInput ? audioReact : 0
-      const layerEnergy = (energy * 0.8 + inputLevel * 0.2) * layerAudioReact
-      const reactivePulse = clamp01(beatPulse * layerBpmSync + layerEnergy, 0)
+      const beatDrive = supportsReactiveInput
+        ? beatPulse * (0.7 + layerBpmSync * 0.55)
+        : 0
+      const layerEnergy = supportsReactiveInput
+        ? (energy * 0.8 + inputLevel * 0.2) * (0.5 + layerAudioReact * 0.75)
+        : 0
+      const reactivePulse = clamp01(beatDrive + layerEnergy * 0.85, 0)
       const speed = layer.speed * 2.4 * tempoFactor
       const layerOpacity = clamp01(layer.mix, 0.7)
       const layerPositionX = resolveLayerAxisLink(
@@ -1005,11 +1193,11 @@ export default class BuiltinVisualizer extends LayerBase {
         res.params
       )
 
-      const baseHue =
-        (layer.hueShift + hueFx * 0.5 + chroma * layerIndex * 0.04 + 1) % 1
-      const hue = mix(baseHue, syncHue, colorSync)
-      const sat = mix(0.75, syncSat, colorSync)
-      const light = mix(0.72, syncLight, colorSync)
+      const baseHue = (layer.hueShift + 1) % 1
+      const colorFollow = Math.max(colorSync, supportsReactiveInput ? 0.4 : 0)
+      const hue = mix(baseHue, syncHue, colorFollow)
+      const sat = mix(0.82, syncSat, Math.max(colorSync, supportsReactiveInput ? 0.35 : 0))
+      const light = mix(0.7, syncLight, Math.max(colorSync, supportsReactiveInput ? 0.22 : 0))
       const color = new THREE.Color().setHSL(hue, sat, light)
       const emissive = new THREE.Color().setHSL(hue, sat, Math.max(0, light * 0.78))
 
@@ -1108,14 +1296,7 @@ export default class BuiltinVisualizer extends LayerBase {
         layer.sourceType === 'procedural' &&
         runtimeLayer.generator === 'spectrograph'
       ) {
-        updateSpectrographPoints(
-          runtimeLayer,
-          layerAudioReact > 0.001
-            ? res.audio
-            : { ...res.audio, enabled: false, beatPulse: 0, spectrum: [] },
-          dtSec,
-          layer.scale
-        )
+        updateSpectrographPoints(runtimeLayer, res.audio, dtSec, layer.scale, this.clockSec, reactivePulse)
       }
 
       for (const node of runtimeLayer.nodes) {
@@ -1131,10 +1312,9 @@ export default class BuiltinVisualizer extends LayerBase {
         node.object.position.copy(this.tmpPositionTarget)
       }
 
-      const runtimeAudioInput =
-        layerAudioReact > 0.001
-          ? res.audio
-          : { ...res.audio, enabled: false, beatPulse: 0, spectrum: [] }
+      const runtimeAudioInput = supportsReactiveInput
+        ? res.audio
+        : { ...res.audio, enabled: false, beatPulse: 0, spectrum: [] }
 
       if (layer.sourceType === 'procedural') {
         updateLayerGeneratorBehavior(runtimeLayer, {
@@ -1193,15 +1373,21 @@ export default class BuiltinVisualizer extends LayerBase {
 
         if ('opacity' in material) {
           material.opacity =
-            strobeGate *
-            (layer.blend === 'dissolve'
+            layer.blend === 'dissolve'
               ? clamp01(layerOpacity * (0.7 + this.rng() * 0.6), layerOpacity)
-              : layerOpacity)
+              : layerOpacity
           material.transparent = material.opacity < 0.995 || layer.blend !== 'alpha'
         }
 
         if ('blending' in material) {
           material.blending = mapBlendMode(layer.blend)
+        }
+
+        if (material instanceof THREE.ShaderMaterial && material.uniforms.uMix) {
+          material.uniforms.uMix.value = material.opacity
+          if (material.uniforms.uHue) {
+            material.uniforms.uHue.value = hue
+          }
         }
       }
 
@@ -1211,21 +1397,21 @@ export default class BuiltinVisualizer extends LayerBase {
 
     const cameraFx =
       cameraEffect === null
-        ? {
-            x: 0,
-            y: 0,
-            z: 0,
-            fov: 0,
-            lookAtX: 0,
-            lookAtY: 0,
-          }
-        : evaluateCameraEffect(cameraEffect.type, cameraEffectPhase)
-    this.camera.position.x = cameraFx.x
-    this.camera.position.y = cameraFx.y
-    this.camera.position.z = 4.6 + cameraFx.z
-    this.camera.fov = 62 + cameraFx.fov
+        ? idleCameraPose()
+        : evaluateCameraEffect(
+            cameraEffect.type,
+            cameraEffectPhase,
+            res.time.beats,
+            beatPulse
+          )
+    this.camera.up.set(0, 1, 0)
+    this.camera.position.set(cameraFx.x, cameraFx.y, 4.6 + cameraFx.z)
+    this.camera.fov = Math.min(110, Math.max(18, 62 + cameraFx.fov))
     this.camera.updateProjectionMatrix()
     this.camera.lookAt(cameraFx.lookAtX, cameraFx.lookAtY, 0)
+    if (cameraFx.roll !== 0) {
+      this.camera.rotateZ(cameraFx.roll)
+    }
     this.updateRimLight(res, effectValues.rimLight)
     this.syncVisBackdropLayers()
     this.anchorScanlineOverlayToCamera()
@@ -1375,6 +1561,13 @@ export default class BuiltinVisualizer extends LayerBase {
       }
     }
     for (const material of runtimeLayer.materials) {
+      if (
+        material instanceof THREE.MeshBasicMaterial &&
+        material.userData.disposeMap === true &&
+        material.map
+      ) {
+        material.map.dispose()
+      }
       material.dispose()
     }
     runtimeLayer.group.parent?.remove(runtimeLayer.group)
@@ -1590,7 +1783,7 @@ export default class BuiltinVisualizer extends LayerBase {
         }
         currentProjectM.sessionReady =
           result.ok &&
-          result.mode === 'native' &&
+          (result.mode === 'native' || result.mode === 'fallback') &&
           currentProjectM.presetPathKey === requestedPresetKey
         if (!currentProjectM.sessionReady) {
           currentProjectM.hasRenderedFrame = false
@@ -1818,6 +2011,8 @@ export default class BuiltinVisualizer extends LayerBase {
       texture.minFilter = THREE.LinearFilter
       texture.magFilter = THREE.LinearFilter
       texture.generateMipmaps = false
+      texture.flipY = false
+      texture.colorSpace = THREE.NoColorSpace
       media.texture = texture
       this.applyLayerTexture(runtimeLayer, texture)
     }
@@ -1829,7 +2024,13 @@ export default class BuiltinVisualizer extends LayerBase {
       this.noteProjectMRenderMiss(runtimeLayer, sessionId)
       return
     }
-    imageData.set(frameBytes.subarray(0, expectedLength))
+    // Bridge frames are BGRA. The plate texture is RGBA.
+    for (let i = 0; i < expectedLength; i += 4) {
+      imageData[i] = frameBytes[i + 2]
+      imageData[i + 1] = frameBytes[i + 1]
+      imageData[i + 2] = frameBytes[i]
+      imageData[i + 3] = frameBytes[i + 3]
+    }
     texture.needsUpdate = true
 
     projectM.hasRenderedFrame = true
@@ -2000,7 +2201,10 @@ export default class BuiltinVisualizer extends LayerBase {
     runtimeLayer.media = null
   }
 
-  /** Fit fullscreen plate to the camera frustum; crop texture UVs to cover. */
+  /**
+   * Fit a fill plate to the resting camera. It stays in the scene so zoom,
+   * pan, orbit, and roll actually move the picture instead of dragging the plate along.
+   */
   private layoutVisBackdropPlane(runtimeLayer: RuntimeLayer) {
     const media = runtimeLayer.media
     if (!media) {
@@ -2018,16 +2222,11 @@ export default class BuiltinVisualizer extends LayerBase {
     }
     plane.renderOrder = -1000
 
-    const distance = 1.25
-    this.tmpProjectMForward
-      .set(0, 0, -1)
-      .applyQuaternion(this.camera.quaternion)
-    this.tmpProjectMTarget
-      .copy(this.camera.position)
-      .addScaledVector(this.tmpProjectMForward, distance)
-
-    plane.position.copy(this.tmpProjectMTarget)
-    plane.quaternion.copy(this.camera.quaternion)
+    const restZ = 4.6
+    const planeZ = -0.04
+    const distance = restZ - planeZ
+    plane.position.set(0, 0, planeZ)
+    plane.quaternion.identity()
 
     const viewportAspect =
       Number.isFinite(this.camera.aspect) && this.camera.aspect > 0
@@ -2048,11 +2247,9 @@ export default class BuiltinVisualizer extends LayerBase {
       textureAspect = textureWidth / textureHeight
     }
 
-    const fovRad = THREE.MathUtils.degToRad(this.camera.fov)
+    const fovRad = THREE.MathUtils.degToRad(62)
     const visibleHeight = 2 * Math.tan(fovRad * 0.5) * distance
     const visibleWidth = visibleHeight * viewportAspect
-    // Keep the fullscreen quad exactly matched to the current viewport.
-    // Aspect fit is handled by UV crop on the texture map.
     plane.scale.set(visibleWidth, visibleHeight, 1)
 
     const map = material instanceof THREE.MeshBasicMaterial ? material.map : null
@@ -2913,21 +3110,23 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
   }
 
   const createStdMat = () =>
-    new THREE.MeshStandardMaterial({
-      color: '#7eb6ff',
-      emissive: '#2e4b6f',
-      emissiveIntensity: 0.45,
-      metalness: 0.08,
-      roughness: 0.3,
+    new THREE.MeshBasicMaterial({
+      color: '#9fd4ff',
       transparent: true,
       opacity: layer.mix,
+      depthWrite: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending,
     })
 
   const createLineMat = () =>
     new THREE.LineBasicMaterial({
-      color: '#84c2ff',
+      color: '#b7e6ff',
       transparent: true,
       opacity: layer.mix,
+      depthWrite: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending,
     })
 
   if (layer.sourceType !== 'procedural') {
@@ -2969,136 +3168,124 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
 
   switch (layer.generator) {
     case 'spheres': {
-      const segments = Math.max(12, Math.round(14 + layer.density * 28))
-      const geometry = new THREE.SphereGeometry(size * 0.65, segments, segments)
+      const geometry = new THREE.SphereGeometry(size * 0.42, 18, 14)
       const material = createStdMat()
       materials.push(material)
-      const count = 1 + Math.round(layer.quantity * 31)
+      const count = Math.max(10, Math.round(12 + layer.quantity * 78))
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const dummy = new THREE.Object3D()
-      const spread = 0.18 + layer.density * 3.9
-      const scaleJitter = layer.variety * 0.85
+      const spread = 1.8 + layer.density * 4.6
+      const scaleJitter = 0.35 + layer.variety * 0.9
       for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.9
+        const angle = (i / count) * Math.PI * 2 * 3 + Math.random() * 0.8
         const radius =
-          count <= 1
-            ? 0
-            : Math.sqrt(i / Math.max(1, count - 1)) * spread * (0.55 + layer.variety * 0.85)
+          Math.sqrt((i + 0.5) / count) * spread * (0.45 + layer.variety * 0.7)
         dummy.position.set(
           Math.cos(angle) * radius,
-          (Math.random() - 0.5) * spread * 0.65,
-          Math.sin(angle) * radius
+          (Math.random() - 0.5) * spread * 0.72,
+          Math.sin(angle) * radius * 0.72
         )
-        const s = 0.65 + (Math.random() - 0.5) * scaleJitter
-        dummy.scale.setScalar(Math.max(0.2, s))
+        const s = 0.45 + Math.random() * scaleJitter
+        dummy.scale.setScalar(Math.max(0.18, s))
+        dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
       mesh.instanceMatrix.needsUpdate = true
+      rememberShapeLayout(scratch, mesh)
       addMesh(mesh, 0.14 + layer.density * 0.28)
       break
     }
     case 'cubes': {
-      const geometry = new THREE.BoxGeometry(size * 1.1, size * 1.1, size * 1.1)
+      const geometry = new THREE.BoxGeometry(size * 0.72, size * 0.72, size * 0.72)
       const material = createStdMat()
       materials.push(material)
-      const count = 1 + Math.round(layer.quantity * 31)
+      const count = Math.max(10, Math.round(12 + layer.quantity * 78))
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const dummy = new THREE.Object3D()
-      const spread = 0.18 + layer.density * 3.9
-      const scaleJitter = layer.variety * 0.8
+      const spread = 1.8 + layer.density * 4.6
+      const scaleJitter = 0.35 + layer.variety * 0.85
       for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2 + Math.random() * 1.2
-        const radius =
-          count <= 1
-            ? 0
-            : Math.sqrt(i / Math.max(1, count - 1)) * spread * (0.55 + layer.variety * 0.85)
+        const angle = (i / count) * Math.PI * 2 * 2.5 + Math.random() * 1.1
+        const radius = Math.sqrt((i + 0.5) / count) * spread * (0.42 + layer.variety * 0.75)
         dummy.position.set(
           Math.cos(angle) * radius,
-          (Math.random() - 0.5) * spread * 0.7,
-          Math.sin(angle) * radius
+          (Math.random() - 0.5) * spread * 0.78,
+          Math.sin(angle) * radius * 0.7
         )
         dummy.rotation.set(
-          Math.random() * Math.PI * layer.variety,
-          Math.random() * Math.PI * layer.variety,
-          Math.random() * Math.PI * layer.variety
+          Math.random() * Math.PI,
+          Math.random() * Math.PI,
+          Math.random() * Math.PI
         )
-        const s = 0.62 + (Math.random() - 0.5) * scaleJitter
-        dummy.scale.setScalar(Math.max(0.2, s))
+        const s = 0.42 + Math.random() * scaleJitter
+        dummy.scale.setScalar(Math.max(0.16, s))
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
       mesh.instanceMatrix.needsUpdate = true
+      rememberShapeLayout(scratch, mesh)
       addMesh(mesh, 0.12 + layer.density * 0.28)
       break
     }
     case 'triangles': {
-      const geometry = new THREE.ConeGeometry(size * 0.8, size * 1.35, 4, 1)
+      const geometry = new THREE.ConeGeometry(size * 0.48, size * 0.95, 4, 1)
       const material = createStdMat()
       materials.push(material)
-      const count = 1 + Math.round(layer.quantity * 31)
+      const count = Math.max(10, Math.round(12 + layer.quantity * 78))
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const dummy = new THREE.Object3D()
-      const spread = 0.18 + layer.density * 3.9
-      const scaleJitter = layer.variety * 0.8
+      const spread = 1.8 + layer.density * 4.6
+      const scaleJitter = 0.35 + layer.variety * 0.85
       for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2 + Math.random() * 1.1
-        const radius =
-          count <= 1
-            ? 0
-            : Math.sqrt(i / Math.max(1, count - 1)) * spread * (0.55 + layer.variety * 0.85)
+        const angle = (i / count) * Math.PI * 2 * 2.2 + Math.random()
+        const radius = Math.sqrt((i + 0.5) / count) * spread * (0.42 + layer.variety * 0.75)
         dummy.position.set(
           Math.cos(angle) * radius,
-          (Math.random() - 0.5) * spread * 0.6,
-          Math.sin(angle) * radius
+          (Math.random() - 0.5) * spread * 0.7,
+          Math.sin(angle) * radius * 0.7
         )
         dummy.rotation.set(
-          Math.PI + (Math.random() - 0.5) * Math.PI * layer.variety,
           Math.random() * Math.PI * 2,
-          (Math.random() - 0.5) * Math.PI * layer.variety
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2
         )
-        const s = 0.64 + (Math.random() - 0.5) * scaleJitter
-        dummy.scale.setScalar(Math.max(0.2, s))
+        const s = 0.4 + Math.random() * scaleJitter
+        dummy.scale.setScalar(Math.max(0.16, s))
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
       mesh.instanceMatrix.needsUpdate = true
+      rememberShapeLayout(scratch, mesh)
       addMesh(mesh, 0.12 + layer.density * 0.25)
       break
     }
     case 'beatGrid': {
-      // Density controls square size: low density = larger squares.
-      const segments = Math.max(10, Math.round(18 + layer.scale * 42))
-      const squareSize = 1.24 - layer.density * 1.08
-      const gridSize = segments * Math.max(0.09, squareSize)
-      const grid = new THREE.GridHelper(gridSize, segments, '#78c3ff', '#345f8d')
+      const segments = Math.max(12, Math.round(16 + layer.scale * 28))
+      const squareSize = 1.05 - layer.density * 0.72
+      const gridSize = segments * Math.max(0.16, squareSize)
+      const grid = new THREE.GridHelper(gridSize, segments, '#9ad7ff', '#3d6f99')
       const material = createLineMat()
       materials.push(material)
       ;(grid.material as THREE.Material).dispose()
       grid.material = material
-      grid.position.y = -1
+      grid.rotation.x = -1.05
       addMesh(grid, 0.1)
       const intersectionCount = (segments + 1) * (segments + 1)
-      const dotGeometry = new THREE.SphereGeometry(0.026 + layer.scale * 0.024, 8, 8)
-      const dotMaterial = new THREE.MeshStandardMaterial({
-        color: '#8fd3ff',
-        emissive: '#346a8e',
-        emissiveIntensity: 0.7,
-        metalness: 0.05,
-        roughness: 0.44,
-        transparent: true,
-        opacity: Math.max(0.2, layer.mix),
-      })
+      const cell = Math.max(0.08, squareSize * 0.42)
+      const dotGeometry = new THREE.BoxGeometry(cell, 0.55, cell)
+      const dotMaterial = createStdMat()
       materials.push(dotMaterial)
       const dots = new THREE.InstancedMesh(dotGeometry, dotMaterial, intersectionCount)
+      dots.rotation.x = -1.05
       const dummy = new THREE.Object3D()
       let dotIndex = 0
       for (let row = 0; row <= segments; row++) {
         const z = (row / Math.max(1, segments) - 0.5) * gridSize
         for (let col = 0; col <= segments; col++) {
           const x = (col / Math.max(1, segments) - 0.5) * gridSize
-          dummy.position.set(x, -1, z)
-          dummy.scale.setScalar(1)
+          dummy.position.set(x, 0, z)
+          dummy.scale.set(1, 0.2, 1)
           dummy.updateMatrix()
           dots.setMatrixAt(dotIndex++, dummy.matrix)
         }
@@ -3163,26 +3350,35 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'stars': {
-      const count = Math.max(450, Math.round(880 + layer.density * 3600))
+      const count = Math.max(700, Math.round(1200 + layer.density * 4200))
       const positions = new Float32Array(count * 3)
+      const colors = new Float32Array(count * 3)
+      const tint = new THREE.Color()
       for (let i = 0; i < count; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * 24
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 14
-        positions[i * 3 + 2] = -Math.random() * 120
+        positions[i * 3] = (Math.random() - 0.5) * 28
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 16
+        positions[i * 3 + 2] = -Math.random() * 140
+        tint.setHSL(0.52 + Math.random() * 0.18, 0.75, 0.55 + Math.random() * 0.35)
+        colors[i * 3] = tint.r
+        colors[i * 3 + 1] = tint.g
+        colors[i * 3 + 2] = tint.b
       }
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
       const material = new THREE.PointsMaterial({
-        color: '#b7e4ff',
-        size: 0.03 + layer.scale * 0.05,
+        color: '#ffffff',
+        size: 0.08 + layer.scale * 0.14,
         transparent: true,
         opacity: layer.mix,
         depthWrite: false,
+        vertexColors: true,
         blending: THREE.AdditiveBlending,
+        sizeAttenuation: true,
       })
       materials.push(material)
       const points = new THREE.Points(geometry, material)
-      scratch.starFieldDepth = 120
+      scratch.starFieldDepth = 140
       addMesh(points, 0.18)
       break
     }
@@ -3222,7 +3418,7 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
       const pointsMaterial = new THREE.PointsMaterial({
         color: '#ffffff',
-        size: 0.02 + layer.scale * 0.055,
+        size: 0.045 + layer.scale * 0.09,
         transparent: true,
         opacity: layer.mix,
         depthWrite: false,
@@ -3239,9 +3435,10 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       linksGeometry.setAttribute('position', new THREE.BufferAttribute(linkPositions, 3))
       linksGeometry.setDrawRange(0, 0)
       const linksMaterial = new THREE.LineBasicMaterial({
-        color: '#8fd9ff',
+        color: '#d7f4ff',
         transparent: true,
-        opacity: layer.mix * 0.35,
+        opacity: Math.max(0.25, layer.mix * 0.7),
+        depthWrite: false,
         blending: THREE.AdditiveBlending,
       })
       materials.push(linksMaterial)
@@ -3287,14 +3484,14 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
         drift[i * 3] = (Math.random() - 0.5) * 0.6
         drift[i * 3 + 1] = (Math.random() - 0.5) * 0.42
         drift[i * 3 + 2] = (Math.random() - 0.5) * 0.56
-        scales[i] = (1.8 + Math.random() * 4.8) * (0.7 + layer.scale * 1.15)
+        scales[i] = (2.4 + Math.random() * 5.6) * (0.9 + layer.scale * 1.45)
         hueOffsets[i] = Math.random()
         const color = createNebulaPaletteColor()
         const material = new THREE.SpriteMaterial({
           map: cloudTexture,
           color,
           transparent: true,
-          opacity: Math.max(0.08, layer.mix * (0.22 + Math.random() * 0.2)),
+          opacity: Math.max(0.2, layer.mix * (0.48 + Math.random() * 0.32)),
           depthWrite: false,
           depthTest: true,
           blending: THREE.AdditiveBlending,
@@ -3314,62 +3511,45 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'spectrograph': {
-      const barCount = Math.max(48, Math.round(56 + layer.density * 136))
-      const barWidth = 0.04 + layer.scale * 0.07
-      const geometry = new THREE.BoxGeometry(barWidth, 1, barWidth)
-      const material = new THREE.MeshStandardMaterial({
-        color: '#7ce7ff',
-        emissive: '#226678',
-        emissiveIntensity: 0.72,
-        metalness: 0.02,
-        roughness: 0.35,
-        transparent: true,
-        opacity: layer.mix,
-      })
+      const barCount = Math.max(64, Math.round(72 + layer.density * 160))
+      const barWidth = 0.045 + layer.scale * 0.05
+      const geometry = new THREE.BoxGeometry(barWidth, 1, barWidth * 1.4)
+      const material = createStdMat()
       materials.push(material)
       const mesh = new THREE.InstancedMesh(geometry, material, barCount)
       const dummy = new THREE.Object3D()
-      const spread = 3 + layer.scale * 2.4
+      const spread = 6.2 + layer.scale * 3.2
       for (let i = 0; i < barCount; i++) {
         const t = barCount <= 1 ? 0 : i / (barCount - 1)
-        const h = 0.04
-        dummy.position.set((t - 0.5) * spread, -1 + h * 0.5, 0)
-        dummy.scale.set(1, h, 1)
+        dummy.position.set((t - 0.5) * spread, 0, 0)
+        dummy.scale.set(1, 0.25, 1)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
       mesh.instanceMatrix.needsUpdate = true
       addMesh(mesh, 0.04)
       scratch.spectrographLevels = new Float32Array(barCount)
+      scratch.spectrographSpread = spread
       break
     }
     case 'audioRing': {
-      const barCount = Math.max(48, Math.round(72 + layer.density * 180))
-      const barWidth = 0.03 + layer.scale * 0.055
+      const barCount = Math.max(64, Math.round(96 + layer.density * 200))
+      const barWidth = 0.028 + layer.scale * 0.03
       const geometry = new THREE.BoxGeometry(barWidth, 1, barWidth)
-      const material = new THREE.MeshStandardMaterial({
-        color: '#8fd9ff',
-        emissive: '#275d82',
-        emissiveIntensity: 0.72,
-        metalness: 0.05,
-        roughness: 0.36,
-        transparent: true,
-        opacity: layer.mix,
-      })
+      const material = createStdMat()
       materials.push(material)
       const mesh = new THREE.InstancedMesh(geometry, material, barCount)
       const angles = new Float32Array(barCount)
       const levels = new Float32Array(barCount)
-      const radius = 0.85 + layer.scale * 2.1
+      const radius = 1.15 + layer.scale * 1.7
       const dummy = new THREE.Object3D()
       for (let i = 0; i < barCount; i++) {
         const t = barCount <= 1 ? 0 : i / barCount
         const angle = t * Math.PI * 2
         angles[i] = angle
-        const h = 0.05
-        dummy.position.set(Math.cos(angle) * radius, -0.9 + h * 0.5, Math.sin(angle) * radius)
-        dummy.rotation.y = -angle
-        dummy.scale.set(1, h, 1)
+        dummy.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0)
+        dummy.rotation.z = angle
+        dummy.scale.set(1, 0.2, 1)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
@@ -3381,19 +3561,11 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'audioTunnel': {
-      const slices = Math.max(10, Math.round(14 + layer.density * 18))
-      const segments = Math.max(18, Math.round(24 + layer.density * 34))
+      const slices = Math.max(18, Math.round(22 + layer.density * 26))
+      const segments = Math.max(28, Math.round(36 + layer.density * 40))
       const count = slices * segments
-      const geometry = new THREE.SphereGeometry(0.04 + layer.scale * 0.05, 6, 6)
-      const material = new THREE.MeshStandardMaterial({
-        color: '#7bd2ff',
-        emissive: '#215778',
-        emissiveIntensity: 0.56,
-        metalness: 0.06,
-        roughness: 0.42,
-        transparent: true,
-        opacity: layer.mix,
-      })
+      const geometry = new THREE.SphereGeometry(0.055 + layer.scale * 0.05, 8, 6)
+      const material = createStdMat()
       materials.push(material)
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const depths = new Float32Array(slices)
@@ -3429,24 +3601,21 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'oscilloscope3D': {
-      const pointCount = Math.max(96, Math.round(128 + layer.density * 320))
-      const positions = new Float32Array(pointCount * 3)
-      for (let i = 0; i < pointCount; i++) {
-        const t = pointCount <= 1 ? 0 : i / (pointCount - 1)
-        positions[i * 3] = (t - 0.5) * (4 + layer.scale * 4.5)
-        positions[i * 3 + 1] = -0.4
-        positions[i * 3 + 2] = 0
+      const pointCount = Math.max(120, Math.round(180 + layer.density * 280))
+      const positions = new Float32Array(pointCount * 2 * 3)
+      const indices: number[] = []
+      for (let i = 0; i < pointCount - 1; i++) {
+        const a = i * 2
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
       }
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-      const material = new THREE.LineBasicMaterial({
-        color: '#8ef5ff',
-        transparent: true,
-        opacity: layer.mix,
-      })
+      geometry.setIndex(indices)
+      const material = createStdMat()
+      material.side = THREE.DoubleSide
       materials.push(material)
-      const line = new THREE.Line(geometry, material)
-      addMesh(line, 0.08)
+      const ribbon = new THREE.Mesh(geometry, material)
+      addMesh(ribbon, 0.08)
       scratch.oscilloscopeLevels = new Float32Array(pointCount)
       break
     }
@@ -3480,19 +3649,12 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       for (let i = 0; i < attr.array.length; i++) {
         base[i] = Number(attr.array[i]) || 0
       }
-      const material = new THREE.MeshStandardMaterial({
-        color: '#7fe4ff',
-        emissive: '#295f7a',
-        emissiveIntensity: 0.48,
-        metalness: 0.03,
-        roughness: 0.42,
-        transparent: true,
-        opacity: layer.mix,
-        wireframe: true,
-      })
+      const material = createStdMat()
+      material.side = THREE.DoubleSide
       materials.push(material)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.y = -1.1
+      mesh.position.y = 0
+      mesh.rotation.x = -0.42
       addMesh(mesh, 0.12)
       scratch.fftRibbonCols = cols
       scratch.fftRibbonRows = rows
@@ -3501,31 +3663,22 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'voxelPulse': {
-      const grid = Math.max(10, Math.round(12 + layer.density * 18))
+      const grid = Math.max(12, Math.round(14 + layer.density * 16))
       const count = grid * grid
-      const cell = 0.05 + layer.scale * 0.08
+      const cell = 0.07 + layer.scale * 0.06
       const geometry = new THREE.BoxGeometry(cell, 1, cell)
-      const material = new THREE.MeshStandardMaterial({
-        color: '#8bdcff',
-        emissive: '#265d7c',
-        emissiveIntensity: 0.65,
-        metalness: 0.04,
-        roughness: 0.38,
-        transparent: true,
-        opacity: layer.mix,
-      })
+      const material = createStdMat()
       materials.push(material)
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const dummy = new THREE.Object3D()
-      const span = 2.4 + layer.scale * 3.2
+      const span = 4.2 + layer.scale * 3.4
       for (let i = 0; i < count; i++) {
         const gx = i % grid
         const gz = Math.floor(i / grid)
         const x = ((gx / Math.max(1, grid - 1)) - 0.5) * span
         const z = ((gz / Math.max(1, grid - 1)) - 0.5) * span
-        const h = 0.03
-        dummy.position.set(x, -1 + h * 0.5, z)
-        dummy.scale.set(1, h, 1)
+        dummy.position.set(x, 0, z)
+        dummy.scale.set(1, 0.2, 1)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
@@ -3612,7 +3765,13 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       break
     }
     case 'geodesic': {
-      const geometry = new THREE.IcosahedronGeometry(size * 0.9, 2)
+      const glow = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(size * 0.78, 1),
+        createStdMat()
+      )
+      materials.push(glow.material as THREE.Material)
+      addMesh(glow, 0.12)
+      const geometry = new THREE.IcosahedronGeometry(size * 1.05, 2)
       const wire = new THREE.WireframeGeometry(geometry)
       const material = createLineMat()
       materials.push(material)
@@ -3634,8 +3793,8 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
       const material = new THREE.PointsMaterial({
-        color: '#ffd37f',
-        size: 0.02 + layer.scale * 0.06,
+        color: '#ffe1a8',
+        size: 0.055 + layer.scale * 0.1,
         transparent: true,
         opacity: layer.mix,
         depthWrite: false,
@@ -3687,25 +3846,19 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       const height = 3.4 + layer.scale * 5.4
       const nearZ = 2
       const farZ = -84
-      const geometry = new THREE.CylinderGeometry(0.032, 0.032, 0.34, 8)
+      const geometry = new THREE.CylinderGeometry(0.02, 0.055, 0.85, 6)
       geometry.rotateX(Math.PI / 2)
-      const material = new THREE.MeshStandardMaterial({
-        color: '#a4ccff',
-        emissive: '#416e99',
-        emissiveIntensity: 0.5,
-        metalness: 0.08,
-        roughness: 0.28,
-        transparent: true,
-        opacity: layer.mix,
-      })
+      const material = createStdMat()
       materials.push(material)
       const mesh = new THREE.InstancedMesh(geometry, material, count)
       const positions = new Float32Array(count * 3)
       const dummy = new THREE.Object3D()
       for (let i = 0; i < count; i++) {
-        const x = (Math.random() - 0.5) * width
-        const y = (Math.random() - 0.5) * height
-        const z = farZ + Math.random() * (nearZ - farZ)
+        const angle = (i % 36) * ((Math.PI * 2) / 36) + Math.floor(i / 36) * 0.17
+        const ring = 0.55 + ((i % 5) / 5) * 0.7
+        const z = farZ + (i / Math.max(1, count - 1)) * (nearZ - farZ)
+        const x = Math.cos(angle) * width * 0.16 * ring
+        const y = Math.sin(angle) * height * 0.16 * ring
         positions[i * 3] = x
         positions[i * 3 + 1] = y
         positions[i * 3 + 2] = z
@@ -3722,6 +3875,42 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
         nearZ,
         farZ,
       }
+      break
+    }
+    case 'fractal':
+    case 'kaleidoscope':
+    case 'oilWater':
+    case 'plasma':
+    case 'lightTunnel':
+    case 'aurora':
+    case 'hexGrid':
+    case 'vortex':
+    case 'clouds':
+    case 'rays':
+    case 'fluid':
+    case 'solid': {
+      const material = createGenerativeMaterial(layer.generator)
+      materials.push(material)
+      const mesh = new THREE.Mesh(createGenerativePlate(), material)
+      mesh.frustumCulled = false
+      mesh.renderOrder = -900 + index
+      mesh.position.z = -0.85
+      addMesh(mesh, 0)
+      if (layer.generator === 'fluid') {
+        const water = createWaterSim()
+        scratch.waterSim = water
+        material.uniforms.uWater.value = water.texture
+      } else if (layer.generator === 'solid') {
+        scratch.particleSim = createParticleSim('solid')
+      }
+      break
+    }
+    case 'text': {
+      const material = createTextMaterial(layer.text)
+      materials.push(material)
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), material)
+      mesh.frustumCulled = false
+      addMesh(mesh, 0)
       break
     }
     case 'customModule': {
@@ -3900,6 +4089,21 @@ function clamp01(value: unknown, fallback: number) {
   return Math.min(1, Math.max(0, numeric))
 }
 
+/** Spectrum level when audio is present, otherwise a moving shape so the layer still performs. */
+function bandEnergy(
+  hasSpectrum: boolean,
+  sample: number,
+  t: number,
+  clock: number,
+  beat: number
+) {
+  if (hasSpectrum) {
+    return Math.pow(clamp01(sample, 0), 0.68)
+  }
+  const wave = 0.5 + 0.5 * Math.sin(clock * 1.85 + t * 11.5)
+  return Math.pow(clamp01(0.22 + wave * (0.38 + beat * 0.7), 0), 0.78)
+}
+
 function clampSigned(value: unknown, fallback: number) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return fallback
@@ -3958,93 +4162,143 @@ function applyColorFx(
   return c
 }
 
-function evaluateCameraEffect(
-  type: BuiltinCameraEffectType,
-  phase: number
-) {
-  const angle = phase * Math.PI * 2
-  const result = {
+type CameraPose = {
+  x: number
+  y: number
+  z: number
+  fov: number
+  lookAtX: number
+  lookAtY: number
+  roll: number
+}
+
+function idleCameraPose(): CameraPose {
+  return {
     x: 0,
     y: 0,
     z: 0,
     fov: 0,
     lookAtX: 0,
     lookAtY: 0,
+    roll: 0,
   }
+}
 
-  if (type === 'zoom') {
-    const cycle = Math.sin(angle)
-    result.z = -0.65 - cycle * 0.75
-    result.fov = cycle * 6.4
-    return result
-  }
-  if (type === 'orbit') {
-    // Single 360° loop on a tilted plane (phase 0 and 1 match for a seamless cycle).
-    const nx = 0.28
-    const ny = 0.82
-    const nz = 0.5
-    const invLen = 1 / Math.hypot(nx, ny, nz)
-    const nxu = nx * invLen
-    const nyu = ny * invLen
-    const nzu = nz * invLen
-    // Orthonormal tangents: e = normalize(up × n), f = n × e
-    let ex = nzu
-    let ey = 0
-    let ez = -nxu
-    let eLen = Math.hypot(ex, ey, ez)
-    if (eLen < 1e-4) {
-      ex = 0
-      ey = nzu
-      ez = -nyu
-      eLen = Math.hypot(ex, ey, ez)
+function evaluateCameraEffect(
+  type: BuiltinCameraEffectType,
+  phase: number,
+  beats: number,
+  beatPulse: number
+): CameraPose {
+  const angle = phase * Math.PI * 2
+  const wave = Math.sin(angle)
+  const result = idleCameraPose()
+
+  switch (type) {
+    case 'zoom': {
+      const push = wave * 0.5 + 0.5
+      result.z = -push * 1.15
+      result.fov = -push * 22
+      return result
     }
-    const invELen = 1 / eLen
-    ex *= invELen
-    ey *= invELen
-    ez *= invELen
-    const fx = nyu * ez - nzu * ey
-    const fy = nzu * ex - nxu * ez
-    const fz = nxu * ey - nyu * ex
-    const radius = 1.12
-    const c = Math.cos(angle)
-    const s = Math.sin(angle)
-    result.x = (ex * c + fx * s) * radius
-    result.y = (ey * c + fy * s) * radius
-    result.z = (ez * c + fz * s) * radius
-    result.lookAtX = 0
-    result.lookAtY = 0
-    return result
+    case 'dolly': {
+      const push = wave * 0.5 + 0.5
+      result.z = -push * 2.5
+      result.fov = -push * 6
+      return result
+    }
+    case 'beatPunch': {
+      const frac = ((beats % 1) + 1) % 1
+      const clock = Math.pow(1 - frac, 3)
+      const punch = Math.max(clock, Math.min(1, beatPulse))
+      result.z = -punch * 1.55
+      result.fov = -punch * 14
+      return result
+    }
+    case 'orbit': {
+      const yaw = wave * 0.95
+      const dist = 5.05
+      result.x = Math.sin(yaw) * dist
+      result.y = Math.sin(angle * 2) * 0.7
+      result.z = Math.cos(yaw) * dist - 4.6
+      return result
+    }
+    case 'spiral': {
+      const push = 0.5 - 0.5 * Math.cos(angle)
+      result.x = wave * (0.55 + push * 1.7)
+      result.y = Math.sin(angle * 2) * (0.35 + push * 0.9)
+      result.z = -push * 1.65
+      result.lookAtX = result.x * 0.12
+      result.lookAtY = result.y * 0.12
+      result.roll = wave * 0.38
+      result.fov = -push * 8
+      return result
+    }
+    case 'flyAround': {
+      result.x = wave * 3.1
+      result.y = Math.sin(angle * 2) * 1.35
+      result.z = Math.cos(angle) * 1.15 - 0.35
+      result.lookAtX = Math.sin(angle * 2) * 0.5
+      result.lookAtY = wave * 0.28
+      result.roll = wave * 0.22
+      return result
+    }
+    case 'pan': {
+      result.x = wave * 2.6
+      result.lookAtX = wave * -1.15
+      result.roll = wave * 0.05
+      return result
+    }
+    case 'tilt': {
+      result.y = wave * 1.95
+      result.lookAtY = wave * 1.05
+      return result
+    }
+    case 'crane': {
+      const lift = wave * 0.5 + 0.5
+      result.y = lift * 2.9
+      result.z = -lift * 0.95
+      result.lookAtY = -lift * 0.4
+      result.fov = -lift * 6
+      return result
+    }
+    case 'whip': {
+      const snap = Math.tanh(wave * 8)
+      result.x = snap * 0.5
+      result.lookAtX = snap * 3.2
+      result.roll = snap * 0.1
+      return result
+    }
+    case 'dutch': {
+      result.roll = wave * 0.58
+      result.y = wave * 0.2
+      return result
+    }
+    case 'roll': {
+      result.roll = angle
+      result.z = -0.3
+      return result
+    }
+    case 'shake': {
+      result.x = Math.sin(angle * 11) * 0.32 + Math.sin(angle * 7) * 0.14
+      result.y = Math.cos(angle * 9) * 0.28 + Math.sin(angle * 13) * 0.08
+      result.z = Math.sin(angle * 5) * 0.16
+      result.roll = Math.sin(angle * 8) * 0.07
+      result.fov = Math.sin(angle * 15) * 2.4
+      return result
+    }
+    case 'handheld': {
+      result.x = Math.sin(angle * 2) * 0.62 + Math.sin(angle * 5) * 0.2
+      result.y = Math.cos(angle * 3) * 0.46 + Math.sin(angle * 7) * 0.14
+      result.z = Math.sin(angle * 2) * 0.28
+      result.lookAtX = Math.sin(angle * 3) * 0.28
+      result.lookAtY = Math.cos(angle * 2) * 0.2
+      result.roll = Math.sin(angle * 2) * 0.06 + Math.sin(angle * 5) * 0.03
+      return result
+    }
+    default:
+      return result
   }
-  if (type === 'pan') {
-    result.x = Math.sin(angle) * 1.5
-    result.z = Math.cos(angle) * 0.3
-    result.lookAtX = -Math.sin(angle) * 0.3
-    return result
-  }
-  if (type === 'tilt') {
-    result.y = Math.sin(angle) * 1.15
-    result.z = Math.cos(angle) * 0.18
-    result.lookAtY = Math.sin(angle) * 0.34
-    return result
-  }
-  if (type === 'flyAround') {
-    result.x = Math.cos(angle) * 1.35
-    result.y = Math.sin(angle * 3) * 0.6
-    result.z = Math.sin(angle * 2) * 0.72
-    result.lookAtX = Math.sin(angle) * 0.3
-    result.lookAtY = Math.sin(angle * 2) * 0.24
-    return result
-  }
-  // Deterministic looped shake to avoid visual seams.
-  result.x =
-    Math.sin(angle * 5.0) * 0.09 +
-    Math.sin(angle * 9.0 + Math.PI / 4) * 0.03
-  result.y =
-    Math.cos(angle * 6.0 + Math.PI / 7) * 0.08 +
-    Math.sin(angle * 10.0 + Math.PI / 5) * 0.025
-  result.z = Math.sin(angle * 4.0 + Math.PI / 9) * 0.06
-  result.fov = Math.sin(angle * 8.0) * 1.6
-  return result
 }
 
 type SpectrumSampler = {
@@ -4153,6 +4407,7 @@ const LAYER_SCALE_GROUP_FACTOR_GENERATORS = new Set<BuiltinGeneratorType>([
   'importedModel',
   'legacyTextParticles',
   'legacySpaceTunnel',
+  'text',
 ])
 
 function proceduralBuiltSizeScaleFactor(
@@ -4190,6 +4445,78 @@ function syncProceduralLayerGroupScale(
   }
 }
 
+function rememberShapeLayout(
+  scratch: Record<string, unknown>,
+  mesh: THREE.InstancedMesh
+) {
+  const packed = new Float32Array(mesh.count * 9)
+  const position = new THREE.Vector3()
+  const quaternion = new THREE.Quaternion()
+  const scale = new THREE.Vector3()
+  const euler = new THREE.Euler()
+  const matrix = new THREE.Matrix4()
+  for (let i = 0; i < mesh.count; i++) {
+    mesh.getMatrixAt(i, matrix)
+    matrix.decompose(position, quaternion, scale)
+    euler.setFromQuaternion(quaternion)
+    const offset = i * 9
+    packed[offset] = position.x
+    packed[offset + 1] = position.y
+    packed[offset + 2] = position.z
+    packed[offset + 3] = scale.x
+    packed[offset + 4] = scale.y
+    packed[offset + 5] = scale.z
+    packed[offset + 6] = euler.x
+    packed[offset + 7] = euler.y
+    packed[offset + 8] = euler.z
+  }
+  scratch.shapeLayout = packed
+}
+
+function updateShapeField(
+  runtimeLayer: RuntimeLayer,
+  input: { clockSec: number; beatPulse: number; speed: number }
+) {
+  const node = runtimeLayer.nodes.find(
+    (item) => item.object instanceof THREE.InstancedMesh
+  )
+  if (!(node?.object instanceof THREE.InstancedMesh)) {
+    return
+  }
+  const layout = runtimeLayer.scratch.shapeLayout as Float32Array | undefined
+  if (layout === undefined || layout.length < node.object.count * 9) {
+    return
+  }
+  const mesh = node.object
+  const dummy = getScratchObject3D(runtimeLayer, '__tmpShapeFieldDummy')
+  const spin = input.clockSec * (0.28 + input.speed * 0.55)
+  const pulse = 1 + input.beatPulse * 0.9
+  for (let i = 0; i < mesh.count; i++) {
+    const offset = i * 9
+    const x = layout[offset]
+    const y = layout[offset + 1]
+    const z = layout[offset + 2]
+    const radius = Math.hypot(x, z)
+    const angle = Math.atan2(z, x) + spin * (0.65 + (i % 5) * 0.08)
+    const bob = Math.sin(input.clockSec * (0.9 + input.speed * 0.35) + i * 0.47) * (0.28 + input.beatPulse * 0.55)
+    dummy.position.set(Math.cos(angle) * radius, y * 0.55 + bob, Math.sin(angle) * radius)
+    dummy.rotation.set(
+      layout[offset + 6] + spin * (0.8 + (i % 3) * 0.25),
+      layout[offset + 7] + spin * 1.4,
+      layout[offset + 8] + spin * 0.55
+    )
+    const wave = 0.72 + 0.48 * Math.sin(spin * 2.2 + i * 0.63)
+    dummy.scale.set(
+      layout[offset + 3] * pulse * wave,
+      layout[offset + 4] * pulse * wave,
+      layout[offset + 5] * pulse * wave
+    )
+    dummy.updateMatrix()
+    mesh.setMatrixAt(i, dummy.matrix)
+  }
+  mesh.instanceMatrix.needsUpdate = true
+}
+
 function updateLayerGeneratorBehavior(
   runtimeLayer: RuntimeLayer,
   input: {
@@ -4205,7 +4532,96 @@ function updateLayerGeneratorBehavior(
   if (runtimeLayer.nodes.length === 0) {
     return
   }
+  if (isGenerativePlate(generator)) {
+    const layer = runtimeLayer.layer
+    const material = runtimeLayer.materials.find(
+      (item) => item instanceof THREE.ShaderMaterial
+    ) as THREE.ShaderMaterial | undefined
+    if (material) {
+      let travel: number | undefined
+      if (generator === 'fractal') {
+        const rate = 0.04 + input.speed * 0.12
+        const step = Math.min(0.1, Math.max(0, input.dtSec)) * rate
+        const cycle = 3.294145233480032
+        let next = Number(runtimeLayer.scratch.fractalTravel ?? 0) + step
+        next = next % cycle
+        if (next < 0) next += cycle
+        runtimeLayer.scratch.fractalTravel = next
+        travel = next
+      }
+      syncGenerativeMaterial(material, {
+        time: input.clockSec,
+        hue: layer.hueShift,
+        density: layer.density,
+        speed: input.speed,
+        scale: layer.scale,
+        variety: layer.variety,
+        beat: input.beatPulse,
+        mix: material.uniforms.uMix?.value ?? layer.mix,
+        travel,
+      })
+      if (generator === 'fluid') {
+        let water = runtimeLayer.scratch.waterSim as WaterSim | undefined
+        if (!water) {
+          water = createWaterSim()
+          runtimeLayer.scratch.waterSim = water
+          if (material.uniforms.uWater) material.uniforms.uWater.value = water.texture
+        }
+        stepWaterSim(
+          water,
+          input.dtSec,
+          input.clockSec,
+          input.speed,
+          layer.density,
+          layer.scale,
+          layer.variety,
+          input.beatPulse
+        )
+      } else if (generator === 'solid') {
+        const sim = runtimeLayer.scratch.particleSim as ParticleSimScratch | undefined
+        if (sim) {
+          const count = 6 + layer.density * 14
+          stepParticleSim(
+            sim,
+            'solid',
+            input.dtSec,
+            count,
+            layer.speed,
+            layer.variety,
+            input.beatPulse
+          )
+          writeParticleUniforms(material, sim, count)
+        }
+      }
+    }
+    return
+  }
   const spectrum = createSpectrumSampler(input.audio)
+
+  if (
+    generator === 'spheres' ||
+    generator === 'cubes' ||
+    generator === 'triangles'
+  ) {
+    updateShapeField(runtimeLayer, input)
+    return
+  }
+
+  if (generator === 'geodesic') {
+    const spin = input.clockSec * (0.35 + input.speed * 0.9)
+    const pulse = 1 + input.beatPulse * 0.28
+    runtimeLayer.nodes.forEach((node, index) => {
+      const dir = index === 0 ? 1 : -1
+      node.object.rotation.set(spin * 0.4 * dir, spin * dir, spin * 0.22)
+      node.object.scale.setScalar(pulse * (index === 0 ? 1 : 1.02))
+    })
+    return
+  }
+
+  if (generator === 'importedModel') {
+    runtimeLayer.group.rotation.y += input.clockSec * (0.12 + input.speed * 0.28)
+    return
+  }
 
   if (generator === 'spikeBall') {
     const meshNode = runtimeLayer.nodes[0]
@@ -4289,6 +4705,8 @@ function updateLayerGeneratorBehavior(
     }
     attr.needsUpdate = true
     geometry.computeVertexNormals()
+    mesh.rotation.y = input.clockSec * (0.4 + input.speed * 0.75)
+    mesh.rotation.x = Math.sin(input.clockSec * 0.45) * 0.4
     return
   }
 
@@ -4316,22 +4734,29 @@ function updateLayerGeneratorBehavior(
         const col = i % (segments + 1)
         const xT = segments <= 0 ? 0 : col / segments
         const zT = segments <= 0 ? 0 : row / segments
-        const spectral = spectrum.hasSpectrum
-          ? spectrum.sampleAt(xT)
-          : input.beatPulse * (0.22 + (1 - zT) * 0.2)
-        const target = Math.pow(clamp01(spectral, 0), 0.72)
+        const spectral = bandEnergy(
+          spectrum.hasSpectrum,
+          spectrum.hasSpectrum ? spectrum.sampleAt(xT) : 0,
+          xT * 0.7 + zT * 0.3,
+          input.clockSec,
+          input.beatPulse
+        )
+        const target = spectral
         const current = levels[i] ?? 0
         levels[i] =
           target >= current
             ? current + (target - current) * rise
             : current + (target - current) * fall
-        const beatLift = input.beatPulse * 0.18
-        const y = -1 + levels[i] * (0.18 + runtimeLayer.layer.scale * 0.95) + beatLift
+        const beatLift = input.beatPulse * 0.35
+        const ripple =
+          Math.sin(input.clockSec * (1.1 + input.speed) * 2.4 - xT * 8.5 - zT * 4) *
+          (0.12 + input.beatPulse * 0.2)
+        const y = levels[i] * (0.55 + runtimeLayer.layer.scale * 2.4) + beatLift + ripple
         const x = (xT - 0.5) * gridSize
         const z = (zT - 0.5) * gridSize
-        const scale = 0.72 + levels[i] * 1.8 + input.beatPulse * 0.35
-        dummy.position.set(x, y, z)
-        dummy.scale.setScalar(scale)
+        const scale = 0.55 + levels[i] * 2.4 + input.beatPulse * 0.45
+        dummy.position.set(x, y * 0.5, z)
+        dummy.scale.set(1, Math.max(0.15, scale), 1)
         dummy.updateMatrix()
         mesh.setMatrixAt(i, dummy.matrix)
       }
@@ -4359,19 +4784,25 @@ function updateLayerGeneratorBehavior(
     }
     const pulse =
       input.beatPulse * 0.9 + Math.pow(clamp01(spectrum.average, 0), 0.8) * 0.75
-    const speed = 0.42 + input.speed * 0.82
-    const amp = 0.08 + pulse * (0.58 + runtimeLayer.layer.scale * 0.8)
+    const speed = 0.7 + input.speed * 1.1
+    const amp = 0.42 + pulse * (0.85 + runtimeLayer.layer.scale * 1.35)
     for (let i = 0; i < attr.count; i++) {
       const idx = i * 3
       const x = base[idx]
       const z = base[idx + 2]
       const xT = clamp01((x / Math.max(0.001, width)) + 0.5, 0.5)
       const zT = clamp01((z / Math.max(0.001, depth)) + 0.5, 0.5)
-      const spectrumBand = spectrum.hasSpectrum ? spectrum.sampleAt(xT) : input.beatPulse * 0.25
-      const seq = input.clockSec * (0.95 + speed * 1.6) - zT * 8.2
-      const crest = Math.sin(seq)
-      const localAmp = amp * (0.35 + Math.pow(clamp01(spectrumBand, 0), 0.72) * 0.9)
-      const y = -1 + crest * localAmp + input.beatPulse * 0.12
+      const spectrumBand = bandEnergy(
+        spectrum.hasSpectrum,
+        spectrum.hasSpectrum ? spectrum.sampleAt(xT) : 0,
+        xT,
+        input.clockSec,
+        input.beatPulse
+      )
+      const seq = input.clockSec * (1.15 + speed * 1.8) - zT * 9.4
+      const crest = Math.sin(seq) * 0.72 + Math.sin(seq * 2.1 + xT * 6) * 0.28
+      const localAmp = amp * (0.55 + spectrumBand * 0.9)
+      const y = crest * localAmp + input.beatPulse * 0.2
       attr.setXYZ(i, x, y, z)
     }
     attr.needsUpdate = true
@@ -4389,16 +4820,23 @@ function updateLayerGeneratorBehavior(
     if (!attr) {
       return
     }
-    const depth = Number(runtimeLayer.scratch.starFieldDepth ?? 120)
+    const depth = Number(runtimeLayer.scratch.starFieldDepth ?? 140)
+    const twist = input.speed * (0.55 + input.beatPulse * 1.4) * input.dtSec
+    const cs = Math.cos(twist)
+    const sn = Math.sin(twist)
     for (let i = 0; i < attr.count; i++) {
       let x = attr.getX(i)
       let y = attr.getY(i)
       let z = attr.getZ(i)
-      z += input.speed * 22 * input.dtSec
-      if (z > 2) {
+      const nx = x * cs - y * sn
+      const ny = x * sn + y * cs
+      x = nx
+      y = ny
+      z += input.speed * (1.4 + input.beatPulse * 3.2) * 26 * input.dtSec
+      if (z > 3) {
         z = -depth
-        x = (Math.random() - 0.5) * 24
-        y = (Math.random() - 0.5) * 14
+        x = (Math.random() - 0.5) * 28
+        y = (Math.random() - 0.5) * 16
       }
       attr.setXYZ(i, x, y, z)
     }
@@ -4439,6 +4877,9 @@ function updateLayerGeneratorBehavior(
     const speedDrive = 0.18 + input.speed * 1.9
     const separation = burst * speedDrive
     const emitterCount = Math.max(1, Math.floor(emitters.length / 3))
+    const spin = input.clockSec * (0.22 + input.speed * 0.4)
+    const cs = Math.cos(spin)
+    const sn = Math.sin(spin)
     const roamRadius = 4.8 + runtimeLayer.layer.scale * 8.2 + separation * 10.5
     const attraction =
       0.34 + runtimeLayer.layer.variety * 1.3 + (1 - burst) * 0.7
@@ -4446,9 +4887,11 @@ function updateLayerGeneratorBehavior(
     const burstForce = (0.12 + separation * 4.8) * input.dtSec
     for (let i = 0; i < attr.count; i++) {
       const e = (i % emitterCount) * 3
-      const tx = emitters[e] * (1 + separation * (1.2 + runtimeLayer.layer.variety * 0.8))
+      const ex = emitters[e]
+      const ez = emitters[e + 2]
+      const tx = (ex * cs - ez * sn) * (1 + separation * (1.2 + runtimeLayer.layer.variety * 0.8))
       const ty = emitters[e + 1] * (1 + separation * 0.65)
-      const tz = emitters[e + 2] * (1 + separation * (1 + runtimeLayer.layer.variety * 0.75))
+      const tz = (ex * sn + ez * cs) * (1 + separation * (1 + runtimeLayer.layer.variety * 0.75))
       let vx = velocities[i * 3]
       let vy = velocities[i * 3 + 1]
       let vz = velocities[i * 3 + 2]
@@ -4571,25 +5014,28 @@ function updateLayerGeneratorBehavior(
     const baseRadius = Number(runtimeLayer.scratch.audioRingRadius ?? 1.4)
     runtimeLayer.scratch.audioRingLevels = levels
     const hasSpectrum = spectrum.hasSpectrum
-    const rise = clamp01(input.dtSec * 12, 1)
-    const fall = clamp01(input.dtSec * 5.2, 1)
+    const rise = clamp01(input.dtSec * 14, 1)
+    const fall = clamp01(input.dtSec * 6, 1)
     const dummy = getScratchObject3D(runtimeLayer, '__tmpAudioRingDummy')
+    const spin = input.clockSec * (0.35 + input.speed * 0.85)
     for (let i = 0; i < count; i++) {
       const t = count <= 1 ? 0 : i / count
-      const raw = hasSpectrum ? spectrum.sampleAt(t) : input.beatPulse * 0.25
-      const target = Math.pow(clamp01(raw, 0), 0.72)
+      const target = bandEnergy(
+        hasSpectrum,
+        hasSpectrum ? spectrum.sampleAt(t) : 0,
+        t,
+        input.clockSec,
+        input.beatPulse
+      )
       const current = levels[i] ?? 0
       levels[i] = target >= current ? current + (target - current) * rise : current + (target - current) * fall
-      const height = 0.05 + levels[i] * (0.8 + runtimeLayer.layer.scale * 2.8)
-      const pulseRadius = baseRadius + levels[i] * 0.55 + input.beatPulse * 0.14
-      const angle = angles[i] + input.clockSec * input.speed * 0.08
-      dummy.position.set(
-        Math.cos(angle) * pulseRadius,
-        -0.9 + height * 0.5,
-        Math.sin(angle) * pulseRadius
-      )
-      dummy.rotation.y = -angle
-      dummy.scale.set(1, height, 1)
+      const height = 0.18 + levels[i] * (1.15 + runtimeLayer.layer.scale * 2.6) + input.beatPulse * 0.2
+      const pulseRadius = baseRadius + levels[i] * 0.35
+      const angle = angles[i] + spin
+      const outward = pulseRadius + height * 0.5
+      dummy.position.set(Math.cos(angle) * outward, Math.sin(angle) * outward, 0)
+      dummy.rotation.set(0, 0, angle)
+      dummy.scale.set(0.7, height, 0.7)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
     }
@@ -4621,12 +5067,18 @@ function updateLayerGeneratorBehavior(
     const fall = clamp01(input.dtSec * 4.8, 1)
     for (let s = 0; s < segments; s++) {
       const t = segments <= 1 ? 0 : s / segments
-      const raw = hasSpectrum ? spectrum.sampleAt(t) : input.beatPulse * 0.2
-      const target = Math.pow(clamp01(raw, 0), 0.74)
+      const raw = bandEnergy(
+        hasSpectrum,
+        hasSpectrum ? spectrum.sampleAt(t) : 0,
+        t,
+        input.clockSec,
+        input.beatPulse
+      )
+      const target = raw
       const current = levels[s] ?? 0
       levels[s] = target >= current ? current + (target - current) * rise : current + (target - current) * fall
     }
-    const travel = input.dtSec * (8 + input.speed * 30)
+    const travel = input.dtSec * (14 + input.speed * 36) * (1 + input.beatPulse * 0.8)
     for (let i = 0; i < slices; i++) {
       depths[i] += travel
       if (depths[i] > nearZ) {
@@ -4637,15 +5089,16 @@ function updateLayerGeneratorBehavior(
     for (let i = 0; i < mesh.count; i++) {
       const slice = Math.floor(i / segments)
       const segment = i % segments
-      const angle = (segment / segments) * Math.PI * 2 + input.clockSec * 0.32
+      const angle = (segment / segments) * Math.PI * 2 + input.clockSec * (0.45 + input.speed * 0.35) + slice * 0.08
       const amp = levels[segment] ?? 0
-      const radius = baseRadius + amp * 1.2
+      const radius = baseRadius * (0.72 + slice / Math.max(1, slices) * 0.55) + amp * 1.35
+      const depthT = (depths[slice] - farZ) / Math.max(0.001, nearZ - farZ)
       dummy.position.set(
         Math.cos(angle) * radius,
-        Math.sin(angle) * radius * 0.68,
+        Math.sin(angle) * radius * 0.82,
         depths[slice]
       )
-      dummy.scale.setScalar(0.62 + amp * 1.8)
+      dummy.scale.setScalar(0.45 + depthT * 1.8 + amp * 1.6)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
     }
@@ -4655,34 +5108,44 @@ function updateLayerGeneratorBehavior(
 
   if (generator === 'oscilloscope3D') {
     const node = runtimeLayer.nodes[0]
-    if (!(node.object instanceof THREE.Line)) {
+    if (!(node.object instanceof THREE.Mesh)) {
       return
     }
-    const line = node.object
-    const geometry = line.geometry as THREE.BufferGeometry
+    const mesh = node.object
+    const geometry = mesh.geometry as THREE.BufferGeometry
     const attr = geometry.getAttribute('position') as THREE.BufferAttribute
     if (!attr) {
       return
     }
-    const count = attr.count
+    const count = Math.floor(attr.count / 2)
     const levels =
       (runtimeLayer.scratch.oscilloscopeLevels as Float32Array | undefined) ??
       new Float32Array(count)
     runtimeLayer.scratch.oscilloscopeLevels = levels
     const hasSpectrum = spectrum.hasSpectrum
-    const width = 4 + runtimeLayer.layer.scale * 4.5
-    const amp = 0.6 + runtimeLayer.layer.scale * 1.8
-    const rise = clamp01(input.dtSec * 11, 1)
-    const fall = clamp01(input.dtSec * 5.5, 1)
+    const width = 6.4 + runtimeLayer.layer.scale * 3.2
+    const amp = 0.9 + runtimeLayer.layer.scale * 1.6
+    const rise = clamp01(input.dtSec * 14, 1)
+    const fall = clamp01(input.dtSec * 6, 1)
+    const phase = input.clockSec * (1.4 + input.speed * 0.45)
     for (let i = 0; i < count; i++) {
       const t = count <= 1 ? 0 : i / (count - 1)
-      const raw = hasSpectrum ? spectrum.sampleAt(t) : input.beatPulse * 0.2
-      const target = Math.pow(clamp01(raw, 0), 0.7)
+      const target = bandEnergy(
+        hasSpectrum,
+        hasSpectrum ? spectrum.sampleAt(t) : 0,
+        t,
+        input.clockSec,
+        input.beatPulse
+      )
       const current = levels[i] ?? 0
       levels[i] = target >= current ? current + (target - current) * rise : current + (target - current) * fall
-      const y = (levels[i] - 0.35) * amp
-      const z = Math.sin(t * Math.PI * 10 + input.clockSec * (1.2 + input.speed * 1.1)) * (0.2 + levels[i] * 0.7)
-      attr.setXYZ(i, (t - 0.5) * width, y, z)
+      const y =
+        Math.sin(t * Math.PI * 8 + phase) * (0.28 + levels[i] * 1.35) * amp
+      const z = Math.cos(t * Math.PI * 3 + phase * 0.65) * (0.22 + levels[i] * 0.85)
+      const x = (t - 0.5) * width
+      const half = 0.025 + levels[i] * 0.09 + input.beatPulse * 0.02
+      attr.setXYZ(i * 2, x, y - half, z)
+      attr.setXYZ(i * 2 + 1, x, y + half, z)
     }
     attr.needsUpdate = true
     return
@@ -4702,8 +5165,9 @@ function updateLayerGeneratorBehavior(
       avg = input.beatPulse * 0.22
     }
     const pulse = Math.pow(clamp01(avg, 0), 0.7)
-    mesh.rotation.set(0, 0, 0)
-    const scale = 0.85 + pulse * 0.75 + input.beatPulse * 0.18
+    const spin = input.clockSec * (0.35 + input.speed * 0.9)
+    mesh.rotation.set(spin * 0.22, spin, spin * 0.08)
+    const scale = (1.25 + pulse * 0.75) * (1 + input.beatPulse * 0.4)
     mesh.scale.setScalar(scale)
     return
   }
@@ -4731,21 +5195,29 @@ function updateLayerGeneratorBehavior(
     const fall = clamp01(input.dtSec * 5.4, 1)
     for (let c = 0; c < cols; c++) {
       const t = cols <= 1 ? 0 : c / (cols - 1)
-      const raw = hasSpectrum ? spectrum.sampleAt(t) : input.beatPulse * 0.2
-      const target = Math.pow(clamp01(raw, 0), 0.76)
+      const raw = bandEnergy(
+        hasSpectrum,
+        hasSpectrum ? spectrum.sampleAt(t) : 0,
+        t,
+        input.clockSec,
+        input.beatPulse
+      )
+      const target = raw
       const current = levels[c] ?? 0
       levels[c] = target >= current ? current + (target - current) * rise : current + (target - current) * fall
     }
-    const amp = 0.6 + runtimeLayer.layer.scale * 2.2
+    const amp = 0.85 + runtimeLayer.layer.scale * 2.8
     for (let r = 0; r < rows; r++) {
       const rowT = rows <= 1 ? 0 : r / (rows - 1)
       for (let c = 0; c < cols; c++) {
         const idx = (r * cols + c) * 3
         const baseX = base[idx]
         const baseY = base[idx + 1]
-        const wave = Math.sin(input.clockSec * (1.2 + input.speed) - rowT * 3.2 + c * 0.11) * 0.06
-        const y = baseY + levels[c] * amp * (1 - rowT * 0.82) + wave + input.beatPulse * 0.1
-        const z = base[idx + 2] - rowT * (1.2 + runtimeLayer.layer.scale * 1.7)
+        const wave =
+          Math.sin(input.clockSec * (1.5 + input.speed) - rowT * 4.2 + c * 0.16) *
+          (0.08 + input.beatPulse * 0.12)
+        const y = baseY + levels[c] * amp * (1 - rowT * 0.55) + wave
+        const z = base[idx + 2] - rowT * (0.4 + runtimeLayer.layer.scale * 0.8)
         attr.setXYZ(r * cols + c, baseX, y, z)
       }
     }
@@ -4780,15 +5252,20 @@ function updateLayerGeneratorBehavior(
       const z = ((gz / Math.max(1, grid - 1)) - 0.5) * span
       const radial = Math.hypot(x, z)
       const radialT = clamp01(radial / (span * 0.75), 1)
-      const raw = hasSpectrum
-        ? spectrum.sampleAt(1 - radialT)
-        : input.beatPulse * (0.2 + (1 - radialT) * 0.4)
-      const target = Math.pow(clamp01(raw, 0), 0.8)
+      const travel = (input.clockSec * (0.05 + input.speed * 0.12)) % 1
+      const raw = bandEnergy(
+        hasSpectrum,
+        hasSpectrum ? spectrum.sampleAt((1 - radialT + travel) % 1) : 0,
+        radialT,
+        input.clockSec,
+        input.beatPulse
+      )
+      const target = raw
       const current = levels[i] ?? 0
       levels[i] = target >= current ? current + (target - current) * rise : current + (target - current) * fall
-      const height = 0.03 + levels[i] * (0.85 + runtimeLayer.layer.scale * 2.6)
-      dummy.position.set(x, -1 + height * 0.5, z)
-      dummy.scale.set(1, height, 1)
+      const height = 0.16 + levels[i] * (1.15 + runtimeLayer.layer.scale * 2.8) + input.beatPulse * 0.2
+      dummy.position.set(x, 0, z)
+      dummy.scale.set(0.85 + levels[i] * 0.5, height, 0.85 + levels[i] * 0.5)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
     }
@@ -4854,16 +5331,18 @@ function updateLayerGeneratorBehavior(
   }
 
   if (generator === 'legacyTextSpin') {
-    const spinSpeed = 0.5 + input.speed * 1.7
+    const spinSpeed = 0.7 + input.speed * 2.1
+    const beatScale = 1 + input.beatPulse * 0.45
+    const tilt = Math.sin(input.clockSec * 0.65) * 0.42
     for (const node of runtimeLayer.nodes) {
       node.object.rotation.set(
-        node.baseRotation.x,
+        node.baseRotation.x + tilt,
         node.baseRotation.y + input.clockSec * spinSpeed,
-        node.baseRotation.z
+        node.baseRotation.z + input.clockSec * spinSpeed * 0.18
       )
     }
     runtimeLayer.group.scale.setScalar(
-      proceduralBuiltSizeScaleFactor(runtimeLayer, runtimeLayer.layer)
+      proceduralBuiltSizeScaleFactor(runtimeLayer, runtimeLayer.layer) * beatScale
     )
     return
   }
@@ -4883,7 +5362,7 @@ function updateLayerGeneratorBehavior(
     }
     const { width, height, nearZ, farZ } = bounds
     const dummy = getScratchObject3D(runtimeLayer, '__tmpLegacySpaceTunnelDummy')
-    const travel = input.dtSec * (18 + input.speed * 26)
+    const travel = input.dtSec * (18 + input.speed * 26) * (1 + input.beatPulse * 1.7)
     for (let i = 0; i < instanced.count; i++) {
       const idx = i * 3
       let x = positions[idx]
@@ -4891,17 +5370,22 @@ function updateLayerGeneratorBehavior(
       let z = positions[idx + 2] + travel
       if (z > nearZ) {
         z = farZ
-        x = (Math.random() - 0.5) * width
-        y = (Math.random() - 0.5) * height
+        const angle = Math.random() * Math.PI * 2
+        const ring = 0.45 + Math.random() * 0.7
+        x = Math.cos(angle) * width * 0.16 * ring
+        y = Math.sin(angle) * height * 0.16 * ring
       }
       positions[idx] = x
       positions[idx + 1] = y
       positions[idx + 2] = z
+      const depthT = (z - farZ) / Math.max(0.001, nearZ - farZ)
       dummy.position.set(x, y, z)
-      dummy.rotation.z = (i % 7) * 0.31
+      dummy.scale.setScalar(0.35 + depthT * 2.6)
+      dummy.rotation.z = Math.atan2(y, x)
       dummy.updateMatrix()
       instanced.setMatrixAt(i, dummy.matrix)
     }
+    instanced.rotation.z = input.clockSec * (0.12 + input.speed * 0.22)
     instanced.instanceMatrix.needsUpdate = true
     return
   }
@@ -4911,6 +5395,9 @@ function generatorSupportsReactiveInput(runtimeLayer: RuntimeLayer) {
   const { generator, customGenerator } = runtimeLayer
   if (generator === 'customModule') {
     return customGenerator?.supportsReactiveInput === true
+  }
+  if (isGenerativePlate(generator) || generator === 'text') {
+    return true
   }
   return (
     generator === 'beatGrid' ||
@@ -4928,6 +5415,11 @@ function generatorSupportsReactiveInput(runtimeLayer: RuntimeLayer) {
     generator === 'legacyTextParticles' ||
     generator === 'legacyTextSpin' ||
     generator === 'legacySpaceTunnel' ||
+    generator === 'spheres' ||
+    generator === 'cubes' ||
+    generator === 'triangles' ||
+    generator === 'geodesic' ||
+    generator === 'importedModel' ||
     generator === 'spikeBall'
   )
 }
@@ -5133,7 +5625,9 @@ function updateSpectrographPoints(
   runtimeLayer: RuntimeLayer,
   audio: UpdateResource['audio'],
   dtSec: number,
-  scale: number
+  scale: number,
+  clockSec: number,
+  beatPulse: number
 ) {
   const node = runtimeLayer.nodes.find(
     (item) => item.object instanceof THREE.InstancedMesh
@@ -5143,28 +5637,32 @@ function updateSpectrographPoints(
   const bars = node.object as THREE.InstancedMesh
   const count = bars.count
   const spectrum = createSpectrumSampler(audio)
-  const hasSpectrum = spectrum.hasSpectrum
   const dummy = getScratchObject3D(runtimeLayer, '__tmpSpectrographDummy')
   const levels =
     (runtimeLayer.scratch.spectrographLevels as Float32Array | undefined) ??
     new Float32Array(count)
   runtimeLayer.scratch.spectrographLevels = levels
 
-  const spread = 3 + scale * 2.4
-  const floorY = -1
-  const rise = clamp01(dtSec * 10, 1)
-  const fall = clamp01(dtSec * 4.2, 1)
+  const spread = Number(runtimeLayer.scratch.spectrographSpread ?? 6.2 + scale * 3.2)
+  const rise = clamp01(dtSec * 14, 1)
+  const fall = clamp01(dtSec * 5.5, 1)
 
   for (let i = 0; i < count; i++) {
     const t = count <= 1 ? 0 : i / (count - 1)
-    const sample = hasSpectrum ? spectrum.sampleAt(t) : 0
-    const target = hasSpectrum ? Math.pow(Math.min(1, Math.max(0, sample)), 0.78) : 0
+    const mirror = t < 0.5 ? t * 2 : (1 - t) * 2
+    const target = bandEnergy(
+      spectrum.hasSpectrum,
+      spectrum.hasSpectrum ? spectrum.sampleAt(mirror) : 0,
+      mirror,
+      clockSec,
+      beatPulse
+    )
     const prev = levels[i] ?? 0
     const smooth = target >= prev ? prev + (target - prev) * rise : prev + (target - prev) * fall
     levels[i] = smooth
 
-    const height = 0.03 + smooth * (0.75 + scale * 2.8)
-    dummy.position.set((t - 0.5) * spread, floorY + height * 0.5, 0)
+    const height = 0.22 + smooth * (1.6 + scale * 3.4) + beatPulse * 0.25
+    dummy.position.set((t - 0.5) * spread, 0, Math.sin(clockSec * 0.8 + t * 8) * 0.12)
     dummy.scale.set(1, height, 1)
     dummy.updateMatrix()
     bars.setMatrixAt(i, dummy.matrix)
@@ -5185,6 +5683,10 @@ function createEmptyEffectAmountMap(): Record<BuiltinResolvedEffectType, number>
     chromaShift: 0,
     invert: 0,
     posterize: 0,
+    pixelate: 0,
+    radialBlur: 0,
+    edge: 0,
+    beatFlash: 0,
     hueShift: 0,
     mirror: 0,
     bpmSync: 0,

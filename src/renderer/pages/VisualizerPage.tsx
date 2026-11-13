@@ -92,7 +92,7 @@ export default function VisualizerPage({ standalone = false }: VisualizerPagePro
         <SplitPane
           style={{ height: '100%' }}
           type="horizontal"
-          initialSplit={0.6}
+          initialSplit={0.46}
           rem={0.5}
           min={0.35}
           max={0.9}

@@ -4,6 +4,7 @@ const path = require('path')
 const repoRoot = path.resolve(__dirname, '..')
 const bridgePath = path.join(repoRoot, 'assets', 'projectm-bridge', 'projectm_bridge.node')
 const runtimeDir = path.join(repoRoot, 'assets', 'projectm-runtime')
+const presetDir = path.join(repoRoot, 'assets', 'projectm-presets')
 const appNodeModules = path.join(repoRoot, 'release', 'app', 'node_modules')
 
 const requireBridge =
@@ -159,10 +160,40 @@ if (requireBridge && !allowBridgeFallback && !fs.existsSync(bridgePath)) {
   errors.push(`Missing native projectM bridge at ${bridgePath}`)
 }
 
+function findPresetFile(root) {
+  if (!fs.existsSync(root)) return null
+  const stack = [root]
+  let visited = 0
+  while (stack.length > 0 && visited < 800) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true })
+    } catch (_error) {
+      continue
+    }
+    for (const entry of entries) {
+      visited += 1
+      const entryPath = path.join(current, entry.name)
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.milk')) {
+        return entryPath
+      }
+      if (entry.isDirectory() && entry.name !== '.git') {
+        stack.push(entryPath)
+      }
+    }
+  }
+  return null
+}
+
 if (requireRuntime && !allowRuntimeFallback && !skipRuntime) {
   const runtimeLibrary = findRuntimeLibrary(runtimeDir)
   if (runtimeLibrary === null) {
     errors.push(`Missing bundled projectM runtime library under ${runtimeDir}`)
+  }
+  if (findPresetFile(presetDir) === null) {
+    errors.push(`Missing bundled projectM presets under ${presetDir}`)
   }
 }
 

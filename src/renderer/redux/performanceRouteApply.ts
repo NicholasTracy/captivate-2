@@ -50,6 +50,8 @@ export function midiActionLabel(action: MidiAction): string {
       return 'Performance slider'
     case 'firePerformancePad':
       return 'Performance pad'
+    case 'fireOneShot':
+      return 'One-shot'
     case 'setModulationAmount':
       return `Mod ${action.modIndex + 1} ${action.param}`
     default:

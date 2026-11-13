@@ -1115,6 +1115,9 @@ export function ipcSetup(config: Config) {
     ) => broadcast(ipcChannels.midi_out_connection_update, payload),
     send_osc_connection_update: (payload: OscConnection.UpdatePayload) =>
       broadcast(ipcChannels.osc_connection_update, payload),
+    send_pro_dj_link_update: (
+      payload: import('../../shared/proDjLink').ProDjLinkStatus
+    ) => broadcast(ipcChannels.pro_dj_link_update, payload),
     send_time_state: (time_state: RealtimeState, master: number) => {
       _config.renderers.forEach((renderer) => {
         if (renderer.isDestroyed()) {

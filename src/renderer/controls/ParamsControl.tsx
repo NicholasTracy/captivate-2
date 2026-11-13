@@ -4,7 +4,7 @@ import ParamSlider from './ParamSlider'
 import XyPad from './XyParamsPad'
 import styled from 'styled-components'
 import type { CSSProperties } from 'react'
-import { useMemo } from 'react'
+import { useContext, useMemo } from 'react'
 import Randomizer from './Randomizer'
 import Chase from './Chase'
 import XYAxispad from './XYAxisPad'
@@ -17,6 +17,7 @@ import {
   useDmxSelector,
   useTypedSelector,
 } from 'renderer/redux/store'
+import { OneShotEditContext } from 'renderer/redux/oneShotEdit'
 import { getCustomChannels } from 'renderer/redux/dmxSlice'
 import StrobeControl from './StrobeControl'
 import GoboControl from './GoboControl'
@@ -144,6 +145,7 @@ const stageLightMapSliderWrapperStyle: CSSProperties = {
 
 export default function ParamsControl({ splitIndex }: Params) {
   const dispatch = useDispatch()
+  const oneShotEditing = useContext(OneShotEditContext) !== null
   const fxtrDepthOn = useTypedSelector(
     (state) => state.gui.fxtrDepthOn
   )
@@ -884,8 +886,12 @@ export default function ParamsControl({ splitIndex }: Params) {
         <ZParamsPad splitIndex={splitIndex} />
       ) : null}
       {showMoverControls && <XYAxispad splitIndex={splitIndex} />}
-      <Randomizer splitIndex={splitIndex} />
-      <Chase splitIndex={splitIndex} />
+      {oneShotEditing ? null : (
+        <>
+          <Randomizer splitIndex={splitIndex} />
+          <Chase splitIndex={splitIndex} />
+        </>
+      )}
       <StrobeControl splitIndex={splitIndex} />
       <GoboControl splitIndex={splitIndex} />
       <FocusControl splitIndex={splitIndex} />

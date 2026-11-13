@@ -3,6 +3,11 @@ import { Dirent, existsSync, promises as fsPromises, readdirSync } from 'fs'
 import path from 'path'
 import { getKoffi } from './koffiNative'
 import {
+  ensureProjectMPresetPack,
+  getBundledProjectMPresetDirectories,
+  getUserDataProjectMPresetDirectory,
+} from './projectmPresets'
+import {
   getProjectMRuntimeDownloadUrl,
   initProjectMRuntimeDetection,
   ProjectMPresetCatalog,
@@ -11,9 +16,9 @@ import {
 } from '../../shared/projectm'
 
 const PROJECTM_RUNTIME_DIR = 'projectm-runtime'
-const PROJECTM_PRESET_SCAN_TIMEOUT_MS = 6500
+const PROJECTM_PRESET_SCAN_TIMEOUT_MS = 15000
 const PROJECTM_PRESET_SCAN_MAX_DEPTH = 8
-const PROJECTM_PRESET_SCAN_MAX_COUNT = 8000
+const PROJECTM_PRESET_SCAN_MAX_COUNT = 12000
 const PROJECTM_RUNTIME_DETECTION_CACHE_MS = 3000
 
 type RuntimeDetectionOptions = {
@@ -170,30 +175,88 @@ export async function listProjectMPresets(
   const requestedDirectory =
     typeof directory === 'string' ? directory.trim() : ''
 
-  // When the user explicitly selects a directory, skip runtime auto-detection.
-  // Runtime probing can touch many system paths synchronously and stall scans.
-  const roots =
-    requestedDirectory.length > 0
-      ? existsSync(requestedDirectory)
-        ? [requestedDirectory]
-        : []
-      : getProjectMPresetRoots(detectProjectMRuntime())
-  if (requestedDirectory.length > 0 && roots.length === 0) {
+  // A chosen folder is scanned on its own. Runtime probing is only used when
+  // that folder is missing or has no preset files.
+  const requestedExists =
+    requestedDirectory.length > 0 && existsSync(requestedDirectory)
+  if (requestedExists) {
+    const selectedScan = await findProjectMPresetFiles([requestedDirectory], {
+      maxDepth: PROJECTM_PRESET_SCAN_MAX_DEPTH,
+      maxCount: PROJECTM_PRESET_SCAN_MAX_COUNT,
+      timeoutMs: PROJECTM_PRESET_SCAN_TIMEOUT_MS,
+    })
+    if (selectedScan.presetPaths.length > 0) {
+      return catalogFromScan([requestedDirectory], selectedScan)
+    }
+  }
+
+  let autoRoots = getProjectMPresetRoots(detectProjectMRuntime())
+  let scan = await scanPresetRoots(autoRoots)
+  let installMessage = ''
+  if (scan.presetPaths.length === 0) {
+    const installed = await ensureProjectMPresetPack()
+    installMessage = installed.downloaded ? installed.message : installed.ok ? '' : installed.message
+    if (installed.ok) {
+      autoRoots = getProjectMPresetRoots(detectProjectMRuntime())
+      scan = await scanPresetRoots(autoRoots)
+    }
+  }
+  if (autoRoots.length === 0) {
     return {
       presets: [],
       roots: [],
-      message: `Preset directory not found: ${requestedDirectory}`,
+      message:
+        installMessage.length > 0
+          ? installMessage
+          : requestedDirectory.length > 0
+            ? `Preset directory not found: ${requestedDirectory}`
+            : 'No projectM preset files were found. Select a preset directory to scan.',
       textureDirectories: [],
       scanTimedOut: false,
     }
   }
 
-  const scan = await findProjectMPresetFiles(roots, {
+  const catalog = catalogFromScan(autoRoots, scan)
+  if (installMessage.length > 0 && catalog.presets.length === 0) {
+    return {
+      ...catalog,
+      message: `${catalog.message} ${installMessage}`,
+    }
+  }
+  if (requestedDirectory.length > 0 && catalog.presets.length > 0) {
+    return {
+      ...catalog,
+      message: `${catalog.message} ${requestedDirectory} had no preset files, so the installed preset folder is shown.`,
+    }
+  }
+  if (requestedDirectory.length > 0 && !requestedExists) {
+    return {
+      ...catalog,
+      message: `Preset directory not found: ${requestedDirectory}. ${catalog.message}`,
+    }
+  }
+  return catalog
+}
+
+function scanPresetRoots(roots: string[]) {
+  if (roots.length === 0) {
+    return Promise.resolve({
+      presetPaths: [] as string[],
+      textureDirectories: [] as string[],
+      scanTimedOut: false,
+    })
+  }
+  return findProjectMPresetFiles(roots, {
     maxDepth: PROJECTM_PRESET_SCAN_MAX_DEPTH,
     maxCount: PROJECTM_PRESET_SCAN_MAX_COUNT,
     timeoutMs: PROJECTM_PRESET_SCAN_TIMEOUT_MS,
   })
+}
 
+function catalogFromScan(
+  roots: string[],
+  scan: PresetScanResult
+): ProjectMPresetCatalog {
   const presets = toPresetOptions(scan.presetPaths)
   let message =
     presets.length > 0
@@ -304,12 +367,71 @@ function getProjectMPresetRoots(runtime: ProjectMRuntimeDetection) {
     })
   }
 
-  const userDataPresets = path.join(app.getPath('userData'), 'projectm', 'presets')
-  if (existsSync(userDataPresets)) {
+  const userDataPresets = getUserDataProjectMPresetDirectory()
+  const bundledPresets = getBundledProjectMPresetDirectories()
+  if (directoryHasPresetFileSync(userDataPresets)) {
     roots.add(userDataPresets)
+  } else {
+    bundledPresets.forEach((directory) => {
+      if (directoryHasPresetFileSync(directory)) roots.add(directory)
+    })
   }
 
   return Array.from(roots)
+}
+
+function directoryHasPresetFileSync(root: string) {
+  if (!existsSync(root)) return false
+  const stack = [root]
+  let visited = 0
+  while (stack.length > 0 && visited < 400) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries: Dirent<string>[]
+    try {
+      entries = readdirSync(current, { withFileTypes: true })
+    } catch (_error) {
+      continue
+    }
+    for (const entry of entries) {
+      visited += 1
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.milk')) {
+        return true
+      }
+      if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
+        stack.push(path.join(current, entry.name))
+      }
+    }
+  }
+  return false
+}
+
+function collectDevProjectRoots() {
+  const roots: string[] = []
+  const seen = new Set<string>()
+  for (const seed of [process.cwd(), __dirname]) {
+    let current = path.resolve(seed)
+    for (let depth = 0; depth < 8; depth++) {
+      const key = current.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        const runtimeDir = path.join(current, 'assets', PROJECTM_RUNTIME_DIR)
+        const bridgeNode = path.join(
+          current,
+          'assets',
+          'projectm-bridge',
+          'projectm_bridge.node'
+        )
+        if (existsSync(runtimeDir) || existsSync(bridgeNode)) {
+          roots.push(current)
+        }
+      }
+      const parent = path.dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  }
+  return roots
 }
 
 function getBundledProjectMRuntimeCandidates() {
@@ -322,6 +444,11 @@ function getBundledProjectMRuntimeCandidates() {
     path.join(userDataPath, PROJECTM_RUNTIME_DIR),
     path.join(resourcesPath, PROJECTM_RUNTIME_DIR),
   ]
+  if (!app.isPackaged) {
+    for (const root of collectDevProjectRoots()) {
+      candidates.push(path.join(root, 'assets', PROJECTM_RUNTIME_DIR))
+    }
+  }
   return candidates.flatMap((candidate) => expandRuntimePathCandidates(candidate))
 }
 

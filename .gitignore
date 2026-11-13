@@ -52,6 +52,7 @@ npm-debug.log.*
 
 # Local runtime binaries (downloaded/installed per machine, not source-controlled)
 assets/projectm-runtime/
+assets/projectm-presets/
 assets/projectm-bridge/
 assets/ndi-runtime/
 

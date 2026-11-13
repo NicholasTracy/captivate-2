@@ -4,6 +4,7 @@ import styled from 'styled-components'
 import Video from './pages/VisualizerPage'
 import VisualizerProxy from './pages/VisualizerProxy'
 import Modulation from './pages/Scenes'
+import OneShots from './pages/OneShots'
 import Performance from './pages/Performance'
 import Universe from './pages/Universe'
 import Movers from './pages/Movers'
@@ -71,6 +72,7 @@ export default function App() {
 
   function getActivePage() {
     if (activePage == 'Modulation') return <Modulation />
+    if (activePage == 'OneShots') return <OneShots />
     if (activePage == 'Performance') return <Performance />
     if (activePage == 'Universe') return <Universe />
     if (activePage == 'Movers') return <Movers />

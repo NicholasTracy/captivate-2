@@ -62,6 +62,9 @@ interface Config {
   on_midi_connection_update: (payload: midiConnection.UpdatePayload) => void
   on_midi_out_connection_update: (payload: import('../shared/connection').MidiOutConnections) => void
   on_osc_connection_update: (payload: oscConnection.UpdatePayload) => void
+  on_pro_dj_link_update: (
+    payload: import('../shared/proDjLink').ProDjLinkStatus
+  ) => void
   on_time_state: (time_state: RealtimeState) => void
   on_dispatch: (action: PayloadAction) => void
   on_main_command: (command: MainCommand) => void
@@ -119,6 +122,12 @@ export function ipc_setup(config: Config) {
     ipc_channels.osc_connection_update,
     (payload: oscConnection.UpdatePayload) =>
       _config.on_osc_connection_update(payload)
+  )
+
+  ipcRenderer.on(
+    ipc_channels.pro_dj_link_update,
+    (payload: import('../shared/proDjLink').ProDjLinkStatus) =>
+      _config.on_pro_dj_link_update(payload)
   )
 
   ipcRenderer.on(ipc_channels.new_time_state, (realtimeState: RealtimeState) =>

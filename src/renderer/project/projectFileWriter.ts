@@ -58,6 +58,7 @@ export async function buildProjectSaveState(
     gui: config.gui ? guiProfile : undefined,
     mixer: config.mixer ? state.mixer : undefined,
     performance: config.performance ? control.performance : undefined,
+    oneShots: config.oneShots ? control.oneShots : undefined,
   }
 }
 

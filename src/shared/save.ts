@@ -4,6 +4,7 @@ import { DeviceState } from 'renderer/redux/deviceState'
 import { MixerState } from 'renderer/redux/mixerSlice'
 import type { Page } from './pages'
 import type { PerformanceBank } from './performance'
+import type { OneShotsState } from './oneShots'
 import type { VisualizerStreamingSettings } from './visualizerStreaming'
 import { migrateLegacyFixturePersistedJson } from './dmxFixtures'
 
@@ -28,6 +29,8 @@ export interface SaveState {
   mixer?: MixerState
   /** Performance bank (pads/sliders). Per-scene routes live on light scenes. */
   performance?: PerformanceBank
+  /** One-shot triggers. Plays are cleared on load. */
+  oneShots?: OneShotsState
 }
 export type SaveType = keyof SaveState
 export type SaveConfig = { [key in SaveType]: boolean }
@@ -40,6 +43,7 @@ export const saveTypes: SaveType[] = [
   'gui',
   'mixer',
   'performance',
+  'oneShots',
 ]
 export interface SaveInfo {
   state: SaveState
@@ -85,6 +89,8 @@ export function displaySaveType(saveType: SaveType) {
       return 'DMX Mixer State'
     case 'performance':
       return 'Performance Controls'
+    case 'oneShots':
+      return 'One-shots'
   }
 }
 
@@ -115,6 +121,7 @@ function normalizeSaveStatePayload(raw: unknown): {
       visual?: VisualScenes_t
       device?: DeviceState
       performance?: PerformanceBank
+      oneShots?: OneShotsState
     }
   }
 
@@ -138,6 +145,13 @@ function normalizeSaveStatePayload(raw: unknown): {
     ) {
       state.performance = state.control.performance
       normalization.push('promote_control_performance')
+    }
+    if (
+      state.oneShots === undefined &&
+      state.control.oneShots !== undefined
+    ) {
+      state.oneShots = state.control.oneShots
+      normalization.push('promote_control_one_shots')
     }
     delete (state as { control?: unknown }).control
   }

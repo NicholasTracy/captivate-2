@@ -239,6 +239,9 @@ function split2x2(output: ProjectionMappingOutput): ProjectionMappingOutput[] {
   return next
 }
 
+/** Laser output UI stays off until a later patch. */
+const showLaserOutput = false
+
 export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const dispatch = useDispatch()
   const visualizerDiv = useRef<null | HTMLDivElement>(null)
@@ -1457,7 +1460,9 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
         <VisualizerStreamingModal open={streamingOpen} onClose={() => setStreamingOpen(false)} />
       ) : null}
 
-      {!viewportOnly ? <HeliosOutputPanel onTraceConfig={onTraceConfig} /> : null}
+      {showLaserOutput && !viewportOnly ? (
+        <HeliosOutputPanel onTraceConfig={onTraceConfig} />
+      ) : null}
     </Root>
   )
 }

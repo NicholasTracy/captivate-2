@@ -15,6 +15,7 @@ import {
   setMidi,
   setMidiOut,
   setOsc,
+  setProDjLink,
   setSaving,
   setLoading,
   setNewProjectDialog,
@@ -268,6 +269,7 @@ function parsePageFromLocation(): Page | null {
     'Lighting3D',
     'Atmospherics',
     'Modulation',
+    'OneShots',
     'Video',
     'VideoViewport',
     'Streaming',
@@ -386,6 +388,9 @@ ipc_setup({
   },
   on_osc_connection_update: (payload) => {
     store.dispatch(setOsc(payload))
+  },
+  on_pro_dj_link_update: (payload) => {
+    store.dispatch(setProDjLink(payload))
   },
   on_time_state: (newRealtimeState) => {
     _frequentlyUpdatedRealtimeState = newRealtimeState

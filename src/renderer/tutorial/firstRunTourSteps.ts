@@ -554,13 +554,13 @@ export const FIRST_RUN_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'helios-trace',
-    title: 'Visualizer — one Helios, trace optional',
+    title: 'Visualizer — layers you can mix',
     body: [
-      'The visualizer window (sidebar image button) has a Helios panel at the bottom right.',
-      'Scan, connect one DAC, then Arm. Output stays blank until you arm it. Test pattern sends only after arm. Disarm and quit blank the output.',
-      'Trace on/off and Edge trace or Dot sample sit on that same panel. Turning trace on does not arm the DAC. When mapping is on and the DAC is armed, the trace follows the active output’s keystone.',
+      'The visualizer window (sidebar image button) is a stack of layers you mix together.',
+      'Each layer is a generator, a still, a video, a stream, or ProjectM. Full-frame washes such as plasma, light tunnel, aurora, clouds, and kaleidoscope cover the picture and sit behind 3D layers.',
+      'Mix, blend, and effects sit on the layer. Laser output is not in this release.',
     ],
-    tip: 'Leave the DAC disarmed until you mean to send light.',
+    tip: 'Add a layer, pick a generator, then raise its mix.',
     target: TOUR_IDS.navVisualizer,
     advance: { kind: 'next' },
     closeConnections: true,

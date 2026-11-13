@@ -64,7 +64,12 @@ function controlPixelRect(
   }
 }
 
-type DestKind = 'master' | 'baseParam' | 'groupIntensity' | 'bombacity'
+type DestKind =
+  | 'master'
+  | 'baseParam'
+  | 'groupIntensity'
+  | 'bombacity'
+  | 'oneShot'
 
 export default function PerformanceCanvas() {
   const dispatch = useDispatch()
@@ -300,6 +305,8 @@ function InspectorBody({
   const [destKind, setDestKind] = useState<DestKind>('master')
   const [paramKey, setParamKey] = useState<string>('brightness')
   const [groupName, setGroupName] = useState('All')
+  const [oneShotId, setOneShotId] = useState('')
+  const oneShots = useControlSelector((state) => state.oneShots)
 
   const applyDest = () => {
     let action: MidiAction
@@ -308,8 +315,19 @@ function InspectorBody({
       action = { type: 'setAutoSceneBombacity' }
     else if (destKind === 'groupIntensity')
       action = { type: 'setGroupIntensity', group: groupName.trim() || 'All' }
-    else action = { type: 'setBaseParam', paramKey, splitIndex: 0 }
+    else if (destKind === 'oneShot') {
+      const id = oneShotId || oneShots.ids[0]
+      if (!id) return
+      action = { type: 'fireOneShot', oneShotId: id }
+    } else action = { type: 'setBaseParam', paramKey, splitIndex: 0 }
     onAddRoute(action)
+  }
+
+  const routeLabel = (route: MidiAction) => {
+    if (route.type === 'fireOneShot') {
+      return oneShots.byId[route.oneShotId]?.name || 'One-shot'
+    }
+    return midiActionLabel(route)
   }
 
   const oscAddressOk =
@@ -361,8 +379,8 @@ function InspectorBody({
           <Muted>None</Muted>
         ) : (
           routes.map((route, index) => (
-            <DestRow key={`${index}:${midiActionLabel(route)}`}>
-              <Muted>{midiActionLabel(route)}</Muted>
+            <DestRow key={`${index}:${routeLabel(route)}`}>
+              <Muted>{routeLabel(route)}</Muted>
               <TinyBtn type="button" onClick={() => onRemoveRoute(index)}>
                 Remove
               </TinyBtn>
@@ -379,6 +397,9 @@ function InspectorBody({
           <option value="baseParam">Base param</option>
           <option value="groupIntensity">Group intensity</option>
           <option value="bombacity">Bombacity</option>
+          {control.kind === 'pad' ? (
+            <option value="oneShot">One-shot</option>
+          ) : null}
         </select>
         {destKind === 'baseParam' ? (
           <select
@@ -398,6 +419,22 @@ function InspectorBody({
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Group"
           />
+        ) : null}
+        {destKind === 'oneShot' ? (
+          <select
+            value={oneShotId || oneShots.ids[0] || ''}
+            onChange={(e) => setOneShotId(e.target.value)}
+          >
+            {oneShots.ids.length === 0 ? (
+              <option value="">No one-shots</option>
+            ) : (
+              oneShots.ids.map((id) => (
+                <option key={id} value={id}>
+                  {oneShots.byId[id]?.name || 'One-shot'}
+                </option>
+              ))
+            )}
+          </select>
         ) : null}
         <TinyBtn type="button" onClick={applyDest}>
           Add destination

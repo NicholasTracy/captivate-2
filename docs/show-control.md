@@ -14,6 +14,7 @@ authors tempo in a shared session.
 | OSC learn (address → actions) | In | [osc-mapping.md](osc-mapping.md) |
 | OSC auto-publish `/captivate/…` | Out | [osc-mapping.md](osc-mapping.md) |
 | Ableton Link + tempo role | Sync | This page |
+| Pro DJ Link (CDJ / DJM BPM) | In | This page |
 | LAN remote UI | In/out | [remote-control.md](remote-control.md) |
 
 Settings live on `control.device` / `connectionSettings` and save with
@@ -49,13 +50,30 @@ When Link is on (Connections → Ableton Link), choose a **Link role**:
 Start/stop sync remains the separate **Start/stop sync** toggle; role mainly
 affects **tempo authorship**.
 
+## Pro DJ Link
+
+Connections → **Pro DJ Link** follows Pioneer CDJs (and, if you check it, a DJM)
+on the local network. Captivate announces a virtual player so the decks send
+status, then reads beat packets for the pitched tempo.
+
+- Effective BPM is track BPM times the pitch slider (`0x100000` = 0%).
+- Among the checked CDJs, a deck that is playing is the tempo source. If more
+  than one is playing, the tempo master wins, otherwise the latest beat.
+- If no checked CDJ is playing, Captivate coasts at the last CDJ BPM. Audio beat
+  clock and MIDI clock in stay off while follow is enabled, so they cannot
+  replace that tempo. A mixer metronome is used only when no player is checked.
+- Link role **Follow** still refuses local tempo changes, including this one.
+  Use **Full** or **Leader** when the CDJs should drive the clock.
+- A paused CDJ-3000 can still send its playhead. Only a beat packet or a
+  playing/looping status marks that deck as playing.
+
 ## Loop guards
 
 - **OSC:** If listen is on and send host is localhost and send port equals the
   listen port, send is blocked and Connections shows an error.
 - **MIDI clock:** Clock out cannot run while **Drive BPM from MIDI clock** is
-  on (and vice versa when enabling out). Prevents feedback when a port loops
-  back.
+  on (and vice versa when enabling out). Pro DJ Link follow also turns MIDI
+  clock in and audio beat clock off. Prevents two external BPM sources at once.
 
 ## Status bar
 

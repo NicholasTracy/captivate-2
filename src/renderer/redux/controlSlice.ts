@@ -47,6 +47,7 @@ import {
   initSplitScene,
   VisualSceneTransitionConfig,
 } from '../../shared/Scenes'
+import { createVjLookScenes } from '../../shared/visualizerPresets'
 import { reorderArray } from '../../shared/util'
 import { normalizeAudioBandConfig } from '../../shared/audioEngine'
 import {
@@ -72,6 +73,15 @@ import {
   autoLabelForRoute,
 } from './performanceRouteApply'
 import type { MidiAction } from './deviceState'
+import { currentOneShotEditCapture } from './oneShotEdit'
+import {
+  clampOneShotBeats,
+  initOneShot,
+  initOneShotsState,
+  newOneShotId,
+  type OneShotPlay,
+  type OneShotsState,
+} from '../../shared/oneShots'
 
 export interface ControlState extends ScenesStateBundle {
   device: DeviceState
@@ -83,6 +93,8 @@ export interface ControlState extends ScenesStateBundle {
   groupIntensity: GroupIntensityMap
   /** Snap-grid performance pads/sliders; per-scene routes live on light scenes. */
   performance: PerformanceBank
+  /** One-shot triggers. They override the playing scene only on parameters they set. */
+  oneShots: OneShotsState
 }
 export function initControlState(): ControlState {
   return {
@@ -92,6 +104,7 @@ export function initControlState(): ControlState {
     master: 1,
     groupIntensity: {},
     performance: initPerformanceBank(),
+    oneShots: initOneShotsState(),
   }
 }
 
@@ -201,6 +214,14 @@ function modifyActiveLightScene(
   state: ControlState,
   callback: (scene: LightScene_t) => void
 ) {
+  const oneShotId = currentOneShotEditCapture()
+  if (oneShotId) {
+    const shot = state.oneShots?.byId[oneShotId]
+    if (shot) {
+      callback(shot)
+      return
+    }
+  }
   const scene = state.light.byId[state.light.active]
   if (scene) {
     callback(scene)
@@ -550,6 +571,26 @@ const scenesSlice = createSlice({
       scenes.byId[id] =
         payload === 'light' ? initLightScene() : initVisualScene()
       scenes.active = id
+    },
+    addVjLooks: (state) => {
+      const scenes = state.visual
+      const existing = new Set(
+        scenes.ids
+          .map((id) => scenes.byId[id]?.name)
+          .filter((name): name is string => typeof name === 'string' && name.length > 0)
+      )
+      let firstAdded: string | null = null
+      for (const scene of createVjLookScenes()) {
+        if (existing.has(scene.name)) continue
+        const id = nanoid()
+        scenes.ids.push(id)
+        scenes.byId[id] = scene
+        existing.add(scene.name)
+        if (firstAdded === null) firstAdded = id
+      }
+      if (firstAdded !== null) {
+        scenes.active = firstAdded
+      }
     },
     removeScene: (
       state,
@@ -1088,7 +1129,11 @@ const scenesSlice = createSlice({
     },
     addSplitScene: (state, {}: PayloadAction<undefined>) => {
       modifyActiveLightScene(state, (scene) => {
-        scene.splitScenes.push(initSplitScene())
+        const split = initSplitScene()
+        if (currentOneShotEditCapture()) {
+          split.baseParams = {}
+        }
+        scene.splitScenes.push(split)
         scene.modulators.forEach((modulator) => {
           modulator.splitModulations.push({})
         })
@@ -1262,6 +1307,58 @@ const scenesSlice = createSlice({
         }
       })
     },
+    addOneShot: (state) => {
+      const id = newOneShotId()
+      state.oneShots.byId[id] = initOneShot()
+      state.oneShots.ids.push(id)
+      state.oneShots.editingId = id
+    },
+    removeOneShot: (state, { payload }: PayloadAction<string>) => {
+      delete state.oneShots.byId[payload]
+      state.oneShots.ids = state.oneShots.ids.filter((id) => id !== payload)
+      state.oneShots.playing = state.oneShots.playing.filter(
+        (play) => play.id !== payload
+      )
+      if (state.oneShots.editingId === payload) {
+        state.oneShots.editingId = state.oneShots.ids[0] ?? null
+      }
+    },
+    setOneShotEditing: (state, { payload }: PayloadAction<string | null>) => {
+      if (payload !== null && !state.oneShots.byId[payload]) return
+      state.oneShots.editingId = payload
+    },
+    setOneShotName: (
+      state,
+      { payload }: PayloadAction<{ id: string; name: string }>
+    ) => {
+      const shot = state.oneShots.byId[payload.id]
+      if (shot) shot.name = payload.name
+    },
+    setOneShotBeats: (
+      state,
+      { payload }: PayloadAction<{ id: string; beats: number }>
+    ) => {
+      const shot = state.oneShots.byId[payload.id]
+      if (!shot) return
+      shot.beats = clampOneShotBeats(payload.beats)
+    },
+    triggerOneShot: (
+      state,
+      { payload }: PayloadAction<{ id: string; startBeat: number }>
+    ) => {
+      const shot = state.oneShots.byId[payload.id]
+      if (!shot || !Number.isFinite(payload.startBeat)) return
+      const now = payload.startBeat
+      const stillPlaying: OneShotPlay[] = []
+      for (const play of state.oneShots.playing) {
+        if (play.id === payload.id) continue
+        const other = state.oneShots.byId[play.id]
+        if (!other || !Number.isFinite(play.startBeat)) continue
+        if (now < play.startBeat + other.beats) stillPlaying.push(play)
+      }
+      stillPlaying.push({ id: payload.id, startBeat: now })
+      state.oneShots.playing = stillPlaying
+    },
     // =====================   VISUAL SCENES ONLY   ===========================
     resetVisualScenes: (state, { payload }: PayloadAction<VisualScenes_t>) => {
       state.visual = payload
@@ -1368,6 +1465,10 @@ const scenesSlice = createSlice({
       midiActions.setLinkStartStopSyncEnabled(state.device, action),
     setLinkRole: (state, action) =>
       midiActions.setLinkRole(state.device, action),
+    setProDjLinkEnabled: (state, action) =>
+      midiActions.setProDjLinkEnabled(state.device, action),
+    setProDjLinkFollow: (state, action) =>
+      midiActions.setProDjLinkFollow(state.device, action),
     setAudioBeatSensitivity: (state, action) =>
       midiActions.setAudioBeatSensitivity(state.device, action),
     setAudioBeatMinIntervalMs: (state, action) =>
@@ -1468,6 +1569,7 @@ export const {
   setAutoSceneMatchAudioEnergy,
   setAutoSceneEnergyMatchEnabled,
   newScene,
+  addVjLooks,
   removeScene,
   setActiveScene,
   setActiveSceneIndex,
@@ -1507,6 +1609,12 @@ export const {
 
   setSceneGroup,
   clearVisualizerGroupFiltersFromSplits,
+  addOneShot,
+  removeOneShot,
+  setOneShotEditing,
+  setOneShotName,
+  setOneShotBeats,
+  triggerOneShot,
 
   // VISUAL SCENES
   resetVisualScenes,
@@ -1553,6 +1661,8 @@ export const {
   setLinkEnabled,
   setLinkStartStopSyncEnabled,
   setLinkRole,
+  setProDjLinkEnabled,
+  setProDjLinkFollow,
   setAudioBeatSensitivity,
   setAudioBeatMinIntervalMs,
   setAudioBpmSmoothing,

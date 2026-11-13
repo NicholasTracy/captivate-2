@@ -6,6 +6,7 @@ export default {
   midi_connection_update: 'midi_connection_update',
   midi_out_connection_update: 'midi_out_connection_update',
   osc_connection_update: 'osc_connection_update',
+  pro_dj_link_update: 'pro_dj_link_update',
   new_control_state: 'new_control_state',
   /** Full Redux snapshot for Lighting 3D preview only (structure + patch). */
   lighting3d_preview_bootstrap: 'lighting3d_preview_bootstrap',

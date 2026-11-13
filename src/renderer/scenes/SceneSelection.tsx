@@ -1,4 +1,4 @@
-import { sortScenesByBombacity, autoBombacity } from '../redux/controlSlice'
+import { sortScenesByBombacity, autoBombacity, addVjLooks } from '../redux/controlSlice'
 import { SceneType } from '../../shared/Scenes'
 import { IconButton, Tooltip } from '@mui/material'
 import styled from 'styled-components'
@@ -83,6 +83,14 @@ export default function SceneSelection({
         <>
           <Sp2 />
           <VisualSceneTransitionControls />
+          <Sp2 />
+          <AddLooksButton
+            type="button"
+            onClick={() => dispatch(addVjLooks())}
+            title="Add the starter looks that are not already in this list. Each one is a normal scene you can edit."
+          >
+            Add VJ looks
+          </AddLooksButton>
         </>
       )}
       <Sp2 />
@@ -123,4 +131,15 @@ const Sp = styled.div`
 
 const Sp2 = styled.div`
   min-height: 0.5rem;
+`
+
+const AddLooksButton = styled.button`
+  align-self: flex-start;
+  border: 1px solid ${(props) => props.theme.colors.divider};
+  background: ${(props) => props.theme.colors.bg.primary};
+  color: ${(props) => props.theme.colors.text.primary};
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
 `

@@ -9,6 +9,7 @@ import AirIcon from '@mui/icons-material/Air'
 import VisualsIcon from '../images/Thick.png'
 import MixerIcon from '@mui/icons-material/BarChart'
 import TuneIcon from '@mui/icons-material/Tune'
+import FlashOnIcon from '@mui/icons-material/FlashOn'
 import { useDmxSelector, useTypedSelector } from '../redux/store'
 import { useDispatch } from 'react-redux'
 import { setActivePage, Page } from '../redux/guiSlice'
@@ -29,6 +30,7 @@ type SidebarAccent =
   | 'movers'
   | 'led'
   | 'modulation'
+  | 'oneShots'
   | 'performance'
   | 'visualizer'
   | 'mixer'
@@ -59,6 +61,12 @@ function accentColors(accent: SidebarAccent) {
         base: 'linear-gradient(180deg, rgba(161, 110, 255, 0.22), rgba(161, 110, 255, 0.08))',
         active: 'linear-gradient(180deg, rgba(161, 110, 255, 0.56), rgba(161, 110, 255, 0.2))',
         border: '#a16eff',
+      }
+    case 'oneShots':
+      return {
+        base: 'linear-gradient(180deg, rgba(255, 214, 74, 0.22), rgba(255, 214, 74, 0.08))',
+        active: 'linear-gradient(180deg, rgba(255, 214, 74, 0.58), rgba(255, 214, 74, 0.2))',
+        border: '#ffd64a',
       }
     case 'performance':
       return {
@@ -169,6 +177,13 @@ export default function MenuBar() {
         tourId={TOUR_IDS.navScenes}
       >
         <LightingIcon fontSize="inherit" />
+      </MenuItem>
+      <MenuItem
+        page="OneShots"
+        tooltipText="One-shot triggers over the current scene"
+        accent="oneShots"
+      >
+        <FlashOnIcon fontSize="inherit" />
       </MenuItem>
       <MenuItem
         page="Performance"

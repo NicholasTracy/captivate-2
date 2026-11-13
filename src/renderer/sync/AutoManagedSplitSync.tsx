@@ -70,6 +70,7 @@ export default function AutoManagedSplitSync() {
   const activeScene = useControlSelector((scenes) => scenes.light.active)
   const activeLightScene = useActiveLightScene((scene) => scene)
   const videoEnabled = useTypedSelector((state) => state.gui.videoEnabled)
+  const activePage = useTypedSelector((state) => state.gui.activePage)
   const dmx = useDmxSelector((state) => state)
   const atmosSettings = useDeviceSelector(
     (state) => state.connectionSettings.atmos
@@ -135,6 +136,7 @@ export default function AutoManagedSplitSync() {
   ])
 
   useEffect(() => {
+    if (activePage === 'OneShots') return
     const scene = activeLightScene
     if (scene === undefined) return
 
@@ -255,7 +257,14 @@ export default function AutoManagedSplitSync() {
         dispatch(clearVisualizerGroupFiltersFromSplits())
       }
     }
-  }, [activeLightScene, activeScene, autoManagedGroupStates, dispatch, videoEnabled])
+  }, [
+    activeLightScene,
+    activePage,
+    activeScene,
+    autoManagedGroupStates,
+    dispatch,
+    videoEnabled,
+  ])
 
   useEffect(() => {
     const mappedFixtureIds = new Set(

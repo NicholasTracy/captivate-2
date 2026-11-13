@@ -65,8 +65,22 @@ uniform float vignetteAmount;
 uniform float anaglyphAmount;
 uniform float parallaxAmount;
 uniform float asciiAmount;
-uniform float afterImageAmount;
+uniform sampler2D feedbackTex;
+uniform float feedbackAmount;
 uniform float posterizeAmount;
+uniform float pixelateAmount;
+uniform float radialBlurAmount;
+uniform float edgeAmount;
+uniform float beatFlashAmount;
+uniform float beatPulse;
+uniform float bloomAmount;
+uniform float filmGrainAmount;
+uniform float scanlineAmount;
+uniform float chromaAmount;
+uniform float mirrorAmount;
+uniform float hueAmount;
+uniform float strobeAmount;
+uniform float rimAmount;
 varying vec2 vUv;
 
 float hash(vec2 p) {
@@ -138,56 +152,143 @@ float asciiGlyph(vec2 cellUv, float glyphIndex) {
   return clamp(m, 0.0, 1.0);
 }
 
+vec3 hueRotate(vec3 color, float angle) {
+  float c = cos(angle);
+  float s = sin(angle);
+  vec3 yiq = mat3(
+    0.299, 0.596, 0.211,
+    0.587, -0.274, -0.523,
+    0.114, -0.322, 0.312
+  ) * color;
+  yiq.yz = mat2(c, s, -s, c) * yiq.yz;
+  return mat3(
+    1.0, 1.0, 1.0,
+    0.956, -0.272, -1.107,
+    0.621, -0.647, 1.705
+  ) * yiq;
+}
+
 void main() {
   vec2 uv = vUv;
-  float glitch = clamp(glitchAmount, 0.0, 1.0);
-  if (glitch > 0.001) {
-    float line = floor(uv.y * (86.0 + glitch * 220.0));
-    float trigger = step(0.72, hash(vec2(line, floor(timeSec * 14.0) + seed)));
-    float shift = (hash(vec2(line * 1.7, floor(timeSec * 31.0) + seed * 0.37)) - 0.5);
-    shift *= (0.08 + 0.24 * glitch) * trigger;
-    uv.x = clamp(uv.x + shift, 0.0, 1.0);
+  float mirror = clamp(mirrorAmount, 0.0, 1.0);
+  if (mirror > 0.001) {
+    float xFolds = mix(1.0, 2.0, mirror);
+    vec2 folded = vec2(
+      abs(fract(uv.x * xFolds) - 0.5) * 2.0,
+      mix(uv.y, abs(fract(uv.y * 2.0) - 0.5) * 2.0, smoothstep(0.45, 1.0, mirror))
+    );
+    uv = mix(uv, folded, mirror);
   }
-
   vec4 result = blendAt(uv);
   if (blurAmount > 0.001) {
-    float px = blurAmount * 0.0042;
-    float py = blurAmount * 0.0031;
-    vec4 blur =
-      blendAt(clamp(uv + vec2(px, 0.0), 0.0, 1.0)) * 0.2 +
-      blendAt(clamp(uv + vec2(-px, 0.0), 0.0, 1.0)) * 0.2 +
-      blendAt(clamp(uv + vec2(0.0, py), 0.0, 1.0)) * 0.2 +
-      blendAt(clamp(uv + vec2(0.0, -py), 0.0, 1.0)) * 0.2 +
-      result * 0.2;
-    result = mix(result, blur, clamp(blurAmount, 0.0, 1.0));
+    vec3 acc = result.rgb;
+    float weight = 1.0;
+    float radius = blurAmount * 0.05;
+    for (int i = 1; i <= 8; i++) {
+      float t = float(i) / 8.0;
+      float ang = t * 6.2831853;
+      vec2 offset = vec2(cos(ang), sin(ang)) * radius * t;
+      float w = 1.0 - t * 0.55;
+      acc += blendAt(clamp(uv + offset, 0.0, 1.0)).rgb * w;
+      weight += w;
+    }
+    result.rgb = acc / weight;
   }
 
-  if (afterImageAmount > 0.001) {
-    vec2 drift = vec2(
-      sin(timeSec * 0.77 + seed),
-      cos(timeSec * 0.61 + seed * 0.7)
-    ) * (0.002 + afterImageAmount * 0.018);
-    vec3 trail =
-      blendAt(clamp(uv - drift, 0.0, 1.0)).rgb * 0.55 +
-      blendAt(clamp(uv - drift * 2.1, 0.0, 1.0)).rgb * 0.3 +
-      blendAt(clamp(uv - drift * 3.3, 0.0, 1.0)).rgb * 0.15;
-    result.rgb = mix(result.rgb, trail, clamp(afterImageAmount * 0.78, 0.0, 0.9));
+  if (pixelateAmount > 0.001) {
+    float cells = mix(80.0, 5.0, clamp(pixelateAmount, 0.0, 1.0));
+    vec2 grid = vec2(cells, cells * 0.5625);
+    vec2 cell = (floor(uv * grid) + 0.5) / grid;
+    result.rgb = mix(result.rgb, blendAt(clamp(cell, 0.0, 1.0)).rgb, clamp(pixelateAmount * 1.25, 0.0, 1.0));
   }
 
+  if (radialBlurAmount > 0.001) {
+    vec3 acc = result.rgb;
+    float weight = 1.0;
+    for (int i = 1; i <= 8; i++) {
+      float t = float(i) / 8.0;
+      float zoom = 1.0 - t * radialBlurAmount * 0.7;
+      vec2 sampleUv = clamp((uv - 0.5) * zoom + 0.5, 0.0, 1.0);
+      float w = 1.0 - t * 0.35;
+      acc += blendAt(sampleUv).rgb * w;
+      weight += w;
+    }
+    result.rgb = mix(result.rgb, acc / weight, clamp(radialBlurAmount, 0.0, 1.0));
+  }
+
+  if (bloomAmount > 0.001) {
+    vec3 glow = vec3(0.0);
+    float rad = mix(0.008, 0.045, clamp(bloomAmount, 0.0, 1.0));
+    for (int i = 0; i < 8; i++) {
+      float ang = float(i) * 0.785398;
+      vec3 sampleColor = blendAt(clamp(uv + vec2(cos(ang), sin(ang)) * rad, 0.0, 1.0)).rgb;
+      float luma = dot(sampleColor, vec3(0.299, 0.587, 0.114));
+      glow += sampleColor * smoothstep(0.22, 0.78, luma);
+    }
+    result.rgb += (glow / 8.0) * bloomAmount * 1.7;
+  }
+
+  if (feedbackAmount > 0.001) {
+    vec2 zoomUv = (uv - 0.5) * (1.0 - feedbackAmount * 0.045) + 0.5;
+    vec3 prev = texture2D(feedbackTex, clamp(zoomUv, 0.0, 1.0)).rgb;
+    prev *= mix(0.88, 0.5, clamp(feedbackAmount, 0.0, 1.0));
+    result.rgb = mix(result.rgb, prev, clamp(feedbackAmount * 0.84, 0.0, 0.9));
+  }
+
+  float glitch = clamp(glitchAmount, 0.0, 1.0);
   if (glitch > 0.001) {
-    float rgbShift = 0.001 + glitch * 0.008;
-    float r = blendAt(clamp(uv + vec2(rgbShift, 0.0), 0.0, 1.0)).r;
-    float b = blendAt(clamp(uv - vec2(rgbShift, 0.0), 0.0, 1.0)).b;
-    result.rgb = mix(result.rgb, vec3(r, result.g, b), clamp(glitch * 0.9, 0.0, 1.0));
-    float scan = sin((uv.y + timeSec * 0.08) * 900.0) * 0.5 + 0.5;
-    result.rgb *= 1.0 - scan * glitch * 0.12;
+    float rate = 5.0 + glitch * 22.0;
+    float tick = floor(timeSec * rate);
+    float burst = step(mix(0.72, 0.18, glitch), hash(vec2(tick, 3.7 + seed)));
+    float rows = mix(10.0, 42.0, glitch);
+    float row = floor(uv.y * rows);
+    float rowRoll = hash(vec2(row, tick + 1.3));
+    float rowHit = step(mix(0.7, 0.28, glitch), rowRoll) * burst;
+    float slide = (hash(vec2(row * 2.17, tick + 8.2)) - 0.5) * mix(0.12, 0.85, glitch);
+    vec2 torn = vec2(fract(uv.x + slide * rowHit), uv.y);
+    float split = slide * rowHit * (0.35 + glitch * 0.8);
+    vec3 sliced = vec3(
+      blendAt(vec2(fract(torn.x + split), torn.y)).r,
+      blendAt(torn).g,
+      blendAt(vec2(fract(torn.x - split * 1.25), torn.y)).b
+    );
+    float swapped = step(0.78, hash(vec2(row, tick + 19.0))) * rowHit;
+    sliced = mix(sliced, sliced.gbr, swapped);
+    float cols = mix(6.0, 22.0, glitch);
+    float blockX = floor(uv.x * cols);
+    float blockY = floor(uv.y * mix(5.0, 16.0, glitch));
+    float blockRoll = hash(vec2(blockX + blockY * 13.0, tick + 27.0));
+    float blockHit = step(mix(0.9, 0.62, glitch), blockRoll) * burst;
+    vec2 jumped = vec2(
+      fract(uv.x + (hash(vec2(blockY, tick + 4.0)) - 0.5) * 0.7),
+      fract(uv.y + (hash(vec2(blockX, tick + 6.0)) - 0.5) * 0.22)
+    );
+    vec3 block = blendAt(jumped).rgb;
+    float solid = step(0.55, hash(vec2(blockX, tick + blockY)));
+    vec3 chip = vec3(
+      hash(vec2(blockY, tick)),
+      hash(vec2(blockX, tick + 2.0)) * 0.25,
+      hash(vec2(blockX + blockY, tick + 5.0))
+    );
+    block = mix(block, chip, solid);
+    vec3 digital = mix(sliced, block, blockHit);
+    float hit = max(rowHit, blockHit);
+    result.rgb = mix(result.rgb, digital, hit);
+    float snow = hash(vec2(floor(uv.x * 180.0) + floor(uv.y * 90.0), tick));
+    result.rgb = mix(result.rgb, vec3(snow), hit * step(0.93, snow) * glitch);
   }
 
   float vignette = pow(smoothstep(0.2, 1.0, distance(vUv, vec2(0.5)) * 1.414), 1.7);
   result.rgb *= 1.0 - clamp(vignetteAmount, 0.0, 1.0) * vignette * 0.92;
 
+  if (chromaAmount > 0.001) {
+    float shift = chromaAmount * 0.042;
+    result.r = blendAt(clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).r;
+    result.b = blendAt(clamp(uv - vec2(shift, shift * 0.28), 0.0, 1.0)).b;
+  }
+
   if (anaglyphAmount > 0.001) {
-    float shift = 0.001 + anaglyphAmount * 0.004;
+    float shift = 0.008 + anaglyphAmount * 0.042;
     vec3 left = blendAt(clamp(uv + vec2(-shift, 0.0), 0.0, 1.0)).rgb;
     vec3 right = blendAt(clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).rgb;
     vec3 ana = vec3(left.r, right.g, right.b);
@@ -195,7 +296,7 @@ void main() {
   }
 
   if (parallaxAmount > 0.001) {
-    float shift = 0.0015 + parallaxAmount * 0.0045;
+    float shift = 0.012 + parallaxAmount * 0.07;
     vec3 left = blendAt(clamp(uv + vec2(-shift, 0.0), 0.0, 1.0)).rgb;
     vec3 right = blendAt(clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).rgb;
     float stripe = step(0.5, fract(gl_FragCoord.x * 0.5));
@@ -204,7 +305,7 @@ void main() {
   }
 
   if (asciiAmount > 0.001) {
-    float density = mix(48.0, 120.0, clamp(asciiAmount, 0.0, 1.0));
+    float density = mix(72.0, 14.0, clamp(asciiAmount, 0.0, 1.0));
     vec2 grid = vec2(density, density * 0.58);
     vec2 cell = floor(vUv * grid);
     vec2 cellUv = fract(vUv * grid);
@@ -215,14 +316,58 @@ void main() {
     float glyph = asciiGlyph(cellUv, glyphIndex);
     vec3 ink = mix(vec3(0.03), cellColor, 0.8);
     vec3 ascii = mix(vec3(0.01), ink, glyph);
-    result.rgb = mix(result.rgb, ascii, clamp(asciiAmount, 0.0, 1.0));
+    result.rgb = mix(result.rgb, ascii, clamp(asciiAmount * 1.2, 0.0, 1.0));
+  }
+
+  if (scanlineAmount > 0.001) {
+    float line = step(0.5, fract(gl_FragCoord.y * 0.5));
+    float roll = smoothstep(0.12, 0.0, abs(fract(uv.y + timeSec * 0.15) - 0.5));
+    result.rgb *= 1.0 - clamp(scanlineAmount, 0.0, 1.0) * (line * 0.72 + roll * 0.4);
+  }
+
+  if (filmGrainAmount > 0.001) {
+    float grain = hash(gl_FragCoord.xy + vec2(floor(timeSec * 24.0) * 17.0, seed * 30.0));
+    result.rgb += (grain - 0.5) * filmGrainAmount * 0.62;
   }
 
   if (posterizeAmount > 0.001) {
-    float levels = mix(16.0, 3.0, clamp(posterizeAmount, 0.0, 1.0));
-    result.rgb = floor(result.rgb * levels + 0.5) / levels;
+    float levels = mix(8.0, 2.0, clamp(posterizeAmount, 0.0, 1.0));
+    result.rgb = floor(result.rgb * levels) / levels;
   }
 
+  if (edgeAmount > 0.001) {
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+    float px = 0.003 + edgeAmount * 0.014;
+    float center = dot(blendAt(uv).rgb, luma);
+    float dx = dot(blendAt(clamp(uv + vec2(px, 0.0), 0.0, 1.0)).rgb, luma) - center;
+    float dy = dot(blendAt(clamp(uv + vec2(0.0, px), 0.0, 1.0)).rgb, luma) - center;
+    float edge = clamp((abs(dx) + abs(dy)) * (8.0 + edgeAmount * 14.0), 0.0, 1.0);
+    vec3 ink = mix(result.rgb * 0.06, result.rgb + vec3(edge), edge);
+    result.rgb = mix(result.rgb, ink, clamp(edgeAmount, 0.0, 1.0));
+  }
+
+  if (hueAmount > 0.001) {
+    result.rgb = hueRotate(result.rgb, hueAmount * 6.2831853);
+  }
+
+  if (beatFlashAmount > 0.001) {
+    float flash = clamp(beatPulse, 0.0, 1.0) * beatFlashAmount;
+    result.rgb += vec3(flash * 1.15);
+  }
+
+  if (strobeAmount > 0.001) {
+    float rate = mix(3.0, 14.0, clamp(strobeAmount, 0.0, 1.0));
+    float gate = step(0.5, fract(timeSec * rate));
+    gate = max(gate, step(0.42, beatPulse));
+    result.rgb *= mix(1.0, gate, clamp(strobeAmount, 0.0, 1.0));
+  }
+
+  if (rimAmount > 0.001) {
+    float rim = smoothstep(0.18, 1.05, distance(uv, vec2(0.5)) * 1.4);
+    result.rgb += rim * rimAmount * vec3(0.72, 0.86, 1.0);
+  }
+
+  result.rgb = clamp(result.rgb, 0.0, 1.0);
   result.rgb = mix(result.rgb, vec3(1.0) - result.rgb, clamp(negativeAmount, 0.0, 1.0));
   gl_FragColor = result;
 }
@@ -262,6 +407,11 @@ export default class VisualizerManager {
   private lightMapReadTarget: THREE.WebGLRenderTarget | null = null
   private lightMapReadBuffer: Uint8Array | null = null
   private lightMapFrameTick = 0
+  private feedbackRead: THREE.WebGLRenderTarget | null = null
+  private feedbackWrite: THREE.WebGLRenderTarget | null = null
+  private blankFeedback: THREE.DataTexture
+  private presentScene: THREE.Scene
+  private presentMaterial: THREE.ShaderMaterial
 
   constructor() {
     this.renderer = new THREE.WebGLRenderer()
@@ -286,8 +436,22 @@ export default class VisualizerManager {
         anaglyphAmount: { value: 0 },
         parallaxAmount: { value: 0 },
         asciiAmount: { value: 0 },
-        afterImageAmount: { value: 0 },
+        feedbackTex: { value: null },
+        feedbackAmount: { value: 0 },
         posterizeAmount: { value: 0 },
+        pixelateAmount: { value: 0 },
+        radialBlurAmount: { value: 0 },
+        edgeAmount: { value: 0 },
+        beatFlashAmount: { value: 0 },
+        beatPulse: { value: 0 },
+        bloomAmount: { value: 0 },
+        filmGrainAmount: { value: 0 },
+        scanlineAmount: { value: 0 },
+        chromaAmount: { value: 0 },
+        mirrorAmount: { value: 0 },
+        hueAmount: { value: 0 },
+        strobeAmount: { value: 0 },
+        rimAmount: { value: 0 },
       },
       vertexShader: compositeVertexShader,
       fragmentShader: compositeFragmentShader,
@@ -299,6 +463,25 @@ export default class VisualizerManager {
       this.compositeMaterial
     )
     this.compositeScene.add(quad)
+    this.blankFeedback = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1)
+    this.blankFeedback.needsUpdate = true
+    this.presentMaterial = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null } },
+      vertexShader: compositeVertexShader,
+      fragmentShader: `
+        uniform sampler2D tex;
+        varying vec2 vUv;
+        void main() {
+          gl_FragColor = texture2D(tex, vUv);
+        }
+      `,
+      depthWrite: false,
+      depthTest: false,
+    })
+    this.presentScene = new THREE.Scene()
+    this.presentScene.add(
+      new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.presentMaterial)
+    )
   }
 
   getElement() {
@@ -413,6 +596,10 @@ export default class VisualizerManager {
     }
     const negativeAmount = this.getGlobalNegativeAmount(layerConfig, stuff.params)
     const overlayFx = this.getGlobalOverlayEffects(layerConfig, stuff.params)
+    const beatPulse = effectBeatPulse(
+      Number(res.rt.audio?.beatPulse ?? 0),
+      renderTime.beats
+    )
     const stageLightMapStrength = stageLightMapMasterFromEffects(
       layerConfig.builtin.effects,
       stuff.params
@@ -474,7 +661,8 @@ export default class VisualizerManager {
         toCompositeMode(this.transitionConfig.type),
         negativeAmount,
         overlayFx,
-        Date.now() / 1000,
+        (Date.now() % 60000) / 1000,
+        beatPulse,
         stageLightMapStrength,
         stageLightMapGrid
       )
@@ -507,7 +695,8 @@ export default class VisualizerManager {
       0,
       negativeAmount,
       overlayFx,
-      Date.now() / 1000,
+      (Date.now() % 60000) / 1000,
+      beatPulse,
       stageLightMapStrength,
       stageLightMapGrid
     )
@@ -570,6 +759,13 @@ export default class VisualizerManager {
     this.lightMapReadTarget?.dispose()
     this.lightMapReadTarget = null
     this.lightMapReadBuffer = null
+    this.feedbackRead?.dispose()
+    this.feedbackWrite?.dispose()
+    this.feedbackRead = null
+    this.feedbackWrite = null
+    this.blankFeedback.dispose()
+    this.presentMaterial.dispose()
+    this.presentScene.clear()
     this.compositeMaterial.dispose()
     this.compositeScene.clear()
     this.renderer.renderLists.dispose()
@@ -671,8 +867,21 @@ export default class VisualizerManager {
       ascii: number
       afterImage: number
       posterize: number
+      pixelate: number
+      radialBlur: number
+      edge: number
+      beatFlash: number
+      bloom: number
+      filmGrain: number
+      scanlines: number
+      chromaShift: number
+      mirror: number
+      hueShift: number
+      strobe: number
+      rimLight: number
     },
     beatTime: number,
+    beatPulse: number,
     _stageLightMapStrength: number,
     stageLightMapGrid: { width: number; height: number }
   ) {
@@ -693,12 +902,40 @@ export default class VisualizerManager {
     this.compositeMaterial.uniforms.anaglyphAmount.value = overlayFx.anaglyph
     this.compositeMaterial.uniforms.parallaxAmount.value = overlayFx.parallaxBarrier
     this.compositeMaterial.uniforms.asciiAmount.value = overlayFx.ascii
-    this.compositeMaterial.uniforms.afterImageAmount.value = overlayFx.afterImage
+    this.compositeMaterial.uniforms.feedbackAmount.value = overlayFx.afterImage
+    this.compositeMaterial.uniforms.feedbackTex.value =
+      this.feedbackRead?.texture ?? this.blankFeedback
     this.compositeMaterial.uniforms.posterizeAmount.value = overlayFx.posterize
+    this.compositeMaterial.uniforms.pixelateAmount.value = overlayFx.pixelate
+    this.compositeMaterial.uniforms.radialBlurAmount.value = overlayFx.radialBlur
+    this.compositeMaterial.uniforms.edgeAmount.value = overlayFx.edge
+    this.compositeMaterial.uniforms.beatFlashAmount.value = overlayFx.beatFlash
+    this.compositeMaterial.uniforms.beatPulse.value = beatPulse
+    this.compositeMaterial.uniforms.bloomAmount.value = overlayFx.bloom
+    this.compositeMaterial.uniforms.filmGrainAmount.value = overlayFx.filmGrain
+    this.compositeMaterial.uniforms.scanlineAmount.value = overlayFx.scanlines
+    this.compositeMaterial.uniforms.chromaAmount.value = overlayFx.chromaShift
+    this.compositeMaterial.uniforms.mirrorAmount.value = overlayFx.mirror
+    this.compositeMaterial.uniforms.hueAmount.value = overlayFx.hueShift
+    this.compositeMaterial.uniforms.strobeAmount.value = overlayFx.strobe
+    this.compositeMaterial.uniforms.rimAmount.value = overlayFx.rimLight
 
-    this.renderer.setRenderTarget(null)
-    this.renderer.clear()
-    this.renderer.render(this.compositeScene, this.compositeCamera)
+    if (overlayFx.afterImage > 0.001 && this.feedbackWrite !== null) {
+      this.renderer.setRenderTarget(this.feedbackWrite)
+      this.renderer.clear()
+      this.renderer.render(this.compositeScene, this.compositeCamera)
+      this.renderer.setRenderTarget(null)
+      this.renderer.clear()
+      this.presentMaterial.uniforms.tex.value = this.feedbackWrite.texture
+      this.renderer.render(this.presentScene, this.compositeCamera)
+      const previous = this.feedbackRead
+      this.feedbackRead = this.feedbackWrite
+      this.feedbackWrite = previous
+    } else {
+      this.renderer.setRenderTarget(null)
+      this.renderer.clear()
+      this.renderer.render(this.compositeScene, this.compositeCamera)
+    }
     // Always capture the downsampled composite for UI preview + DMX sampling cache.
     // (DMX still gates *application* by stage light map effect strength × visStageMapMix.)
     this.captureStageLightMapFrame(stageLightMapGrid)
@@ -786,6 +1023,17 @@ export default class VisualizerManager {
       this.toTarget = new THREE.WebGLRenderTarget(w, h)
     } else {
       this.toTarget.setSize(w, h)
+    }
+
+    const feedbackOptions = { depthBuffer: false, stencilBuffer: false }
+    if (this.feedbackRead === null || this.feedbackWrite === null) {
+      this.feedbackRead?.dispose()
+      this.feedbackWrite?.dispose()
+      this.feedbackRead = new THREE.WebGLRenderTarget(w, h, feedbackOptions)
+      this.feedbackWrite = new THREE.WebGLRenderTarget(w, h, feedbackOptions)
+    } else {
+      this.feedbackRead.setSize(w, h)
+      this.feedbackWrite.setSize(w, h)
     }
   }
 
@@ -883,6 +1131,18 @@ export default class VisualizerManager {
         ascii: 0,
         afterImage: 0,
         posterize: 0,
+        pixelate: 0,
+        radialBlur: 0,
+        edge: 0,
+        beatFlash: 0,
+        bloom: 0,
+        filmGrain: 0,
+        scanlines: 0,
+        chromaShift: 0,
+        mirror: 0,
+        hueShift: 0,
+        strobe: 0,
+        rimLight: 0,
       }
     }
 
@@ -894,6 +1154,18 @@ export default class VisualizerManager {
     let ascii = 0
     let afterImage = 0
     let posterize = 0
+    let pixelate = 0
+    let radialBlur = 0
+    let edge = 0
+    let beatFlash = 0
+    let bloom = 0
+    let filmGrain = 0
+    let scanlines = 0
+    let chromaShift = 0
+    let mirror = 0
+    let hueShift = 0
+    let strobe = 0
+    let rimLight = 0
     for (const effect of layerConfig.builtin.effects) {
       if (!effect.enabled) continue
       const linkValue = getBuiltinEffectLinkValue(effect.linkSource, params)
@@ -914,6 +1186,30 @@ export default class VisualizerManager {
         parallaxBarrier += weighted
       } else if (effect.type === 'ascii') {
         ascii += weighted
+      } else if (effect.type === 'pixelate') {
+        pixelate += weighted
+      } else if (effect.type === 'radialBlur') {
+        radialBlur += weighted
+      } else if (effect.type === 'edge') {
+        edge += weighted
+      } else if (effect.type === 'beatFlash') {
+        beatFlash += weighted
+      } else if (effect.type === 'bloom') {
+        bloom += weighted
+      } else if (effect.type === 'filmGrain') {
+        filmGrain += weighted
+      } else if (effect.type === 'scanlines') {
+        scanlines += weighted
+      } else if (effect.type === 'chromaShift') {
+        chromaShift += weighted
+      } else if (effect.type === 'mirror') {
+        mirror += weighted
+      } else if (effect.type === 'hueShift') {
+        hueShift += weighted
+      } else if (effect.type === 'strobe') {
+        strobe += weighted
+      } else if (effect.type === 'rimLight') {
+        rimLight += weighted
       }
     }
 
@@ -926,8 +1222,27 @@ export default class VisualizerManager {
       ascii: Math.min(1, Math.max(0, ascii)),
       afterImage: Math.min(1, Math.max(0, afterImage)),
       posterize: Math.min(1, Math.max(0, posterize)),
+      pixelate: Math.min(1, Math.max(0, pixelate)),
+      radialBlur: Math.min(1, Math.max(0, radialBlur)),
+      edge: Math.min(1, Math.max(0, edge)),
+      beatFlash: Math.min(1, Math.max(0, beatFlash)),
+      bloom: Math.min(1, Math.max(0, bloom)),
+      filmGrain: Math.min(1, Math.max(0, filmGrain)),
+      scanlines: Math.min(1, Math.max(0, scanlines)),
+      chromaShift: Math.min(1, Math.max(0, chromaShift)),
+      mirror: Math.min(1, Math.max(0, mirror)),
+      hueShift: Math.min(1, Math.max(0, hueShift)),
+      strobe: Math.min(1, Math.max(0, strobe)),
+      rimLight: Math.min(1, Math.max(0, rimLight)),
     }
   }
+}
+
+function effectBeatPulse(audioPulse: number, beats: number) {
+  const audio = Math.min(1, Math.max(0, Number.isFinite(audioPulse) ? audioPulse : 0))
+  const phase = ((beats % 1) + 1) % 1
+  const clock = Math.pow(1 - phase, 5)
+  return Math.min(1, Math.max(audio, clock))
 }
 
 function toCompositeMode(type: VisualSceneTransitionConfig['type']) {
