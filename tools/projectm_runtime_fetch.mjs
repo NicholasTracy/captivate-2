@@ -5,7 +5,6 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
 import https from 'https'
-import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -335,13 +334,19 @@ async function extractArchive(archivePath, destination) {
 
   if (lowerArchivePath.endsWith('.zip')) {
     if (process.platform === 'win32') {
-      await runCommand('powershell', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        `Expand-Archive -LiteralPath '${escapeForPowerShell(archivePath)}' -DestinationPath '${escapeForPowerShell(destination)}' -Force`,
+      await runFirstSuccessfulCommand([
+        { command: 'tar', args: ['-xf', archivePath, '-C', destination] },
+        {
+          command: 'powershell',
+          args: [
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            `Expand-Archive -LiteralPath '${escapeForPowerShell(archivePath)}' -DestinationPath '${escapeForPowerShell(destination)}' -Force`,
+          ],
+        },
       ])
       return
     }
@@ -511,9 +516,12 @@ async function ensureProjectMRuntimeDependencies(
  * Download and stage projectM runtime files into destinationDir.
  */
 export async function stageProjectMRuntime(destinationDir) {
-  const temporaryRoot = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), 'captivate-projectm-stage-')
+  const temporaryRoot = path.join(
+    path.dirname(path.resolve(destinationDir)),
+    '.captivate-projectm-stage'
   )
+  await fs.promises.rm(temporaryRoot, { recursive: true, force: true })
+  await fs.promises.mkdir(temporaryRoot, { recursive: true })
   try {
     const { releases } = await fetchReleaseCandidates()
     const selectedAsset = findBestRuntimeAsset(releases)
@@ -536,8 +544,16 @@ export async function stageProjectMRuntime(destinationDir) {
     )
     const runtimeBinary = pickBestProjectMLibraryFile(runtimeLibraries)
     if (runtimeBinary === null) {
+      const archiveSize = await fs.promises
+        .stat(runtimeArchive)
+        .then((stat) => stat.size)
+        .catch(() => -1)
+      const extracted = await findMatchingFiles(runtimeExtractDir, () => true)
+      const sample = extracted
+        .slice(0, 20)
+        .map((filePath) => path.relative(runtimeExtractDir, filePath))
       throw new Error(
-        `Runtime archive ${selectedAsset.asset.name} did not contain a projectM library for ${describeCurrentPlatform()}.`
+        `Runtime archive ${selectedAsset.asset.name} (${archiveSize} bytes) did not contain a projectM library for ${describeCurrentPlatform()}. Saw: ${sample.join(', ') || 'no files'}.`
       )
     }
 
