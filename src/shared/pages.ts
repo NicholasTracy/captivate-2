@@ -4,6 +4,7 @@ export type Page =
   | 'Lighting3D'
   | 'Atmospherics'
   | 'Modulation'
+  | 'OneShots'
   | 'Performance'
   | 'Video'
   | 'VideoViewport'

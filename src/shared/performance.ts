@@ -22,6 +22,13 @@ export interface PerformanceControl {
   value: number
   /** Accent color (CSS hex) for the pad/slider chrome. */
   color: string
+  /**
+   * Optional OSC out on this control (in addition to the auto `/captivate/…` bus).
+   * Published only when Connections OSC send is on and `oscAddress` is a path.
+   */
+  oscSendEnabled: boolean
+  /** OSC path, e.g. `/performance/master`. Empty or not starting with `/` is not sent. */
+  oscAddress: string
 }
 
 export interface PerformanceBank {
@@ -101,6 +108,8 @@ export function createPerformanceControl(
     grid: normalizeGridCell(grid, kind),
     value: 0,
     color: normalizePerformanceColor(color ?? PERFORMANCE_DEFAULT_COLOR),
+    oscSendEnabled: false,
+    oscAddress: '',
   }
 }
 
@@ -207,6 +216,8 @@ export function normalizePerformanceBank(raw: unknown): PerformanceBank {
           ? Math.min(1, Math.max(0, c.value))
           : 0,
       color: normalizePerformanceColor(c.color),
+      oscSendEnabled: c.oscSendEnabled === true,
+      oscAddress: normalizePerformanceOscAddress(c.oscAddress),
     }
     order.push(controlId)
   }
@@ -230,4 +241,50 @@ export function normalizePerformanceBank(raw: unknown): PerformanceBank {
 export function autoLabelFromDestinationHint(hint: string): string {
   const trimmed = hint.trim()
   return trimmed.length > 0 ? trimmed : 'Control'
+}
+
+const OSC_ADDRESS_MAX = 128
+
+/** Keep a user-typed OSC path (trimmed). Validity is checked at send time. */
+export function normalizePerformanceOscAddress(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return ''
+  return trimmed.length > OSC_ADDRESS_MAX
+    ? trimmed.slice(0, OSC_ADDRESS_MAX)
+    : trimmed
+}
+
+/**
+ * A control OSC out is sendable when it is a non-empty path starting with `/`
+ * and contains no whitespace.
+ */
+export function isSendablePerformanceOscAddress(address: string): boolean {
+  return (
+    address.startsWith('/') && address.length > 1 && !/\s/.test(address)
+  )
+}
+
+function isPerformanceRouteAction(raw: unknown): raw is { type: string } {
+  return (
+    !!raw &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    typeof (raw as { type?: unknown }).type === 'string' &&
+    (raw as { type: string }).type.length > 0
+  )
+}
+
+/**
+ * Migrate `performanceRoutes[controlId]` to a list.
+ * A legacy save stored one MidiAction object (`{ type: string, ... }`).
+ */
+export function normalizePerformanceRouteList(raw: unknown): Array<{
+  type: string
+}> {
+  if (Array.isArray(raw)) {
+    return raw.filter(isPerformanceRouteAction)
+  }
+  if (isPerformanceRouteAction(raw)) return [raw]
+  return []
 }

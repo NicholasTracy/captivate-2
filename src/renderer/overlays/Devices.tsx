@@ -15,6 +15,8 @@ import {
   setOscSendHost,
   setOscSendPort,
   setLinkRole,
+  setProDjLinkEnabled,
+  setProDjLinkFollow,
   setOpenDmxRefreshRateHz,
   setUniverseCount,
   setDmxDeviceUniverse,
@@ -22,6 +24,14 @@ import {
   setArtNetUniverseRoute,
 } from '../redux/controlSlice'
 import type { LinkRole } from '../redux/deviceState'
+import {
+  formatProDjBpm,
+  formatProDjPitch,
+  initProDjLinkStatus,
+  isProDjDeviceFollowed,
+  proDjStatusLine,
+  type ProDjLinkDeviceView,
+} from '../../shared/proDjLink'
 import CloseIcon from '@mui/icons-material/Close'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
@@ -177,6 +187,7 @@ export default function Devices({
           </SectionHeader>
           <ArtNetDevices />
         </ConnectionSection>
+        <div data-tour="tour-show-control" style={{ display: 'contents' }}>
         <ConnectionSection>
           <SectionHeader title="MIDI" helpAriaLabel="How to set up MIDI">
             <HelpTitle>How to set up MIDI</HelpTitle>
@@ -285,6 +296,36 @@ export default function Devices({
           </SectionHeader>
           <AbletonLinkConnections />
         </ConnectionSection>
+        <ConnectionSection>
+          <SectionHeader title="Pro DJ Link" helpAriaLabel="How to follow CDJs">
+            <HelpTitle>How to follow CDJs</HelpTitle>
+            <HelpIntro>
+              Captivate listens for Pioneer Pro DJ Link on this network and follows
+              the pitched tempo of a CDJ that is actually playing.
+            </HelpIntro>
+            <HelpList>
+              <li>
+                Checked players are eligible. If one of them is playing, tempo and
+                beat phase follow that deck, including the pitch slider.
+              </li>
+              <li>
+                If several checked players are playing, the tempo master wins.
+                Otherwise the deck that sent the latest beat wins.
+              </li>
+              <li>
+                If none of the checked CDJs are playing, tempo coasts at the last
+                CDJ BPM. A mixer metronome is used only when no player is checked.
+              </li>
+              <li>
+                Link role Follow still blocks local tempo, so use Full or Leader
+                if the CDJs should set the clock. This turns off MIDI clock in and
+                audio beat clock.
+              </li>
+            </HelpList>
+          </SectionHeader>
+          <ProDjLinkConnections />
+        </ConnectionSection>
+        </div>
         {!hideRemoteControl ? <RemoteControlSection /> : null}
       </ConnectionsGrid>
       <DmxTroubleShoot />
@@ -430,7 +471,8 @@ function MidiClockBpmControl({ midiConnected }: { midiConnected: boolean }) {
             When this is on, master BPM follows MIDI timing clock (24 pulses per
             quarter note) from any enabled MIDI input above. Your DAW or hardware
             must send clock on that port. Only one external BPM source can be active
-            at a time — this disables audio beat clock and MIDI clock out (loop guard).
+            at a time — this disables audio beat clock, Pro DJ Link follow, and MIDI
+            clock out (loop guard).
           </FieldHelpButton>
         </MidiClockLabelGroup>
         <ToggleSwitch
@@ -761,6 +803,195 @@ function AbletonLinkConnections() {
     </>
   )
 }
+
+function ProDjLinkConnections() {
+  const dispatch = useDispatch()
+  const enabled = useControlSelector(
+    (state) => state.device.connectionSettings.proDjLinkEnabled === true
+  )
+  const explicit = useControlSelector(
+    (state) => state.device.connectionSettings.proDjLinkFollowExplicit === true
+  )
+  const followIds = useControlSelector(
+    (state) => state.device.connectionSettings.proDjLinkFollowIds ?? []
+  )
+  const linkRole = useControlSelector(
+    (state) => state.device.connectionSettings.linkRole ?? 'full'
+  )
+  const status = useTypedSelector(
+    (state) => state.gui.proDj ?? initProDjLinkStatus()
+  )
+  const statusText = proDjStatusLine(status)
+  const blockedByLinkFollow = enabled && linkRole === 'follow'
+
+  const toggleDevice = (device: ProDjLinkDeviceView) => {
+    const checked = isProDjDeviceFollowed(device, explicit, followIds)
+    let ids = explicit
+      ? [...followIds]
+      : status.devices
+          .filter((item) => item.kind === 'player')
+          .map((item) => item.id)
+    if (checked) {
+      ids = ids.filter((id) => id !== device.id)
+    } else if (!ids.includes(device.id)) {
+      ids.push(device.id)
+    }
+    dispatch(setProDjLinkFollow({ explicit: true, ids }))
+  }
+
+  return (
+    <MidiClockBlock>
+      <MidiClockRow>
+        <MidiClockLabelGroup>
+          <MidiClockLabel>Follow CDJ tempo</MidiClockLabel>
+          <FieldHelpButton ariaLabel="How CDJ tempo follow works">
+            Captivate announces itself on Pro DJ Link so CDJs send play state.
+            Effective BPM is the track tempo times the pitch slider. While a
+            checked CDJ is playing, that tempo is applied. When every checked
+            CDJ is stopped, the last tempo is held.
+          </FieldHelpButton>
+        </MidiClockLabelGroup>
+        <ToggleSwitch
+          checked={enabled}
+          onChange={(next) => dispatch(setProDjLinkEnabled(next))}
+          aria-label="Follow CDJ tempo"
+        />
+      </MidiClockRow>
+      {enabled ? (
+        <>
+          {status.devices.length === 0 ? (
+            <OscStatusText $ok={false} $error={Boolean(status.error)}>
+              {statusText}
+            </OscStatusText>
+          ) : (
+            <ProDjList>
+              {status.devices.map((device) => {
+                const checked = isProDjDeviceFollowed(device, explicit, followIds)
+                const bpm = device.effectiveBpm ?? device.trackBpm
+                const roles = [
+                  device.isMaster ? 'Master' : null,
+                  device.isSync ? 'Sync' : null,
+                  device.isOnAir ? 'On air' : null,
+                ].filter((role): role is string => role !== null)
+                return (
+                  <ProDjRow key={device.id}>
+                    <ProDjCheck
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleDevice(device)}
+                      aria-label={`Follow ${device.name}`}
+                    />
+                    <ProDjIdentity>
+                      <ProDjName>
+                        {device.name}
+                        {checked && status.followDeviceId === device.id
+                          ? ' · following'
+                          : ''}
+                      </ProDjName>
+                      <ProDjMeta>
+                        {proDjKindLabel(device)}
+                        {' · '}
+                        {device.playLabel}
+                        {roles.length > 0 ? ` · ${roles.join(' · ')}` : ''}
+                        {device.beatInBar !== null
+                          ? ` · beat ${device.beatInBar}`
+                          : ''}
+                      </ProDjMeta>
+                    </ProDjIdentity>
+                    <ProDjTempo>
+                      <div>{formatProDjBpm(bpm)}</div>
+                      <ProDjPitch>
+                        {formatProDjPitch(device.pitchPercent)}
+                      </ProDjPitch>
+                    </ProDjTempo>
+                  </ProDjRow>
+                )
+              })}
+            </ProDjList>
+          )}
+          {status.devices.length > 0 ? (
+            <OscStatusText
+              $ok={status.mode === 'following'}
+              $error={Boolean(status.error)}
+            >
+              {statusText}
+              {blockedByLinkFollow
+                ? ' Link role is Follow, so this tempo is not applied.'
+                : ''}
+            </OscStatusText>
+          ) : blockedByLinkFollow ? (
+            <OscStatusText $ok={false} $error={false}>
+              Link role is Follow, so CDJ tempo is not applied. Use Full or
+              Leader.
+            </OscStatusText>
+          ) : null}
+        </>
+      ) : (
+        <OscStatusText $ok={false} $error={false}>
+          Off. CDJs on this network show up here when follow is on.
+        </OscStatusText>
+      )}
+    </MidiClockBlock>
+  )
+}
+
+function proDjKindLabel(device: ProDjLinkDeviceView): string {
+  if (device.kind === 'player') return `Player ${device.id}`
+  if (device.kind === 'mixer') return `Mixer ${device.id}`
+  if (device.kind === 'rekordbox') return 'rekordbox'
+  return `Device ${device.id}`
+}
+
+const ProDjList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+`
+
+const ProDjRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+`
+
+const ProDjCheck = styled.input`
+  margin: 0;
+  flex: 0 0 auto;
+`
+
+const ProDjIdentity = styled.div`
+  min-width: 0;
+  flex: 1 1 auto;
+`
+
+const ProDjName = styled.div`
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: ${(p) => p.theme.colors.text.primary};
+`
+
+const ProDjMeta = styled.div`
+  font-size: 0.68rem;
+  color: ${(p) => p.theme.colors.text.secondary};
+`
+
+const ProDjTempo = styled.div`
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: ${(p) => p.theme.colors.text.primary};
+`
+
+const ProDjPitch = styled.div`
+  font-size: 0.66rem;
+  color: ${(p) => p.theme.colors.text.secondary};
+`
 
 function ArtNetDevices() {
   const dispatch = useDispatch()

@@ -25,7 +25,11 @@ export function redoAction(group: UndoGroup) {
 
 export function getUndoGroup(state: ReduxState): UndoGroup | null {
   if (state.gui.activePage === 'Universe' || state.gui.activePage === 'Movers') return 'dmx'
-  else if (state.gui.activePage === 'Modulation' || state.gui.activePage === 'Video')
+  else if (
+    state.gui.activePage === 'Modulation' ||
+    state.gui.activePage === 'OneShots' ||
+    state.gui.activePage === 'Video'
+  )
     return 'control'
   return null
 }

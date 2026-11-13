@@ -14,6 +14,7 @@ import {
   DEFAULT_OSC_SEND_PORT,
   encodeOscMessage,
 } from '../../shared/osc'
+import { isSendablePerformanceOscAddress } from '../../shared/performance'
 import type { CleanReduxState } from '../../renderer/redux/store'
 import type { RealtimeState } from '../../renderer/redux/realtimeStore'
 import type { OscConnections } from '../../shared/connection'
@@ -37,6 +38,7 @@ let _lastMidiNoteByKey: { [key: string]: number } = {}
 let _lastClockTickAtMs = 0
 let _lastPlaying: boolean | null = null
 let _lastOscStatusKey = ''
+let _lastPerformanceOsc: { [key: string]: number } = {}
 
 export function resetControlBusPublishState(): void {
   _lastPublishAtMs = 0
@@ -47,6 +49,7 @@ export function resetControlBusPublishState(): void {
   _lastClockTickAtMs = 0
   _lastPlaying = null
   _lastOscStatusKey = ''
+  _lastPerformanceOsc = {}
 }
 
 export function publishControlBusTick(
@@ -103,6 +106,7 @@ function publishOsc(
     ) {
       sendError =
         'OSC send blocked: destination equals local listen port (loop guard)'
+      _lastPerformanceOsc = {}
     } else {
       sending = true
       const flat = flattenControlBusAddresses(snapshot)
@@ -133,9 +137,11 @@ function publishOsc(
         ])
         OscConnection.sendTo(sendHost, sendPort, buffer)
       }
+      publishPerformanceOscOut(controlState, sendHost, sendPort)
     }
   } else {
     _lastOscValues = {}
+    _lastPerformanceOsc = {}
   }
 
   const listenStatus = OscConnection.getLastStatus()
@@ -199,6 +205,15 @@ function resolveMidiOutNormalizedValue(
   } else if (action.type === 'setPerformanceValue') {
     raw =
       controlState.control.performance.controls[action.controlId]?.value ?? 0
+  } else if (action.type === 'setModulationAmount') {
+    const scene =
+      controlState.control.light.byId[controlState.control.light.active]
+    const modulator = scene?.modulators[action.modIndex]
+    if (!modulator) return null
+    const stored = action.param.startsWith('intermod:lfo:')
+      ? modulator.lfoInterModulation?.[action.param]
+      : modulator.splitModulations[action.splitIndex]?.[action.param]
+    raw = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0.5
   } else {
     return null
   }
@@ -235,7 +250,46 @@ function resolveMidiOutNoteOn(
     const activeIndex = scenes.ids.indexOf(scenes.active)
     return activeIndex === action.index
   }
+  if (action.type === 'firePerformancePad') {
+    const value =
+      controlState.control.performance.controls[action.controlId]?.value ?? 0
+    return value >= 0.5
+  }
   return null
+}
+
+function publishPerformanceOscOut(
+  controlState: CleanReduxState,
+  sendHost: string,
+  sendPort: number
+): void {
+  const controls = controlState.control.performance.controls
+  const seen = new Set<string>()
+  for (const control of Object.values(controls)) {
+    if (!control || control.oscSendEnabled !== true) continue
+    const address = control.oscAddress.trim()
+    if (!isSendablePerformanceOscAddress(address)) continue
+    const isPad = control.kind === 'pad'
+    const value = isPad
+      ? control.value >= 0.5
+        ? 1
+        : 0
+      : Math.min(1, Math.max(0, control.value))
+    const key = `${control.id}\0${address}`
+    seen.add(key)
+    const prev = _lastPerformanceOsc[key]
+    if (prev !== undefined && controlBusValuesEqual(prev, value)) continue
+    _lastPerformanceOsc[key] = value
+    const buffer = encodeOscMessage(address, [
+      isPad
+        ? { type: 'i', value }
+        : { type: 'f', value },
+    ])
+    OscConnection.sendTo(sendHost, sendPort, buffer)
+  }
+  for (const key of Object.keys(_lastPerformanceOsc)) {
+    if (!seen.has(key)) delete _lastPerformanceOsc[key]
+  }
 }
 
 function publishMidiOutMappings(

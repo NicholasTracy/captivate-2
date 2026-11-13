@@ -6,6 +6,7 @@ export default {
   midi_connection_update: 'midi_connection_update',
   midi_out_connection_update: 'midi_out_connection_update',
   osc_connection_update: 'osc_connection_update',
+  pro_dj_link_update: 'pro_dj_link_update',
   new_control_state: 'new_control_state',
   /** Full Redux snapshot for Lighting 3D preview only (structure + patch). */
   lighting3d_preview_bootstrap: 'lighting3d_preview_bootstrap',
@@ -82,6 +83,13 @@ export default {
   remote_control_regenerate_pin: 'remote_control_regenerate_pin',
   submit_fixture_to_community_library: 'submit_fixture_to_community_library',
   fixture_library_submit_progress: 'fixture_library_submit_progress',
+  helios_scan: 'helios_scan',
+  helios_status: 'helios_status',
+  helios_connect: 'helios_connect',
+  helios_disconnect: 'helios_disconnect',
+  helios_set_armed: 'helios_set_armed',
+  helios_test_pattern: 'helios_test_pattern',
+  helios_set_points: 'helios_set_points',
 } as const
 
 export interface SetLinkEnabled {

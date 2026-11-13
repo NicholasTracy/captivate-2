@@ -127,6 +127,18 @@ interface SetActivePageAction {
   page: Page
 }
 
+/**
+ * Modulation-matrix depth (0..1, 0.5 = off) on the active light scene.
+ * `param` is a key of `modulators[modIndex].splitModulations[splitIndex]`,
+ * or an `intermod:lfo:` key of `modulators[modIndex].lfoInterModulation`.
+ */
+interface SetModulationAmount {
+  type: 'setModulationAmount'
+  modIndex: number
+  splitIndex: number
+  param: string
+}
+
 /** MIDI/OSC/slider learn target → performance bank control value (0..1). */
 interface SetPerformanceValue {
   type: 'setPerformanceValue'
@@ -137,6 +149,12 @@ interface SetPerformanceValue {
 interface FirePerformancePad {
   type: 'firePerformancePad'
   controlId: string
+}
+
+/** Fire a one-shot for its beat length. MIDI, OSC, keyboard, and pads. */
+interface FireOneShot {
+  type: 'fireOneShot'
+  oneShotId: string
 }
 
 interface ConnectionSettings {
@@ -176,6 +194,14 @@ interface ConnectionSettings {
    * - follow: only Link session tempo drives BPM (UI/MIDI/OSC/audio clock do not setTempo)
    */
   linkRole: LinkRole
+  /** Follow Pioneer Pro DJ Link tempo from CDJs on the network. */
+  proDjLinkEnabled: boolean
+  /**
+   * When false, every discovered player is followed. When true, only
+   * `proDjLinkFollowIds` are followed (players and any mixers the user checked).
+   */
+  proDjLinkFollowExplicit: boolean
+  proDjLinkFollowIds: number[]
   atmos: AtmosSettings
 }
 
@@ -187,6 +213,7 @@ export const buttonMidiActionTypes: Set<MidiAction['type']> = new Set([
   'triggerAtmosFixture',
   'setActivePage',
   'firePerformancePad',
+  'fireOneShot',
 ])
 
 export type MidiAction =
@@ -201,8 +228,10 @@ export type MidiAction =
   | ToggleBlackout
   | TriggerAtmosFixture
   | SetActivePageAction
+  | SetModulationAmount
   | SetPerformanceValue
   | FirePerformancePad
+  | FireOneShot
 
 /** Slider-style actions published as MIDI CC out. */
 export const midiOutSliderActionTypes: Set<MidiAction['type']> = new Set([
@@ -212,6 +241,7 @@ export const midiOutSliderActionTypes: Set<MidiAction['type']> = new Set([
   'setGroupIntensity',
   'setAutoSceneBombacity',
   'setPerformanceValue',
+  'setModulationAmount',
 ])
 
 /** Stateful button actions published as MIDI note on/off out. */
@@ -220,6 +250,7 @@ export const midiOutNoteActionTypes: Set<MidiAction['type']> = new Set([
   'setActiveSceneIndex',
   'setActivePage',
   'toggleAutoScene',
+  'firePerformancePad',
 ])
 
 export function supportsMidiOut(action: MidiAction): boolean {
@@ -395,6 +426,12 @@ export function getActionID(action: MidiAction) {
   if (action.type === 'setPerformanceValue' || action.type === 'firePerformancePad') {
     return action.type + action.controlId
   }
+  if (action.type === 'fireOneShot') {
+    return action.type + action.oneShotId
+  }
+  if (action.type === 'setModulationAmount') {
+    return `${action.type}:${action.modIndex}:${action.splitIndex}:${action.param}`
+  }
   return action.type
 }
 
@@ -516,6 +553,9 @@ export function initDeviceState(): DeviceState {
       linkEnabled: false,
       linkStartStopSyncEnabled: false,
       linkRole: 'full',
+      proDjLinkEnabled: false,
+      proDjLinkFollowExplicit: false,
+      proDjLinkFollowIds: [],
       atmos: initAtmosSettings(),
     },
   }
@@ -843,6 +883,7 @@ export const midiActions = {
     }
     if (payload === true) {
       state.connectionSettings.midiClockBpmEnabled = false
+      state.connectionSettings.proDjLinkEnabled = false
     }
   },
   setMidiClockBpmEnabled: (
@@ -856,6 +897,7 @@ export const midiActions = {
         ...current,
         useBeatClock: false,
       }
+      state.connectionSettings.proDjLinkEnabled = false
       // Avoid MIDI clock feedback loops.
       state.connectionSettings.midiClockOutEnabled = false
     }
@@ -904,6 +946,35 @@ export const midiActions = {
   },
   setLinkRole: (state: DeviceState, { payload }: PayloadAction<LinkRole>) => {
     state.connectionSettings.linkRole = normalizeLinkRole(payload)
+  },
+  setProDjLinkEnabled: (
+    state: DeviceState,
+    { payload }: PayloadAction<boolean>
+  ) => {
+    state.connectionSettings.proDjLinkEnabled = payload === true
+    if (payload === true) {
+      state.connectionSettings.midiClockBpmEnabled = false
+      const current = normalizeAudioInputSettings(
+        state.connectionSettings.audioInput
+      )
+      state.connectionSettings.audioInput = {
+        ...current,
+        useBeatClock: false,
+      }
+    }
+  },
+  setProDjLinkFollow: (
+    state: DeviceState,
+    { payload }: PayloadAction<{ explicit: boolean; ids: number[] }>
+  ) => {
+    state.connectionSettings.proDjLinkFollowExplicit = payload.explicit === true
+    const ids = Array.isArray(payload.ids) ? payload.ids : []
+    const unique: number[] = []
+    for (const id of ids) {
+      if (!Number.isInteger(id) || id < 1 || id > 255) continue
+      if (!unique.includes(id)) unique.push(id)
+    }
+    state.connectionSettings.proDjLinkFollowIds = unique
   },
   setAudioBeatSensitivity: (
     state: DeviceState,

@@ -11,7 +11,7 @@ import {
   ProjectMBridgeStatus,
   ProjectMBridgeTransport,
 } from '../../shared/projectmBridge'
-import { detectProjectMRuntime } from './projectmRuntime'
+import { detectProjectMRuntime, listProjectMPresets } from './projectmRuntime'
 
 interface ProjectMBridgeNativeAddon {
   createSession: (request: ProjectMBridgeSessionInitRequest) => boolean
@@ -68,6 +68,7 @@ interface ProjectMBridgePresetLoadRequest {
 export default class ProjectMBridgeManager {
   private addon: ProjectMBridgeNativeAddon | null = null
   private addonPath: string | null = null
+  private addonLoadError: string | null = null
   private sessions = new Map<string, BridgeSessionState>()
   /** One Node child per native session so a blocking createSession cannot stall other sessions' render/audio. */
   private nativeSessionWorkers = new Map<string, ChildProcess>()
@@ -85,6 +86,7 @@ export default class ProjectMBridgeManager {
     const loaded = tryLoadProjectMBridgeAddon()
     this.addon = loaded.addon
     this.addonPath = loaded.path
+    this.addonLoadError = loaded.error
     this.workerFailureMessage = null
   }
 
@@ -104,14 +106,30 @@ export default class ProjectMBridgeManager {
           ? `projectM bridge worker unavailable (${this.workerFailureMessage}). Running fallback bridge.`
           : this.addon !== null
             ? 'projectM bridge native addon loaded.'
-            : 'projectM bridge native addon missing. Running built-in compatibility bridge.',
+            : this.addonLoadError !== null
+              ? `projectM bridge addon failed to load. ${this.addonLoadError}`
+              : 'projectM bridge native addon missing. Running built-in compatibility bridge.',
     }
   }
 
   async initSession(
     request: ProjectMBridgeSessionInitRequest
   ): Promise<ProjectMBridgeSessionInitResult> {
-    const normalizedRequest = normalizeSessionInitRequest(request)
+    let normalizedRequest = normalizeSessionInitRequest(request)
+    if (normalizedRequest.presetPath.trim().length === 0) {
+      const catalog = await listProjectMPresets()
+      const defaultPreset = catalog.presets[0]?.path ?? ''
+      if (defaultPreset.length > 0) {
+        normalizedRequest = {
+          ...normalizedRequest,
+          presetPath: defaultPreset,
+          texturePath:
+            normalizedRequest.texturePath.trim().length > 0
+              ? normalizedRequest.texturePath
+              : path.dirname(defaultPreset),
+        }
+      }
+    }
     const runtime = detectProjectMRuntime()
     if (!runtime.available) {
       const fallback = this.createFallbackSession(normalizedRequest)
@@ -842,10 +860,60 @@ function hueToChannel(p: number, q: number, t: number) {
   return p
 }
 
+function collectDevBridgeCandidates() {
+  const candidates: string[] = []
+  const seenRoots = new Set<string>()
+  const pushRoot = (root: string) => {
+    candidates.push(
+      path.join(root, 'assets', 'projectm-bridge', 'projectm_bridge.node'),
+      path.join(
+        root,
+        'native',
+        'projectm-bridge',
+        'build',
+        'Release',
+        'projectm_bridge.node'
+      ),
+      path.join(
+        root,
+        'native',
+        'projectm-bridge',
+        'build',
+        'Debug',
+        'projectm_bridge.node'
+      ),
+      path.join(root, 'native', 'projectm-bridge', 'projectm_bridge.node')
+    )
+  }
+  for (const seed of [process.cwd(), __dirname]) {
+    let current = path.resolve(seed)
+    for (let depth = 0; depth < 8; depth++) {
+      const key = current.toLowerCase()
+      if (!seenRoots.has(key)) {
+        seenRoots.add(key)
+        const hasBridge = existsSync(
+          path.join(current, 'assets', 'projectm-bridge', 'projectm_bridge.node')
+        )
+        const hasNative = existsSync(
+          path.join(current, 'native', 'projectm-bridge', 'binding.gyp')
+        )
+        if (hasBridge || hasNative) {
+          pushRoot(current)
+        }
+      }
+      const parent = path.dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  }
+  return candidates
+}
+
 function tryLoadProjectMBridgeAddon() {
   ensureRuntimeLibraryOnPath()
   const dynamicRequire = eval('require') as NodeRequire
   const candidates = getAddonCandidates()
+  let lastError: string | null = null
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue
 
@@ -860,14 +928,19 @@ function tryLoadProjectMBridgeAddon() {
         return {
           addon: loaded as ProjectMBridgeNativeAddon,
           path: candidate,
+          error: null,
         }
       }
-    } catch (_err) {}
+      lastError = `${candidate} is missing the projectM bridge exports.`
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+    }
   }
 
   return {
     addon: null,
     path: null,
+    error: lastError,
   }
 }
 
@@ -926,6 +999,7 @@ function getAddonCandidates() {
     )
   } else {
     candidates.push(
+      ...collectDevBridgeCandidates(),
       path.join(
         __dirname,
         '../../assets/projectm-bridge/projectm_bridge.node'

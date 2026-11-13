@@ -5,6 +5,7 @@ import type { MidiAction } from './deviceState'
 import {
   setActiveSceneIndex,
   setAutoSceneEnabled,
+  triggerOneShot,
 } from './controlSlice'
 import {
   setBlackout,
@@ -57,5 +58,12 @@ export function fireMidiButtonAction(
     dispatch(fireAtmosManualTrigger(action.fixtureId))
   } else if (action.type === 'setActivePage') {
     dispatch(setActivePage(action.page))
+  } else if (action.type === 'fireOneShot') {
+    dispatch(
+      triggerOneShot({
+        id: action.oneShotId,
+        startBeat: rt_state.time.beats,
+      })
+    )
   }
 }

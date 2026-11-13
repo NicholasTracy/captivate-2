@@ -29,7 +29,11 @@ import { DmxState, normalizeLighting3DSettings } from 'renderer/redux/dmxSlice'
 import { initLedState } from 'renderer/redux/ledState'
 import { normalizeAppSettings } from './appSettings'
 import { normalizeGroupIntensityMap } from './groupIntensity'
-import { normalizePerformanceBank } from './performance'
+import {
+  normalizePerformanceBank,
+  normalizePerformanceRouteList,
+} from './performance'
+import { normalizeOneShots } from './oneShots'
 import type { CleanReduxState } from '../renderer/redux/store'
 import { MixerState } from 'renderer/redux/mixerSlice'
 import { ColorChannel, inferColorKind } from './dmxColors'
@@ -472,6 +476,7 @@ export default function fixState(state: CleanReduxState): CleanReduxState {
   )
   fixGuiState(state.gui)
   fixLightScenes(state.control.light)
+  state.control.oneShots = normalizeOneShots(state.control.oneShots)
   fixVisualScenes(state.control.visual)
   fixScenesAuto(state.control.light.auto)
   fixScenesAuto(state.control.visual.auto)
@@ -572,6 +577,17 @@ export function fixLightScenes(light: LightScenes_t) {
     }
     if (!scene.performanceRoutes || typeof scene.performanceRoutes !== 'object') {
       scene.performanceRoutes = {}
+    } else {
+      for (const controlId of Object.keys(scene.performanceRoutes)) {
+        const list = normalizePerformanceRouteList(
+          scene.performanceRoutes[controlId]
+        )
+        if (list.length === 0) {
+          delete scene.performanceRoutes[controlId]
+        } else {
+          scene.performanceRoutes[controlId] = list
+        }
+      }
     }
     if (!Array.isArray(scene.splitScenes) || scene.splitScenes.length === 0) {
       scene.splitScenes = [initSplitScene()]
@@ -1213,6 +1229,9 @@ export function fixDeviceState(deviceState: DeviceState) {
       linkEnabled: false,
       linkStartStopSyncEnabled: false,
       linkRole: 'full',
+      proDjLinkEnabled: false,
+      proDjLinkFollowExplicit: false,
+      proDjLinkFollowIds: [],
       atmos: initAtmosSettings(),
     }
   }
@@ -1254,6 +1273,31 @@ export function fixDeviceState(deviceState: DeviceState) {
   deviceState.connectionSettings.linkRole = normalizeLinkRole(
     deviceState.connectionSettings.linkRole
   )
+  deviceState.connectionSettings.proDjLinkEnabled =
+    deviceState.connectionSettings.proDjLinkEnabled === true
+  deviceState.connectionSettings.proDjLinkFollowExplicit =
+    deviceState.connectionSettings.proDjLinkFollowExplicit === true
+  const rawFollowIds = deviceState.connectionSettings.proDjLinkFollowIds
+  const followIds: number[] = []
+  if (Array.isArray(rawFollowIds)) {
+    for (const id of rawFollowIds) {
+      if (!Number.isInteger(id) || id < 1 || id > 255) continue
+      if (!followIds.includes(id)) followIds.push(id)
+    }
+  }
+  deviceState.connectionSettings.proDjLinkFollowIds = followIds
+  if (
+    deviceState.connectionSettings.proDjLinkEnabled &&
+    deviceState.connectionSettings.midiClockBpmEnabled
+  ) {
+    deviceState.connectionSettings.proDjLinkEnabled = false
+  }
+  if (deviceState.connectionSettings.proDjLinkEnabled) {
+    const audio = deviceState.connectionSettings.audioInput
+    if (audio && audio.useBeatClock === true) {
+      audio.useBeatClock = false
+    }
+  }
 
   if (deviceState.connectionSettings.universeCount === undefined) {
     deviceState.connectionSettings.universeCount = 1

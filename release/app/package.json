@@ -1,6 +1,6 @@
 {
   "name": "captivate2",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Visual & Lighting Synth — live DMX and visuals synchronized to music.",
   "homepage": "https://nicholastracy.github.io/captivate-2/",
   "repository": {
@@ -24,6 +24,7 @@
     "koffi": "^2.8.0",
     "midi": "npm:@julusian/midi@^3.6.1",
     "node-link": "file:node-link",
-    "serialport": "^10.4.0"
+    "serialport": "^10.4.0",
+    "usb": "^2.17.0"
   }
 }

@@ -14,6 +14,7 @@ authors tempo in a shared session.
 | OSC learn (address → actions) | In | [osc-mapping.md](osc-mapping.md) |
 | OSC auto-publish `/captivate/…` | Out | [osc-mapping.md](osc-mapping.md) |
 | Ableton Link + tempo role | Sync | This page |
+| Pro DJ Link (CDJ / DJM BPM) | In | This page |
 | LAN remote UI | In/out | [remote-control.md](remote-control.md) |
 
 Settings live on `control.device` / `connectionSettings` and save with
@@ -49,13 +50,30 @@ When Link is on (Connections → Ableton Link), choose a **Link role**:
 Start/stop sync remains the separate **Start/stop sync** toggle; role mainly
 affects **tempo authorship**.
 
+## Pro DJ Link
+
+Connections → **Pro DJ Link** follows Pioneer CDJs (and, if you check it, a DJM)
+on the local network. Captivate announces a virtual player so the decks send
+status, then reads beat packets for the pitched tempo.
+
+- Effective BPM is track BPM times the pitch slider (`0x100000` = 0%).
+- Among the checked CDJs, a deck that is playing is the tempo source. If more
+  than one is playing, the tempo master wins, otherwise the latest beat.
+- If no checked CDJ is playing, Captivate coasts at the last CDJ BPM. Audio beat
+  clock and MIDI clock in stay off while follow is enabled, so they cannot
+  replace that tempo. A mixer metronome is used only when no player is checked.
+- Link role **Follow** still refuses local tempo changes, including this one.
+  Use **Full** or **Leader** when the CDJs should drive the clock.
+- A paused CDJ-3000 can still send its playhead. Only a beat packet or a
+  playing/looping status marks that deck as playing.
+
 ## Loop guards
 
 - **OSC:** If listen is on and send host is localhost and send port equals the
   listen port, send is blocked and Connections shows an error.
 - **MIDI clock:** Clock out cannot run while **Drive BPM from MIDI clock** is
-  on (and vice versa when enabling out). Prevents feedback when a port loops
-  back.
+  on (and vice versa when enabling out). Pro DJ Link follow also turns MIDI
+  clock in and audio beat clock off. Prevents two external BPM sources at once.
 
 ## Status bar
 
@@ -67,12 +85,44 @@ affects **tempo authorship**.
 
 The **Performance** page (sidebar) holds a snap-grid of pads and sliders. MIDI/OSC
 can learn directly onto a performance control (`setPerformanceValue` /
-`firePerformancePad`). Each **active light scene** can route that control to a
-destination (master, base param, group intensity, bombacity, etc.).
+`firePerformancePad`). Each **light scene** stores a **list** of destinations for
+a control (master, base param, group intensity, bombacity, and so on). Moving a
+slider writes every continuous destination on the **active** scene only. Firing
+a pad runs every button destination on the active scene only. Inactive scenes
+keep their own lists and are not written. Older saves that stored a single
+destination object are wrapped into a one-element list on load.
+
+Pads also publish **MIDI note out** when a note is assigned in upload mode
+(note on while the pad value is high, note off when it returns to 0). Sliders
+still publish MIDI CC via `setPerformanceValue`.
+
+A control can additionally send its **own OSC address** (inspector: OSC out
+enabled + a path starting with `/`). That value (sliders 0..1, pads 0 or 1) is
+published on the same OSC send socket as the auto bus, and only when OSC send
+is on and the send-to-self loop guard is not blocking. The `/captivate/…` bus
+is unchanged.
+
+Modulation-matrix depth sliders assign MIDI CC out with `setModulationAmount`
+(active scene, `splitModulations` or `lfoInterModulation`).
 
 Direct `setBaseParam` MIDI still writes the **active scene only**. To use the
 same CC for **different** params per scene, bind MIDI → a performance control,
-then set a different route on each light scene.
+then add a different destination on each light scene.
+
+## OSC clock
+
+The OSC clock for this release is the existing `/captivate/time` namespace,
+published with the rest of the auto bus:
+
+| Address | Meaning |
+|---------|---------|
+| `/captivate/time/bpm` | Master BPM |
+| `/captivate/time/beats` | Beat counter |
+| `/captivate/time/phase` | Phase in the beat |
+| `/captivate/time/playing` | 1 playing / 0 stopped |
+
+These sit beside **MIDI clock out** (`0xFA` start, `0xFC` stop, `0xF8` at 24 PPQ).
+There is no discrete OSC tick protocol.
 
 ## Related
 

@@ -16,6 +16,10 @@ import {
   normalizeAppSettings,
   type AppSettings,
 } from '../../shared/appSettings'
+import {
+  initProDjLinkStatus,
+  type ProDjLinkStatus,
+} from '../../shared/proDjLink'
 
 export type { Page }
 
@@ -85,6 +89,7 @@ export interface GuiState {
   midi: MidiConnections
   midiOut: MidiOutConnections
   osc: OscConnections
+  proDj: ProDjLinkStatus
   dmx: DmxConnectionInfo
   /** @deprecated Save no longer opens a config modal; kept for compatibility. */
   saving: boolean
@@ -125,6 +130,7 @@ export function initGuiState(): GuiState {
     midi: initMidiConnections(),
     midiOut: initMidiOutConnections(),
     osc: initOscConnections(),
+    proDj: initProDjLinkStatus(),
     dmx: initDmxConnections(),
     saving: false,
     loading: null,
@@ -176,6 +182,9 @@ const guiSlice = createSlice({
     },
     setOsc: (state, { payload }: PayloadAction<OscConnections>) => {
       state.osc = payload
+    },
+    setProDjLink: (state, { payload }: PayloadAction<ProDjLinkStatus>) => {
+      state.proDj = payload
     },
     setDmx: (state, { payload }: PayloadAction<DmxConnectionInfo>) => {
       state.dmx = payload
@@ -365,6 +374,7 @@ export const {
   setMidi,
   setMidiOut,
   setOsc,
+  setProDjLink,
   setDmx,
   setSaving,
   setLoading,

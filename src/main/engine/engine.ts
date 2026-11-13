@@ -3,6 +3,7 @@ import { ConnectionManager } from './connections/ConnectionManager'
 import * as MidiConnection from './midiConnection'
 import * as MidiOutputConnection from './midiOutputConnection'
 import * as OscConnection from './oscConnection'
+import * as ProDjLink from './proDjLinkConnection'
 import {
   publishControlBusTick,
   resetControlBusPublishState,
@@ -15,6 +16,7 @@ import {
 import NodeLink from 'node-link'
 import { ipcSetup, IPC_Callbacks } from './ipcHandler'
 import { shutdownRemoteControl } from './remoteControl/remoteControlManager'
+import { heliosShutdown } from './laser/heliosSession'
 import { CleanReduxState } from '../../renderer/redux/store'
 import {
   RealtimeState,
@@ -48,6 +50,7 @@ import {
   finalizeDmxUniverses,
   getDmxComputeIntervalMs,
 } from './dmxEngine'
+import { setOneShotAudioMetrics } from './oneShotDmx'
 import { resetMoverJointMotionState } from '../../shared/moverKinematics'
 import {
   reuseUnchangedDmxOutByUniverse,
@@ -204,7 +207,52 @@ function shouldApplyTapTempoToNodeLink(control: CleanReduxState | null) {
   if (audio.enabled === true && audio.useBeatClock === true) {
     return false
   }
+  if (control.control.device.connectionSettings.proDjLinkEnabled === true) {
+    const mode = ProDjLink.getFollowChoice().mode
+    if (mode === 'following' || mode === 'coasting') return false
+  }
   return true
+}
+
+function applyProDjLinkTempo(
+  controlState: CleanReduxState | null,
+  alignPhase: boolean
+) {
+  if (controlState === null) return
+  if (controlState.control.device.connectionSettings.proDjLinkEnabled !== true) {
+    return
+  }
+  if (!canSetLocalTempo(controlState)) return
+  const choice = ProDjLink.getFollowChoice()
+  if (choice.mode !== 'following' || choice.bpm === null) return
+  const target = clampNumber(choice.bpm, 45, 220)
+  const current = _nodeLink.getSessionInfoCurrent().bpm
+  if (!Number.isFinite(current) || Math.abs(current - target) >= 0.05) {
+    setNodeLinkTempo(target, controlState)
+  }
+  const edge = alignPhase ? ProDjLink.consumeFollowBeatEdge() : null
+  if (edge?.beatInBar != null) {
+    alignProDjLinkPhase(edge.beatInBar)
+  }
+}
+
+function alignProDjLinkPhase(beatInBar: number) {
+  if (beatInBar < 1 || beatInBar > 4) return
+  const info = _nodeLink.getSessionInfoCurrent()
+  const quantum = 4
+  const phase = ((info.phase % quantum) + quantum) % quantum
+  const desired = beatInBar - 1
+  let error = desired - phase
+  if (error > quantum / 2) error -= quantum
+  if (error < -quantum / 2) error += quantum
+  if (Math.abs(error) < 0.05) return
+  const newBeat = info.beats + error
+  if (!Number.isFinite(newBeat)) return
+  if (Math.abs(error) > 0.5) {
+    _nodeLink.forceBeat(newBeat)
+  } else {
+    _nodeLink.requestBeat(newBeat)
+  }
 }
 
 function shouldEmitAudioBeatTapHint(control: CleanReduxState | null) {
@@ -748,6 +796,7 @@ export function start(
     },
     on_audio_engine_metrics: (metrics: AudioEngineMetrics) => {
       _latestAudioMetrics = normalizeAudioEngineMetrics(metrics)
+      setOneShotAudioMetrics(_latestAudioMetrics)
       telemetryGauge(
         'audio',
         'input_level',
@@ -927,6 +976,24 @@ export function start(
     },
   })
 
+  ProDjLink.maintain({
+    update_ms: 250,
+    onUpdate: (status) => {
+      if (_ipcCallbacks !== null) {
+        _ipcCallbacks.send_pro_dj_link_update(status)
+      }
+    },
+    getSettings: () => {
+      const settings = _controlState?.control.device.connectionSettings
+      const ids = settings?.proDjLinkFollowIds
+      return {
+        enabled: settings?.proDjLinkEnabled === true,
+        followExplicit: settings?.proDjLinkFollowExplicit === true,
+        followIds: Array.isArray(ids) ? ids : [],
+      }
+    },
+  })
+
   OscConnection.maintain({
     update_ms: 1000,
     onUpdate: (status) => {
@@ -977,6 +1044,8 @@ export function stop() {
   MidiConnection.shutdownMidi()
   MidiOutputConnection.shutdownMidiOut()
   OscConnection.shutdownOsc()
+  ProDjLink.shutdownProDjLink()
+  void heliosShutdown()
   resetControlBusPublishState()
   try {
     _connectionManager.shutdown()
@@ -999,6 +1068,9 @@ function getBeatFollowDetectedBpm(controlState: CleanReduxState | null): number 
 }
 
 function applyAudioBeatClock(controlState: CleanReduxState | null) {
+  if (controlState?.control.device.connectionSettings.proDjLinkEnabled === true) {
+    return
+  }
   const detectedBpm = getBeatFollowDetectedBpm(controlState)
   if (detectedBpm === null) {
     _audioBeatClockSmoothedBpm = null
@@ -1163,7 +1235,9 @@ function getNextTimeState(controlState: CleanReduxState | null): TimeState {
   const sessionInfo = _nodeLink.getSessionInfoCurrent()
   syncFrozenTransportFromSession(sessionInfo)
 
-  if (_frozenTransportTime !== null) {
+  const transportFrozen = _frozenTransportTime !== null
+  applyProDjLinkTempo(controlState, !transportFrozen)
+  if (transportFrozen) {
     telemetryDurationSampled(
       'engine',
       'get_next_time_state_ms',

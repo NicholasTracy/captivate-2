@@ -5,6 +5,7 @@ import os from 'os'
 import path from 'path'
 import { spawn } from 'child_process'
 import { ProjectMInstallResult, getProjectMRuntimeDownloadUrl } from '../../shared/projectm'
+import { ensureProjectMPresetPack } from './projectmPresets'
 import { detectProjectMRuntime } from './projectmRuntime'
 
 interface GitHubReleaseAsset {
@@ -101,9 +102,16 @@ export async function installProjectMBinaries(): Promise<ProjectMInstallResult> 
       }
     }
 
+    const presetPack = await ensureProjectMPresetPack()
+    const presetNote = presetPack.ok
+      ? presetPack.downloaded
+        ? ' Preset pack installed.'
+        : ' Preset pack already available.'
+      : ` ${presetPack.message}`
+
     return {
       ok: true,
-      message: `projectM runtime installed successfully for ${describeCurrentPlatform()} from ${selectedAsset.release.tag_name ?? 'release'} (${selectedAsset.asset.name}).`,
+      message: `projectM runtime installed successfully for ${describeCurrentPlatform()} from ${selectedAsset.release.tag_name ?? 'release'} (${selectedAsset.asset.name}).${presetNote}`,
       runtimePath,
       bridgePath,
       downloadUrl,

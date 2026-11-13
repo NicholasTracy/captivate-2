@@ -78,10 +78,10 @@ unchanged.
 
 | Address | Type | Meaning |
 |---------|------|---------|
-| `/captivate/time/bpm` | f | Master BPM |
-| `/captivate/time/beats` | f | Beat counter |
-| `/captivate/time/phase` | f | Phase in beat (0..1-ish Link phase) |
-| `/captivate/time/playing` | i | 1 playing / 0 stopped |
+| `/captivate/time/bpm` | f | Master BPM. **OSC clock** for this release |
+| `/captivate/time/beats` | f | Beat counter. **OSC clock** |
+| `/captivate/time/phase` | f | Phase in beat (0..1-ish Link phase). **OSC clock** |
+| `/captivate/time/playing` | i | 1 playing / 0 stopped. **OSC clock** |
 | `/captivate/master` | f | Master intensity 0..1 |
 | `/captivate/blackout` | i | 1 blackout / 0 normal |
 | `/captivate/scene/light` | i | Active light scene index |
@@ -95,6 +95,20 @@ unchanged.
 
 Group names are sanitized for OSC path segments (spaces → `_`, unsafe chars
 stripped).
+
+### OSC clock
+
+`/captivate/time/bpm`, `/captivate/time/beats`, `/captivate/time/phase`, and
+`/captivate/time/playing` are the OSC clock for this release. They are published
+on the auto bus beside **MIDI clock out** (`0xFA` start, `0xFC` stop, `0xF8`
+at 24 PPQ). There is no separate tick address.
+
+### Performance control OSC out
+
+A performance pad or slider can also send its own address (enabled flag + path
+starting with `/`). When OSC send is on and the send-to-self loop guard is not
+blocking, the engine publishes that control's 0..1 value (pads as 0 or 1) in
+addition to the `/captivate/…` bus. Invalid or empty addresses are not sent.
 
 ## Runtime pipeline
 

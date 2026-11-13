@@ -27,8 +27,10 @@ import {
   builtinEffectLinkSourceList,
   builtinEffectTypeList,
   builtinGeneratorDisplayName,
-  builtinGeneratorTypeList,
+  builtinGeneratorGroups,
   builtinLayerSourceDisplayName,
+  fullFrameGenerators,
+  generativeLayerHelp,
   builtinLayerSourceTypeList,
   createBuiltinCameraEffect,
   createBuiltinEffect,
@@ -71,9 +73,21 @@ interface Props {
   onChange: (newConfig: BuiltinVisualizerConfig) => void
 }
 
-const layerCreateGeneratorTypes = builtinGeneratorTypeList.filter(
-  (generator) => generator !== 'customModule'
-)
+const generativeAddOrder: BuiltinGeneratorType[] = [
+  'fractal',
+  'kaleidoscope',
+  'oilWater',
+  'plasma',
+  'lightTunnel',
+  'aurora',
+  'hexGrid',
+  'vortex',
+  'clouds',
+  'rays',
+  'fluid',
+  'solid',
+  'text',
+]
 const effectCreateTypes = builtinEffectTypeList.filter(
   (type) => type !== 'customModule'
 )
@@ -236,6 +250,7 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
     })
   }
   const [moduleBusy, setModuleBusy] = useState(false)
+  const [openLayerId, setOpenLayerId] = useState<string | null>(null)
   const { busy, busyMessage, startBusy, stopBusy } = useStandardBusy()
   const [codeEditor, setCodeEditor] = useState<{
     layerIndex: number
@@ -270,7 +285,7 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
       return ''
     }
     if (!projectMBridgeStatus.runtime.available) {
-      return projectMBridgeStatus.runtime.message
+      return `${projectMBridgeStatus.runtime.message} A compatibility picture plays until the projectM runtime is installed.`
     }
     if (!projectMBridgeStatus.bridgeLoaded) {
       return 'Native projectM bridge is not loaded. Preset files will not apply — only compatibility visuals are shown.'
@@ -695,7 +710,7 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
   return (
     <Root>
       <HeaderRow>
-        <Title>Built-in 3D Visualizer</Title>
+        <Title>Visualizer</Title>
         <ToggleRow>
           <SmallButton onClick={() => void importSceneFromFile()} disabled={moduleBusy}>
             Import Scene
@@ -723,15 +738,15 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
           <Columns>
             <Column>
           <ColumnHeader>
-            <span>Generated Layers</span>
+            <span>Layers</span>
             <SmallButton
               onClick={() =>
                 patch({
                   layers: [
                     ...config.layers,
                     createBuiltinLayer(
-                      layerCreateGeneratorTypes[
-                        config.layers.length % layerCreateGeneratorTypes.length
+                      generativeAddOrder[
+                        config.layers.length % generativeAddOrder.length
                       ],
                       config.layers.length
                     ),
@@ -748,6 +763,15 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                 <CardTop>
                   <LayerTitle>{`Layer ${index + 1}`}</LayerTitle>
                   <SmallButton
+                    onClick={() =>
+                      setOpenLayerId((current) =>
+                        current === layer.id ? null : layer.id
+                      )
+                    }
+                  >
+                    {openLayerId === layer.id ? 'Hide' : 'Edit'}
+                  </SmallButton>
+                  <SmallButton
                     onClick={() => {
                       const layers = config.layers.filter((_, i) => i !== index)
                       patch({ layers })
@@ -756,6 +780,77 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                     Remove
                   </SmallButton>
                 </CardTop>
+                <SummaryRow>
+                  <Toggle>
+                    <input
+                      type="checkbox"
+                      checked={layer.enabled}
+                      onChange={(event) =>
+                        updateLayer(config, patch, index, {
+                          enabled: event.target.checked,
+                        })
+                      }
+                    />
+                  </Toggle>
+                  <SummaryName>
+                    {layer.sourceType === 'procedural'
+                      ? builtinGeneratorDisplayName[layer.generator]
+                      : builtinLayerSourceDisplayName[layer.sourceType]}
+                  </SummaryName>
+                  <SummaryBlendSelect
+                    value={layer.blend}
+                    title="Blend"
+                    onChange={(event) =>
+                      updateLayer(config, patch, index, {
+                        blend: event.target.value as typeof layer.blend,
+                      })
+                    }
+                  >
+                    {builtinBlendModeList.map((blend) => (
+                      <option key={blend} value={blend}>
+                        {builtinBlendDisplayName[blend]}
+                      </option>
+                    ))}
+                  </SummaryBlendSelect>
+                  <LinkedRange
+                    style={{ flex: '1 1 4.5rem', minWidth: '3.5rem', maxWidth: '7rem' }}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={layer.mix}
+                    manualCursorValue={resolveLinkedUnitSliderSetpoint(
+                      layer.mix,
+                      layer.mixLinkSource,
+                      visualizerBaseParams
+                    )}
+                    liveValue={resolveLinkedUnitSliderValue(
+                      layer.mix,
+                      layer.mixLinkSource,
+                      visualizerOutputParams
+                    )}
+                    showLiveCursor={layer.mixLinkSource !== 'none'}
+                    onChange={(event) =>
+                      (() => {
+                        const next = to01(event.target.value)
+                        updateLayer(config, patch, index, {
+                          mix: next,
+                        })
+                        syncLinkedSetpoint(layer.mixLinkSource, next, 0, 1)
+                      })()
+                    }
+                  />
+                  <LinkAssignButton
+                    type="button"
+                    title="Assign mix to a visual slider"
+                    onClick={() =>
+                      openLayerLinkPicker(index, 'mixLinkSource', `Layer ${index + 1} Mix`)
+                    }
+                  >
+                    ...
+                  </LinkAssignButton>
+                </SummaryRow>
+                {openLayerId === layer.id ? (
+                <>
                 <FieldRow>
                   <Label>Source</Label>
                   <Select
@@ -785,10 +880,14 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                           })
                         }
                       >
-                        {builtinGeneratorTypeList.map((generator) => (
-                          <option key={generator} value={generator}>
-                            {builtinGeneratorDisplayName[generator]}
-                          </option>
+                        {builtinGeneratorGroups.map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.types.map((generator) => (
+                              <option key={generator} value={generator}>
+                                {builtinGeneratorDisplayName[generator]}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </Select>
                     </FieldRow>
@@ -797,8 +896,12 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                         Classic Captivate 1.03 tribute generator.
                       </HelperText>
                     )}
+                    {generativeLayerHelp[layer.generator] ? (
+                      <HelperText>{generativeLayerHelp[layer.generator]}</HelperText>
+                    ) : null}
                     {(layer.generator === 'legacyTextParticles' ||
-                      layer.generator === 'legacyTextSpin') && (
+                      layer.generator === 'legacyTextSpin' ||
+                      layer.generator === 'text') && (
                       <FieldRow>
                         <Label>Text</Label>
                         <Input
@@ -1247,8 +1350,10 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                   </SliderRow>
                 )}
                 {layer.sourceType === 'procedural' &&
-                  SHAPE_QUANTITY_GENERATORS.includes(layer.generator) && (
+                  (SHAPE_QUANTITY_GENERATORS.includes(layer.generator) ||
+                    fullFrameGenerators.includes(layer.generator)) && (
                     <>
+                      {SHAPE_QUANTITY_GENERATORS.includes(layer.generator) ? (
                       <SliderRow>
                         <MiniLabel>Quantity</MiniLabel>
                         <LinkedRange
@@ -1287,6 +1392,7 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                           ...
                         </LinkAssignButton>
                       </SliderRow>
+                      ) : null}
                       <SliderRow>
                         <MiniLabel>Variety</MiniLabel>
                         <LinkedRange
@@ -1629,6 +1735,8 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                   />
                   Enabled
                 </Toggle>
+                </>
+                ) : null}
               </Card>
             ))}
           </ColumnBody>
@@ -1923,70 +2031,6 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
             </Column>
           </Columns>
         </ColumnsScroller>
-
-        <BlendScroller>
-          <BlendRow>
-            <BlendHeader>Layer Blending / Mix</BlendHeader>
-            <BlendBody>
-              {config.layers.map((layer, index) => (
-                <BlendItem key={layer.id}>
-                  <BlendName>{`Layer ${index + 1}`}</BlendName>
-                  <Select
-                    style={{ width: '9.2rem', flex: '0 0 auto' }}
-                    value={layer.blend}
-                    onChange={(event) =>
-                      updateLayer(config, patch, index, {
-                        blend: event.target.value as typeof layer.blend,
-                      })
-                    }
-                  >
-                    {builtinBlendModeList.map((blend) => (
-                      <option key={blend} value={blend}>
-                        {builtinBlendDisplayName[blend]}
-                      </option>
-                    ))}
-                  </Select>
-                  <LinkedRange
-                    style={{ flex: '1 1 auto', minWidth: 0 }}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={layer.mix}
-                    manualCursorValue={resolveLinkedUnitSliderSetpoint(
-                      layer.mix,
-                      layer.mixLinkSource,
-                      visualizerBaseParams
-                    )}
-                    liveValue={resolveLinkedUnitSliderValue(
-                      layer.mix,
-                      layer.mixLinkSource,
-                      visualizerOutputParams
-                    )}
-                    showLiveCursor={layer.mixLinkSource !== 'none'}
-                    onChange={(event) =>
-                      (() => {
-                        const next = to01(event.target.value)
-                        updateLayer(config, patch, index, {
-                          mix: next,
-                        })
-                        syncLinkedSetpoint(layer.mixLinkSource, next, 0, 1)
-                      })()
-                    }
-                  />
-                  <LinkAssignButton
-                    type="button"
-                    title="Assign to visual slider"
-                    onClick={() =>
-                      openLayerLinkPicker(index, 'mixLinkSource', `Layer ${index + 1} Mix`)
-                    }
-                  >
-                    ...
-                  </LinkAssignButton>
-                </BlendItem>
-              ))}
-            </BlendBody>
-          </BlendRow>
-        </BlendScroller>
       </BodyScroll>
 
       {codeEditor !== null && (
@@ -2353,14 +2397,11 @@ const Root = styled.div`
 
 const BodyScroll = styled.div`
   flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(18rem, 1fr) auto;
-  gap: 0.55rem;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 0 0 0.5rem 0;
   scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
@@ -2451,11 +2492,10 @@ const Select = styled.select`
 `
 
 const ColumnsScroller = styled.div`
-  grid-row: 1;
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
-  min-height: 18rem;
-  max-height: 100%;
+  min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -2478,12 +2518,41 @@ const ColumnsScroller = styled.div`
 
 const Columns = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(16.5rem, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 0.85fr);
   gap: 0.65rem;
-  min-width: 50rem;
-  min-height: 18rem;
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
   height: 100%;
   padding-right: 0.15rem;
+`
+
+const SummaryRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+`
+
+const SummaryName = styled.div`
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+`
+
+const SummaryBlendSelect = styled.select`
+  flex: 0 1 6.2rem;
+  min-width: 0;
+  max-width: 6.6rem;
+  border: 1px solid ${(props) => props.theme.colors.divider};
+  border-radius: 0.25rem;
+  padding: 0.08rem 0.2rem;
+  background: ${(props) => props.theme.colors.bg.primary};
+  color: ${(props) => props.theme.colors.text.primary};
+  font-size: 0.68rem;
 `
 
 const Column = styled.div`
@@ -2889,86 +2958,6 @@ const ProjectMInlineMessage = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-`
-
-const BlendScroller = styled.div`
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #7a7a7a99 #0000;
-
-  &::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: #0000;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #7a7a7a99;
-    border-radius: 999px;
-  }
-`
-
-const BlendRow = styled.div`
-  border: 1px solid ${(props) => props.theme.colors.divider};
-  border-radius: 0.35rem;
-  padding: 0.45rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 50rem;
-  min-height: 8rem;
-  max-height: min(26vh, 16rem);
-  overflow: auto;
-`
-
-const BlendHeader = styled.div`
-  font-size: 0.8rem;
-`
-
-const BlendBody = styled.div`
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.36rem;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #7a7a7a99 #0000;
-
-  &::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: #0000;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #7a7a7a99;
-    border-radius: 999px;
-  }
-`
-
-const BlendItem = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.4rem;
-`
-
-const BlendName = styled.div`
-  width: 4.8rem;
-  flex: 0 0 auto;
-  font-size: 0.74rem;
-  color: ${(props) => props.theme.colors.text.secondary};
 `
 
 const ModalBackdrop = styled.div`

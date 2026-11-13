@@ -62,6 +62,9 @@ interface Config {
   on_midi_connection_update: (payload: midiConnection.UpdatePayload) => void
   on_midi_out_connection_update: (payload: import('../shared/connection').MidiOutConnections) => void
   on_osc_connection_update: (payload: oscConnection.UpdatePayload) => void
+  on_pro_dj_link_update: (
+    payload: import('../shared/proDjLink').ProDjLinkStatus
+  ) => void
   on_time_state: (time_state: RealtimeState) => void
   on_dispatch: (action: PayloadAction) => void
   on_main_command: (command: MainCommand) => void
@@ -119,6 +122,12 @@ export function ipc_setup(config: Config) {
     ipc_channels.osc_connection_update,
     (payload: oscConnection.UpdatePayload) =>
       _config.on_osc_connection_update(payload)
+  )
+
+  ipcRenderer.on(
+    ipc_channels.pro_dj_link_update,
+    (payload: import('../shared/proDjLink').ProDjLinkStatus) =>
+      _config.on_pro_dj_link_update(payload)
   )
 
   ipcRenderer.on(ipc_channels.new_time_state, (realtimeState: RealtimeState) =>
@@ -494,4 +503,48 @@ export async function remoteControlApplySettings(
 
 export async function remoteControlRegeneratePin() {
   return ipcRenderer.invoke(ipc_channels.remote_control_regenerate_pin)
+}
+
+export async function heliosScanDevices() {
+  return ipcRenderer.invoke(ipc_channels.helios_scan) as Promise<
+    import('../shared/heliosOutput').HeliosScanResult
+  >
+}
+
+export async function heliosGetStatus() {
+  return ipcRenderer.invoke(ipc_channels.helios_status) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosConnectDevice(deviceIndex: number) {
+  return ipcRenderer.invoke(ipc_channels.helios_connect, deviceIndex) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosDisconnectDevice() {
+  return ipcRenderer.invoke(ipc_channels.helios_disconnect) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSetArmed(armed: boolean) {
+  return ipcRenderer.invoke(ipc_channels.helios_set_armed, armed) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSendTestPattern() {
+  return ipcRenderer.invoke(ipc_channels.helios_test_pattern) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
+}
+
+export async function heliosSetPoints(
+  points: import('../shared/heliosOutput').HeliosPoint[]
+) {
+  return ipcRenderer.invoke(ipc_channels.helios_set_points, points) as Promise<
+    import('../shared/heliosOutput').HeliosStatus
+  >
 }

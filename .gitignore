@@ -49,9 +49,11 @@ npm-debug.log.*
 .captivate-darwin-universal-staging/
 .captivate-darwin-runtime-staging/
 .captivate-projectm-universal-staging/
+assets/.captivate-projectm-stage/
 
 # Local runtime binaries (downloaded/installed per machine, not source-controlled)
 assets/projectm-runtime/
+assets/projectm-presets/
 assets/projectm-bridge/
 assets/ndi-runtime/
 

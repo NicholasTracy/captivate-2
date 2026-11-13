@@ -3,20 +3,23 @@ import styled from 'styled-components'
 import { useDispatch, useStore } from 'react-redux'
 import {
   addPerformanceControl,
-  clearPerformanceRoute,
+  addPerformanceRoute,
   movePerformanceControl,
   removePerformanceControl,
+  removePerformanceRoute,
   renamePerformanceControl,
   setPerformanceControlColor,
   setPerformanceEditUnlocked,
   setPerformanceGridSize,
-  setPerformanceRoute,
+  setPerformanceOscOut,
 } from '../redux/controlSlice'
 import {
   commitPerformancePad,
   commitPerformanceValue,
   midiActionLabel,
+  readPerformanceRoutes,
 } from '../redux/performanceControl'
+import { isSendablePerformanceOscAddress } from '../../shared/performance'
 import {
   PERFORMANCE_COLOR_PRESETS,
   PERFORMANCE_DEFAULT_COLS,
@@ -61,7 +64,12 @@ function controlPixelRect(
   }
 }
 
-type DestKind = 'master' | 'baseParam' | 'groupIntensity' | 'bombacity'
+type DestKind =
+  | 'master'
+  | 'baseParam'
+  | 'groupIntensity'
+  | 'bombacity'
+  | 'oneShot'
 
 export default function PerformanceCanvas() {
   const dispatch = useDispatch()
@@ -131,19 +139,15 @@ export default function PerformanceCanvas() {
     selectedId !== null
       ? controls.find((c) => c.id === selectedId) ?? null
       : null
-  const selectedRouteRaw =
-    selected !== null ? routes[selected.id] : undefined
-  const selectedRoute =
-    selectedRouteRaw && typeof selectedRouteRaw === 'object'
-      ? (selectedRouteRaw as MidiAction)
-      : null
+  const selectedRoutes =
+    selected !== null ? readPerformanceRoutes(routes[selected.id]) : []
 
   const onAdd = (kind: PerformanceControlKind) => {
     dispatch(addPerformanceControl({ kind }))
   }
 
   return (
-    <Root>
+    <Root data-tour="tour-performance-bank">
       <Toolbar>
         <Title>Performance</Title>
         <ToolbarSpacer />
@@ -191,16 +195,12 @@ export default function PerformanceCanvas() {
               <CellBg key={i} />
             ))}
             {controls.map((control) => {
-              const routeRaw = routes[control.id]
-              const route =
-                routeRaw && typeof routeRaw === 'object'
-                  ? (routeRaw as MidiAction)
-                  : null
+              const controlRoutes = readPerformanceRoutes(routes[control.id])
               return (
                 <ControlCard
                   key={control.id}
                   control={control}
-                  route={route}
+                  routes={controlRoutes}
                   metrics={metrics}
                   editUnlocked={editUnlocked}
                   selected={selectedId === control.id}
@@ -236,7 +236,7 @@ export default function PerformanceCanvas() {
             {selected ? (
               <InspectorBody
                 control={selected}
-                route={selectedRoute}
+                routes={selectedRoutes}
                 onRename={(label) =>
                   dispatch(
                     renamePerformanceControl({ id: selected.id, label })
@@ -251,16 +251,26 @@ export default function PerformanceCanvas() {
                   dispatch(removePerformanceControl(selected.id))
                   setSelectedId(null)
                 }}
-                onSetRoute={(action) =>
+                onAddRoute={(action) =>
                   dispatch(
-                    setPerformanceRoute({
+                    addPerformanceRoute({
                       controlId: selected.id,
                       action,
                     })
                   )
                 }
-                onClearRoute={() =>
-                  dispatch(clearPerformanceRoute(selected.id))
+                onRemoveRoute={(index) =>
+                  dispatch(
+                    removePerformanceRoute({
+                      controlId: selected.id,
+                      index,
+                    })
+                  )
+                }
+                onOsc={(patch) =>
+                  dispatch(
+                    setPerformanceOscOut({ id: selected.id, ...patch })
+                  )
                 }
               />
             ) : (
@@ -275,24 +285,28 @@ export default function PerformanceCanvas() {
 
 function InspectorBody({
   control,
-  route,
+  routes,
   onRename,
   onColor,
   onRemove,
-  onSetRoute,
-  onClearRoute,
+  onAddRoute,
+  onRemoveRoute,
+  onOsc,
 }: {
   control: PerformanceControl
-  route: MidiAction | null
+  routes: MidiAction[]
   onRename: (label: string) => void
   onColor: (color: string) => void
   onRemove: () => void
-  onSetRoute: (action: MidiAction) => void
-  onClearRoute: () => void
+  onAddRoute: (action: MidiAction) => void
+  onRemoveRoute: (index: number) => void
+  onOsc: (patch: { enabled?: boolean; address?: string }) => void
 }) {
   const [destKind, setDestKind] = useState<DestKind>('master')
   const [paramKey, setParamKey] = useState<string>('brightness')
   const [groupName, setGroupName] = useState('All')
+  const [oneShotId, setOneShotId] = useState('')
+  const oneShots = useControlSelector((state) => state.oneShots)
 
   const applyDest = () => {
     let action: MidiAction
@@ -301,9 +315,24 @@ function InspectorBody({
       action = { type: 'setAutoSceneBombacity' }
     else if (destKind === 'groupIntensity')
       action = { type: 'setGroupIntensity', group: groupName.trim() || 'All' }
-    else action = { type: 'setBaseParam', paramKey, splitIndex: 0 }
-    onSetRoute(action)
+    else if (destKind === 'oneShot') {
+      const id = oneShotId || oneShots.ids[0]
+      if (!id) return
+      action = { type: 'fireOneShot', oneShotId: id }
+    } else action = { type: 'setBaseParam', paramKey, splitIndex: 0 }
+    onAddRoute(action)
   }
+
+  const routeLabel = (route: MidiAction) => {
+    if (route.type === 'fireOneShot') {
+      return oneShots.byId[route.oneShotId]?.name || 'One-shot'
+    }
+    return midiActionLabel(route)
+  }
+
+  const oscAddressOk =
+    control.oscAddress.trim().length === 0 ||
+    isSendablePerformanceOscAddress(control.oscAddress.trim())
 
   return (
     <>
@@ -345,8 +374,19 @@ function InspectorBody({
         </Muted>
       </Field>
       <Field>
-        <FieldLabel>Destination (active scene)</FieldLabel>
-        <Muted>{route ? midiActionLabel(route) : 'None'}</Muted>
+        <FieldLabel>Destinations (active scene)</FieldLabel>
+        {routes.length === 0 ? (
+          <Muted>None</Muted>
+        ) : (
+          routes.map((route, index) => (
+            <DestRow key={`${index}:${routeLabel(route)}`}>
+              <Muted>{routeLabel(route)}</Muted>
+              <TinyBtn type="button" onClick={() => onRemoveRoute(index)}>
+                Remove
+              </TinyBtn>
+            </DestRow>
+          ))
+        )}
       </Field>
       <DestPicker>
         <select
@@ -357,6 +397,9 @@ function InspectorBody({
           <option value="baseParam">Base param</option>
           <option value="groupIntensity">Group intensity</option>
           <option value="bombacity">Bombacity</option>
+          {control.kind === 'pad' ? (
+            <option value="oneShot">One-shot</option>
+          ) : null}
         </select>
         {destKind === 'baseParam' ? (
           <select
@@ -377,15 +420,48 @@ function InspectorBody({
             placeholder="Group"
           />
         ) : null}
-        <TinyBtn type="button" onClick={applyDest}>
-          Set route
-        </TinyBtn>
-        {route ? (
-          <TinyBtn type="button" onClick={onClearRoute}>
-            Clear
-          </TinyBtn>
+        {destKind === 'oneShot' ? (
+          <select
+            value={oneShotId || oneShots.ids[0] || ''}
+            onChange={(e) => setOneShotId(e.target.value)}
+          >
+            {oneShots.ids.length === 0 ? (
+              <option value="">No one-shots</option>
+            ) : (
+              oneShots.ids.map((id) => (
+                <option key={id} value={id}>
+                  {oneShots.byId[id]?.name || 'One-shot'}
+                </option>
+              ))
+            )}
+          </select>
         ) : null}
+        <TinyBtn type="button" onClick={applyDest}>
+          Add destination
+        </TinyBtn>
       </DestPicker>
+      <Field>
+        <FieldLabel>OSC out</FieldLabel>
+        <ToggleRow>
+          <ToggleButton
+            type="button"
+            $on={control.oscSendEnabled}
+            onClick={() => onOsc({ enabled: !control.oscSendEnabled })}
+          >
+            {control.oscSendEnabled ? 'Send on' : 'Send off'}
+          </ToggleButton>
+        </ToggleRow>
+        <NameInput
+          value={control.oscAddress}
+          placeholder="/performance/control"
+          onChange={(e) => onOsc({ address: e.target.value })}
+        />
+        <Muted>
+          {oscAddressOk
+            ? 'Sends this control (0–1, pads 0 or 1) when Connections OSC send is on. The /captivate bus still publishes.'
+            : 'Address must be a path starting with / and contain no spaces.'}
+        </Muted>
+      </Field>
       <RemoveWide type="button" onClick={onRemove}>
         Remove control
       </RemoveWide>
@@ -393,9 +469,15 @@ function InspectorBody({
   )
 }
 
+function routeChipLabel(routes: MidiAction[]): string | null {
+  if (routes.length === 0) return null
+  if (routes.length === 1) return midiActionLabel(routes[0]!)
+  return `${midiActionLabel(routes[0]!)} +${routes.length - 1}`
+}
+
 function ControlCard({
   control,
-  route,
+  routes,
   metrics,
   editUnlocked,
   selected,
@@ -405,7 +487,7 @@ function ControlCard({
   onPad,
 }: {
   control: PerformanceControl
-  route: MidiAction | null
+  routes: MidiAction[]
   metrics: GridMetrics
   editUnlocked: boolean
   selected: boolean
@@ -433,6 +515,7 @@ function ControlCard({
   }
 
   const accent = control.color
+  const routeLabel = routeChipLabel(routes)
   const midiOverlay =
     control.kind === 'slider' ? (
       <SliderMidiOverlay
@@ -529,18 +612,14 @@ function ControlCard({
       {control.kind === 'slider' ? (
         <CardHeader>
           <Name title={control.label}>{control.label}</Name>
-          {route ? (
-            <RouteChip title={midiActionLabel(route)}>
-              {midiActionLabel(route)}
-            </RouteChip>
+          {routeLabel ? (
+            <RouteChip title={routeLabel}>{routeLabel}</RouteChip>
           ) : null}
         </CardHeader>
       ) : null}
       <Body $pad={control.kind === 'pad'}>{midiOverlay}</Body>
-      {control.kind === 'pad' && route ? (
-        <RouteChipAbs title={midiActionLabel(route)}>
-          {midiActionLabel(route)}
-        </RouteChipAbs>
+      {control.kind === 'pad' && routeLabel ? (
+        <RouteChipAbs title={routeLabel}>{routeLabel}</RouteChipAbs>
       ) : null}
     </Card>
   )
@@ -895,6 +974,13 @@ const TinyBtn = styled.button`
   font-size: 0.7rem;
   padding: 0.3rem 0.45rem;
   cursor: pointer;
+`
+
+const DestRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
 `
 
 const DestPicker = styled.div`

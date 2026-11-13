@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.0
+
+### Show control
+
+- Performance pads and sliders can drive several scene routes plus MIDI and OSC outs.
+- Show-control hub for MIDI, OSC, Ableton Link tempo roles, and Pro DJ Link BPM follow.
+- One-shot DMX cues.
+
+### Visuals
+
+- Starter VJ looks, added from the visual scene list and editable like any other scene.
+- Generative plates, including a living fractal, a honeycomb, and a sloshing water surface.
+- projectM preset pack ships with the app. A missing pack is installed into the app’s settings on first use.
+- The detached visualizer keeps its own On/Off state.
+
+### Projection
+
+- One keystone homography shared by the projection preview and point mapping.
+- Single Helios output traces the visualizer through that keystone.
+
 ## 1.2.1
 
 ### Fixes

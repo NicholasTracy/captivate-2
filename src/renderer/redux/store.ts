@@ -4,6 +4,7 @@ import {
   Reducer,
   PayloadAction,
 } from '@reduxjs/toolkit'
+import { useContext } from 'react'
 import { useSelector, TypedUseSelectorHook } from 'react-redux'
 import dmxReducer, { DmxState } from './dmxSlice'
 import guiReducer, { GuiState } from './guiSlice'
@@ -26,6 +27,8 @@ import {
   initMidiOutConnections,
   initOscConnections,
 } from '../../shared/connection'
+import { initProDjLinkStatus } from '../../shared/proDjLink'
+import { OneShotEditContext } from './oneShotEdit'
 
 export interface UndoActionTypes {
   undo: string
@@ -149,6 +152,10 @@ export function mergeProjectSave(
         info.config.performance && info.state.performance !== undefined
           ? normalizePerformanceBank(info.state.performance)
           : normalizePerformanceBank(control.performance),
+      oneShots:
+        info.config.oneShots && info.state.oneShots !== undefined
+          ? cloneDeep(info.state.oneShots)
+          : control.oneShots,
     },
     gui: sanitizeGuiTransientState(loadedGui),
     mixer:
@@ -201,6 +208,7 @@ function sanitizeGuiTransientState(gui: GuiState): GuiState {
       ...initOscConnections(),
       ...(gui?.osc ?? {}),
     },
+    proDj: initProDjLinkStatus(),
     connectionMenu: false,
     saving: false,
     loading: null,
@@ -273,7 +281,11 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         midi: localGui.midi,
         midiOut: localGui.midiOut,
         osc: localGui.osc,
+        proDj: localGui.proDj,
         activePage: localGui.activePage,
+        // The popout owns this toggle. The main window often still has it off,
+        // and copying that across was switching the visualizer off on its own.
+        videoEnabled: localGui.videoEnabled,
         connectionMenu: localGui.connectionMenu,
         saving: localGui.saving,
         loading: localGui.loading,
@@ -326,6 +338,7 @@ const rootReducer: Reducer<ReduxState, PayloadAction<any>> = (
         midi: state.gui.midi,
         midiOut: state.gui.midiOut,
         osc: state.gui.osc,
+        proDj: state.gui.proDj,
         appSettings: state.gui.appSettings,
         projectWorkspace: state.gui.projectWorkspace,
       },
@@ -378,7 +391,12 @@ export function useActiveScene<T>(
 }
 
 export function useActiveLightScene<T>(getVal: (scene: LightScene_t) => T) {
+  const oneShotId = useContext(OneShotEditContext)
   return useTypedSelector((state) => {
+    if (oneShotId) {
+      const shot = state.control.present.oneShots?.byId[oneShotId]
+      if (shot) return getVal(shot)
+    }
     const scene =
       state.control.present.light.byId[state.control.present.light.active]
     if (scene === undefined) {

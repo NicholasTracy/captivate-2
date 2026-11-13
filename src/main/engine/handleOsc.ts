@@ -22,6 +22,7 @@ import {
   setMaster,
   setBaseParams,
   setGroupIntensity,
+  setModulation,
 } from '../../renderer/redux/controlSlice'
 import {
   commitPerformancePad,
@@ -133,6 +134,14 @@ export function handleOscMessage(
       return getGroupIntensityLevel(state.control.groupIntensity, action.group)
     } else if (action.type === 'setPerformanceValue') {
       return state.control.performance.controls[action.controlId]?.value ?? 0
+    } else if (action.type === 'setModulationAmount') {
+      const scene = state.control.light.byId[state.control.light.active]
+      const modulator = scene?.modulators[action.modIndex]
+      if (!modulator) return 0.5
+      const stored = action.param.startsWith('intermod:lfo:')
+        ? modulator.lfoInterModulation?.[action.param]
+        : modulator.splitModulations[action.splitIndex]?.[action.param]
+      return typeof stored === 'number' && Number.isFinite(stored) ? stored : 0.5
     }
     return 0
   }
@@ -170,6 +179,15 @@ export function handleOscMessage(
         action.controlId,
         bounded,
         setTempo
+      )
+    } else if (action.type === 'setModulationAmount') {
+      dispatch(
+        setModulation({
+          splitIndex: action.splitIndex,
+          modIndex: action.modIndex,
+          param: action.param,
+          value: bounded,
+        })
       )
     } else if (action.type === 'tapTempo') {
       tapTempo()
