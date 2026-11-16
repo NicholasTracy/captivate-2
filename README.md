@@ -67,6 +67,8 @@ More walkthroughs: **[Wiki](https://github.com/NicholasTracy/captivate-2/wiki)**
 
 **[DMX output and movers](docs/dmx-movers.md)** — universe composition, USB / Art-Net routing, and mover fine-channel pathing.
 
+**[Focus channels](docs/focus.md)** — Focus min/max/default, the split slider, and when that slider does not reach DMX.
+
 **[Atmospherics](docs/atmospherics.md)** — fog / FX arming, pyro gate, emergency stop, and trigger timing.
 
 **[MIDI and keyboard mapping](docs/midi-mapping.md)** — MIDI learn, slider/encoder modes, keyboard chords, and MIDI clock vs mapped BPM.
@@ -164,6 +166,7 @@ macOS packaging keeps per-arch natives (koffi, usb/serialport, lipo’d node-gyp
 - [Visualizer streaming (RTSP / NDI)](docs/visualizer-streaming.md)
 - [WLED fixtures](docs/wled-fixtures.md)
 - [DMX output and movers](docs/dmx-movers.md)
+- [Focus channels](docs/focus.md)
 - [Atmospherics](docs/atmospherics.md)
 - [MIDI and keyboard mapping](docs/midi-mapping.md)
 - [Scene generation](docs/scene-generation.md)
