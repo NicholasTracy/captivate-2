@@ -115,3 +115,4 @@ Values are saved into `moverBounds`. Completing enables kinematics for that grou
 
 - [Project files and autosave](PROJECTS.md)
 - [Atmospherics](atmospherics.md)
+- [Focus channels](focus.md)
