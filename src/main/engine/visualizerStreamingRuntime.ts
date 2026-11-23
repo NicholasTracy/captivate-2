@@ -4,6 +4,7 @@ import path from 'path'
 import { existsSync } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import { NdiSourceList, VisStreamHealth } from 'shared/visualizerStreaming'
+import { listNdiSourcesNative } from './ndiSourceFinder'
 
 const NDI_RUNTIME_DIR = 'ndi-runtime'
 const NDI_DOWNLOAD_URL = 'https://ndi.video/tools/ndi-runtime/'
@@ -394,9 +395,44 @@ function normalizePackagedExecutablePath(executablePath: string) {
 const NDI_FIND_SOURCES_TIMEOUT_MS = 15000
 
 /**
- * Runs FFmpeg in libndi_newtek "find_sources" mode and parses discovered source names.
- * Requires an FFmpeg build with libndi_newtek and a working NDI runtime on PATH / library path.
+ * Lists NDI sources with the installed NDI runtime so NDI 5/6 senders are visible,
+ * including sources on this computer. Falls back to FFmpeg's legacy finder only
+ * when the runtime cannot start.
  */
+export async function listNdiSources(
+  requestedFfmpegPath: string,
+  configuredRuntimePath: string,
+  defaultFfmpegPath: string = 'auto'
+): Promise<NdiSourceList> {
+  applyNdiRuntimeEnv(configuredRuntimePath)
+  const libraryPath = resolveNdiRuntimeLibrary(configuredRuntimePath)
+  if (!libraryPath) {
+    return ndiFfmpegList(
+      requestedFfmpegPath,
+      configuredRuntimePath,
+      defaultFfmpegPath
+    )
+  }
+
+  const native = await listNdiSourcesNative(libraryPath)
+  if (native.sources.length > 0 || native.error.trim().length === 0) {
+    return native
+  }
+
+  const ffmpeg = await ndiFfmpegList(
+    requestedFfmpegPath,
+    configuredRuntimePath,
+    defaultFfmpegPath
+  )
+  if (ffmpeg.sources.length > 0) {
+    return ffmpeg
+  }
+  return {
+    sources: [],
+    error: native.error || ffmpeg.error,
+  }
+}
+
 /** Run FFmpeg libndi find_sources and parse the source name list. */
 export async function ndiFfmpegList(
   requestedFfmpegPath: string,

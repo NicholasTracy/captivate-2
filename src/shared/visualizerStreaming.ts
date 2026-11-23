@@ -75,10 +75,21 @@ export interface VisualizerNdiRuntimeDetection {
   downloadUrl: string
 }
 
-/** NDI names from FFmpeg `libndi_newtek` find_sources scan. */
+/** NDI source names from the NDI runtime finder, or the legacy FFmpeg scan. */
 export interface NdiSourceList {
   sources: string[]
   /** Non-empty when the scan could not complete or FFmpeg reported a hard failure. */
+  error: string
+}
+
+export interface UsbCameraSource {
+  /** Value stored on the layer and passed to the camera relay. */
+  id: string
+  label: string
+}
+
+export interface UsbCameraList {
+  sources: UsbCameraSource[]
   error: string
 }
 

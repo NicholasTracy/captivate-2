@@ -5,17 +5,21 @@ import {
   VisualizerRelayRequest,
   VisualizerRelayStartResult,
 } from 'shared/visualizerStreaming'
+import { startNdiMjpegRelay } from './NdiMjpegRelay'
+import { startUsbCameraRelay } from './usbCamera'
 import {
   buildFfmpegEnv,
   visStreamHealth,
   resolveFfmpegPath,
+  resolveNdiRuntimeLibrary,
 } from './visualizerStreamingRuntime'
 
 interface RelayEntry {
   id: string
   sourceUrl: string
   relayUrl: string
-  process: ReturnType<typeof spawn>
+  process: ReturnType<typeof spawn> | null
+  stop: () => void
 }
 
 const RELAY_READY_TIMEOUT_MS = 750
@@ -25,7 +29,10 @@ export default class VisualizerInputRelayManager {
   private byId = new Map<string, RelayEntry>()
   private bySourceUrl = new Map<string, RelayEntry>()
 
-  async start(req: VisualizerRelayRequest): Promise<VisualizerRelayStartResult> {
+  async start(
+    req: VisualizerRelayRequest,
+    ndiRuntimePath: string = ''
+  ): Promise<VisualizerRelayStartResult> {
     const sourceUrl = req.sourceUrl.trim()
     if (sourceUrl.length === 0) {
       throw new Error('Stream URL is empty')
@@ -35,6 +42,8 @@ export default class VisualizerInputRelayManager {
       ? 'rtsp'
       : isNdiUrl(sourceUrl)
       ? 'ndi'
+      : isUsbUrl(sourceUrl)
+      ? 'usb'
       : 'direct'
 
     if (sourceKind === 'direct') {
@@ -52,10 +61,116 @@ export default class VisualizerInputRelayManager {
         mode: 'mjpegRelay',
         relayId: existing.id,
         url: existing.relayUrl,
-        message: 'Using existing RTSP relay',
+        message: 'Using existing stream relay',
       }
     }
 
+    if (sourceKind === 'ndi') {
+      const native = await this.startNdiRelay(req, sourceUrl, ndiRuntimePath)
+      if (native) {
+        return native
+      }
+    }
+
+    if (sourceKind === 'usb') {
+      return await this.startUsbRelay(req, sourceUrl)
+    }
+
+    return await this.startFfmpegRelay(req, sourceUrl, sourceKind)
+  }
+
+  stop(relayId: string) {
+    const entry = this.byId.get(relayId)
+    if (!entry) return
+    this.kill(entry)
+  }
+
+  stopAll() {
+    for (const entry of Array.from(this.byId.values())) {
+      this.kill(entry)
+    }
+  }
+
+  private async startNdiRelay(
+    req: VisualizerRelayRequest,
+    sourceUrl: string,
+    ndiRuntimePath: string
+  ): Promise<VisualizerRelayStartResult | null> {
+    const libraryPath = resolveNdiRuntimeLibrary(ndiRuntimePath)
+    if (!libraryPath) {
+      return null
+    }
+    const relayId = nanoid()
+    try {
+      const relay = await startNdiMjpegRelay({
+        libraryPath,
+        runtimePath: ndiRuntimePath,
+        sourceName: parseNdiSourceName(sourceUrl),
+        fps: clampFps(req.fps),
+        relayId,
+      })
+      const entry: RelayEntry = {
+        id: relayId,
+        sourceUrl,
+        relayUrl: relay.url,
+        process: null,
+        stop: () => relay.stop(),
+      }
+      this.byId.set(relayId, entry)
+      this.bySourceUrl.set(sourceUrl, entry)
+      return {
+        mode: 'mjpegRelay',
+        relayId,
+        url: relay.url,
+        message: `NDI source connected on ${relay.url}`,
+      }
+    } catch (err) {
+      console.error('[ndi-relay] native receive failed', err)
+      throw err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  private async startUsbRelay(
+    req: VisualizerRelayRequest,
+    sourceUrl: string
+  ): Promise<VisualizerRelayStartResult> {
+    const health = visStreamHealth(req.ffmpegPath, 'libndi_newtek')
+    if (!health.ffmpeg.exists) {
+      throw new Error(`FFmpeg not found at "${health.ffmpeg.resolvedPath}"`)
+    }
+    const relayId = nanoid()
+    const relay = await startUsbCameraRelay({
+      ffmpegPath: resolveFfmpegPath(req.ffmpegPath),
+      deviceId: parseUsbDeviceId(sourceUrl),
+      fps: clampFps(req.fps),
+      relayId,
+    })
+    const entry: RelayEntry = {
+      id: relayId,
+      sourceUrl,
+      relayUrl: relay.url,
+      process: relay.process,
+      stop: () => relay.stop(),
+    }
+    this.byId.set(relayId, entry)
+    this.bySourceUrl.set(sourceUrl, entry)
+    relay.process.on('exit', () => {
+      relay.stop()
+      this.cleanup(relayId)
+    })
+    return {
+      mode: 'mjpegRelay',
+      relayId,
+      url: relay.url,
+      message: `USB camera connected on ${relay.url}`,
+    }
+  }
+
+  private async startFfmpegRelay(
+    req: VisualizerRelayRequest,
+    sourceUrl: string,
+    sourceKind: 'rtsp' | 'ndi'
+  ): Promise<VisualizerRelayStartResult> {
     const relayId = nanoid()
     const port = await getFreePort()
     const relayUrl = `http://127.0.0.1:${port}/${relayId}.mjpg`
@@ -64,7 +179,6 @@ export default class VisualizerInputRelayManager {
       throw new Error(`FFmpeg not found at "${health.ffmpeg.resolvedPath}"`)
     }
     const ffmpegPath = resolveFfmpegPath(req.ffmpegPath)
-
     const ffmpegArgs =
       sourceKind === 'ndi'
         ? buildNdiRelayArgs(req, sourceUrl, relayUrl)
@@ -81,6 +195,11 @@ export default class VisualizerInputRelayManager {
       sourceUrl,
       relayUrl,
       process: relayProcess,
+      stop: () => {
+        try {
+          relayProcess.kill('SIGTERM')
+        } catch (_err) {}
+      },
     }
     this.byId.set(relayId, entry)
     this.bySourceUrl.set(sourceUrl, entry)
@@ -105,7 +224,8 @@ export default class VisualizerInputRelayManager {
       await waitForRelayReady(relayUrl, relayProcess)
     } catch (err) {
       this.kill(entry)
-      throw new Error(`RTSP relay failed to start: ${toErrorMessage(err)}`)
+      const label = sourceKind === 'ndi' ? 'NDI' : 'RTSP'
+      throw new Error(`${label} relay failed to start: ${toErrorMessage(err)}`)
     }
 
     return {
@@ -119,21 +239,9 @@ export default class VisualizerInputRelayManager {
     }
   }
 
-  stop(relayId: string) {
-    const entry = this.byId.get(relayId)
-    if (!entry) return
-    this.kill(entry)
-  }
-
-  stopAll() {
-    for (const entry of Array.from(this.byId.values())) {
-      this.kill(entry)
-    }
-  }
-
   private kill(entry: RelayEntry) {
     try {
-      entry.process.kill('SIGTERM')
+      entry.stop()
     } catch (_err) {}
     this.cleanup(entry.id)
   }
@@ -154,6 +262,19 @@ function isRtspUrl(url: string) {
 function isNdiUrl(url: string) {
   const lower = url.toLowerCase()
   return lower.startsWith('ndi://')
+}
+
+function isUsbUrl(url: string) {
+  return url.toLowerCase().startsWith('usb://')
+}
+
+function parseUsbDeviceId(url: string) {
+  const raw = url.slice('usb://'.length).trim()
+  try {
+    return decodeURIComponent(raw)
+  } catch (_err) {
+    return raw
+  }
 }
 
 function parseNdiSourceName(url: string) {

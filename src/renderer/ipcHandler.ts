@@ -14,6 +14,7 @@ import type {
 import {
   VisualizerNdiRuntimeDetection,
   NdiSourceList,
+  UsbCameraList,
   VisualizerStreamConfig,
   VisualizerStreamingSettings,
   VisualizerStreamState,
@@ -196,6 +197,42 @@ export async function listScreenDisplays(): Promise<ScreenDisplayChoice[]> {
   return Array.isArray(raw) ? (raw as ScreenDisplayChoice[]) : []
 }
 
+export function sendVisualizerPreviewFrame(jpeg: Uint8Array): void {
+  try {
+    ipcRenderer.send(ipc_channels.visualizer_preview_frame, jpeg)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function sendVisualizerPreviewHello(): void {
+  try {
+    ipcRenderer.send(ipc_channels.visualizer_preview_hello)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function onVisualizerPreviewDemand(
+  handler: (wanted: boolean) => void
+): () => void {
+  const unsubscribe = ipcRenderer.on(
+    ipc_channels.visualizer_preview_demand,
+    (wanted: boolean) => handler(wanted === true)
+  ) as unknown as (() => void) | void
+  return typeof unsubscribe === 'function' ? unsubscribe : () => undefined
+}
+
+export function onVisualizerPreviewFrame(
+  handler: (jpeg: Uint8Array) => void
+): () => void {
+  const unsubscribe = ipcRenderer.on(
+    ipc_channels.visualizer_preview_frame,
+    (jpeg: Uint8Array) => handler(jpeg)
+  ) as unknown as (() => void) | void
+  return typeof unsubscribe === 'function' ? unsubscribe : () => undefined
+}
+
 /** Tell main to set `videoEnabled` from detached visualizer windows (e.g. after loading a project). */
 export function send_reconcile_video_enabled() {
   ipcRenderer.send(ipc_channels.reconcile_video_enabled)
@@ -372,11 +409,18 @@ export async function detectVisualizerNdiRuntime() {
   )) as VisualizerNdiRuntimeDetection
 }
 
-/** NDI names on the LAN (FFmpeg find_sources). */
+/** NDI source names on this computer and the LAN. */
 export async function visNdiList() {
   return (await ipcRenderer.invoke(
     ipc_channels.visualizer_stream_ndi_list_sources
   )) as NdiSourceList
+}
+
+/** USB and virtual cameras attached to this computer. */
+export async function visUsbCameras() {
+  return (await ipcRenderer.invoke(
+    ipc_channels.visualizer_stream_usb_list_cameras
+  )) as UsbCameraList
 }
 
 export async function getDesktopAudioSourceId(): Promise<string | null> {

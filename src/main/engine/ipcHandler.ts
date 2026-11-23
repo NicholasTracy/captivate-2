@@ -36,6 +36,7 @@ import type { FixtureLibrarySubmitInput } from '../../shared/fixtureLibrarySubmi
 import {
   VisualizerNdiRuntimeDetection,
   NdiSourceList,
+  UsbCameraList,
   VisualizerStreamConfig,
   VisualizerStreamingSettings,
   VisualizerStreamState,
@@ -142,6 +143,7 @@ interface Config {
   ) => VisualizerStreamingSettings
   on_visualizer_stream_detect_ndi_runtime: () => VisualizerNdiRuntimeDetection
   on_visualizer_stream_ndi_list_sources: () => Promise<NdiSourceList>
+  on_visualizer_stream_usb_list_cameras: () => Promise<UsbCameraList>
   on_detect_projectm_runtime: () => ProjectMRuntimeDetection
   on_projectm_list_presets:
     () => ProjectMPresetCatalog | Promise<ProjectMPresetCatalog>
@@ -1038,6 +1040,11 @@ export function ipcSetup(config: Config) {
   ipcMain.handle(ipcChannels.visualizer_stream_ndi_list_sources, () => {
     telemetryCounter('ipc', 'visualizer_stream_ndi_list_sources')
     return _config.on_visualizer_stream_ndi_list_sources()
+  })
+
+  ipcMain.handle(ipcChannels.visualizer_stream_usb_list_cameras, () => {
+    telemetryCounter('ipc', 'visualizer_stream_usb_list_cameras')
+    return _config.on_visualizer_stream_usb_list_cameras()
   })
 
   ipcMain.handle(ipcChannels.detect_projectm_runtime, () => {

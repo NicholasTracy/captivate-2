@@ -11,6 +11,7 @@ import SplitPane from '../base/SplitPane'
 import SceneSelection from '../scenes/SceneSelection'
 import VisualizerSceneEditor from 'renderer/visualizer/VisualizerSceneEditor'
 import Visualizer from 'renderer/visualizer/Visualizer'
+import VisualizerMirror from 'renderer/visualizer/VisualizerMirror'
 import VisualizerContainerSelector from 'renderer/visualizer/VisualizerContainerSelector'
 import { useActiveVisualScene, useTypedSelector } from '../redux/store'
 import { toggleVideoEnabled } from '../redux/guiSlice'
@@ -18,9 +19,13 @@ import { setVisualSceneConfig } from '../redux/controlSlice'
 
 interface VisualizerPageProps {
   standalone?: boolean
+  previewMode?: 'live' | 'mirror'
 }
 
-export default function VisualizerPage({ standalone = false }: VisualizerPageProps) {
+export default function VisualizerPage({
+  standalone = false,
+  previewMode = 'live',
+}: VisualizerPageProps) {
   const dispatch = useDispatch()
   useEffect(() => {
     if (!standalone) {
@@ -98,7 +103,11 @@ export default function VisualizerPage({ standalone = false }: VisualizerPagePro
           max={0.9}
         >
           {videoEnabled ? (
-            <Visualizer />
+            previewMode === 'mirror' ? (
+              <VisualizerMirror />
+            ) : (
+              <Visualizer paintWhenHidden={standalone} publishPreview />
+            )
           ) : (
             <VisualizerDisabled>
               Visualizer output is off. Turn it on from the toggle in the left panel.

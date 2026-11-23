@@ -39,6 +39,12 @@ export default {
   request_window_close: 'request_window_close',
   /** Detached VideoViewport (minimal popout) window: toggle or query OS fullscreen. */
   visualizer_detached_fullscreen: 'visualizer_detached_fullscreen',
+  /** Video preview → main: one JPEG of the rendered visualizer. */
+  visualizer_preview_frame: 'visualizer_preview_frame',
+  /** Video preview asks whether a mirror or the outgoing stream needs frames. */
+  visualizer_preview_hello: 'visualizer_preview_hello',
+  /** Main → Video preview: true while a mirror window or the outgoing stream is open. */
+  visualizer_preview_demand: 'visualizer_preview_demand',
   get_local_filepaths: 'get_local_filepaths',
   get_local_directories: 'get_local_directories',
   main_command: 'main_command',
@@ -52,6 +58,7 @@ export default {
   visualizer_stream_settings_set: 'visualizer_stream_settings_set',
   visualizer_stream_detect_ndi_runtime: 'visualizer_stream_detect_ndi_runtime',
   visualizer_stream_ndi_list_sources: 'visualizer_stream_ndi_list_sources',
+  visualizer_stream_usb_list_cameras: 'visualizer_stream_usb_list_cameras',
   detect_projectm_runtime: 'detect_projectm_runtime',
   projectm_list_presets: 'projectm_list_presets',
   projectm_list_presets_in_directory: 'projectm_list_presets_in_directory',

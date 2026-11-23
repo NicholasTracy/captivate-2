@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electron', {
         'diagnostics_event',
         'telemetry_mark',
         'visualizer_stage_light_map',
+        'visualizer_preview_frame',
+        'visualizer_preview_hello',
       ]
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args)
@@ -52,6 +54,8 @@ contextBridge.exposeInMainWorld('electron', {
         'app_close_prompt',
         'detached_window_close_prompt',
         'fixture_library_submit_progress',
+        'visualizer_preview_frame',
+        'visualizer_preview_demand',
       ]
       if (validChannels.includes(channel)) {
         // Deliberately strip event as it includes `sender`
@@ -102,6 +106,7 @@ contextBridge.exposeInMainWorld('electron', {
         'visualizer_stream_settings_set',
         'visualizer_stream_detect_ndi_runtime',
         'visualizer_stream_ndi_list_sources',
+        'visualizer_stream_usb_list_cameras',
         'detect_projectm_runtime',
         'projectm_list_presets',
         'projectm_list_presets_in_directory',

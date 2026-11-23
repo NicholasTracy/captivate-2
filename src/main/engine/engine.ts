@@ -95,13 +95,16 @@ import {
   VisStreamHealth,
   VisualizerRelayRequest,
   VisualizerRelayStartResult,
+  UsbCameraList,
 } from 'shared/visualizerStreaming'
 import {
   detectNdiRuntimePaths,
   getNdiRuntimeDownloadUrl,
-  ndiFfmpegList,
+  listNdiSources,
+  resolveFfmpegPath,
   visStreamHealth,
 } from './visualizerStreamingRuntime'
+import { listUsbCameras } from './usbCamera'
 import { detectProjectMRuntime, listProjectMPresets } from './projectmRuntime'
 import { installProjectMBinaries } from './projectmInstaller'
 import {
@@ -299,6 +302,24 @@ let _connectionManager = new ConnectionManager({
   realtimeState: () => _realtimeState,
 })
 let _visualizerStreamOutputManager = new VisualizerStreamOutputManager()
+let _visualizerPreviewDemandListener: (() => void) | null = null
+
+export function setVisualizerPreviewDemandListener(listener: () => void) {
+  _visualizerPreviewDemandListener = listener
+}
+
+function notifyVisualizerPreviewDemand() {
+  _visualizerPreviewDemandListener?.()
+}
+
+export function isVisualizerStreamActive() {
+  const status = _visualizerStreamOutputManager.getState().status
+  return status === 'running' || status === 'starting'
+}
+
+export function pushVisualizerPreviewFrame(jpeg: Buffer) {
+  _visualizerStreamOutputManager.pushJpeg(jpeg)
+}
 let _visualizerInputRelayManager = new VisualizerInputRelayManager()
 let _projectMBridgeManager = new ProjectMBridgeManager()
 let _atmosphericsOutputManager = new AtmosphericsOutputManager()
@@ -826,13 +847,14 @@ export function start(
       config: VisualizerStreamConfig
     ): VisualizerStreamState => {
       const mergedConfig = withStreamingDefaults(config)
-      return _visualizerStreamOutputManager.start(
-        mergedConfig,
-        visualizerContainer.visualizer
-      )
+      const state = _visualizerStreamOutputManager.start(mergedConfig)
+      notifyVisualizerPreviewDemand()
+      return state
     },
     on_visualizer_stream_stop: (): VisualizerStreamState => {
-      return _visualizerStreamOutputManager.stop()
+      const state = _visualizerStreamOutputManager.stop()
+      notifyVisualizerPreviewDemand()
+      return state
     },
     on_visualizer_stream_get_state: (): VisualizerStreamState => {
       return _visualizerStreamOutputManager.getState()
@@ -853,7 +875,8 @@ export function start(
       req: VisualizerRelayRequest
     ): Promise<VisualizerRelayStartResult> => {
       return await _visualizerInputRelayManager.start(
-        withRelayDefaults(req)
+        withRelayDefaults(req),
+        getVisualizerStreamingSettings().ndiRuntimePath
       )
     },
     on_visualizer_stream_relay_stop: (relayId: string) => {
@@ -893,10 +916,19 @@ export function start(
       },
     on_visualizer_stream_ndi_list_sources: async () => {
       const settings = getVisualizerStreamingSettings()
-      return await ndiFfmpegList(
+      return await listNdiSources(
         settings.defaultFfmpegPath,
         settings.ndiRuntimePath,
         settings.defaultFfmpegPath
+      )
+    },
+    on_visualizer_stream_usb_list_cameras: async (): Promise<UsbCameraList> => {
+      const settings = getVisualizerStreamingSettings()
+      return await listUsbCameras(
+        resolveFfmpegPath(
+          settings.defaultFfmpegPath,
+          settings.defaultFfmpegPath
+        )
       )
     },
     on_detect_projectm_runtime: () => detectProjectMRuntime(),

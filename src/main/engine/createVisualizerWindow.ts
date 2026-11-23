@@ -57,7 +57,7 @@ export default function createVisualizerWindow(
       preload: path.join(__dirname, 'visualizer_preload.js'),
       webSecurity: false,
       nodeIntegration: false,
-      backgroundThrottling: true,
+      backgroundThrottling: false,
     },
   })
   visualizerContainer.visualizer.setMenuBarVisibility(false)

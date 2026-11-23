@@ -108,6 +108,8 @@ export function sumBuiltinVisSliders(
         ? 'Video'
         : layer.sourceType === 'ndiStream'
         ? 'NDI'
+        : layer.sourceType === 'usbCamera'
+        ? 'USB'
         : 'RTSP'
     const prefix = `Layer ${i + 1} ${layerName}`
     const linkKeys: LayerLinkKey[] = [

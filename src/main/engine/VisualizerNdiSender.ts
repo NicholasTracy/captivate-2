@@ -1,38 +1,13 @@
 import { existsSync } from 'fs'
 import { getKoffi } from './koffiNative'
+import { ensureNdiSdkStructs } from './ndiSdk'
 import { applyNdiRuntimeEnv } from './visualizerStreamingRuntime'
 
 const NDI_FOURCC_BGRA = 1095911234
 const NDI_FRAME_FORMAT_PROGRESSIVE = 1
 
-let ndiStructsRegistered = false
-
 function ensureNdiStructs() {
-  if (ndiStructsRegistered) {
-    return
-  }
-  const koffi = getKoffi()
-  koffi.struct('NDIlib_send_create_t', {
-    p_ndi_name: 'const char *',
-    p_groups: 'const char *',
-    clock_video: 'bool',
-    clock_audio: 'bool',
-  })
-  koffi.struct('NDIlib_video_frame_v2_t', {
-    xres: 'int',
-    yres: 'int',
-    FourCC: 'uint32_t',
-    frame_rate_N: 'int',
-    frame_rate_D: 'int',
-    picture_aspect_ratio: 'float',
-    frame_format_type: 'int',
-    timecode: 'int64_t',
-    p_data: 'uint8_t *',
-    line_stride_in_bytes: 'int',
-    p_metadata: 'const char *',
-    timestamp: 'int64_t',
-  })
-  ndiStructsRegistered = true
+  ensureNdiSdkStructs(getKoffi())
 }
 
 type NdiInitializeFn = () => number

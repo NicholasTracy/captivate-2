@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { BrowserWindow, NativeImage } from 'electron'
+import { NativeImage, nativeImage } from 'electron'
 import {
   initVisualizerStreamState,
   VisualizerStreamConfig,
@@ -29,8 +29,12 @@ const MAX_STDIN_QUEUE_BYTES = 8 * 1024 * 1024
 export default class VisualizerStreamOutputManager {
   private ffmpeg: ReturnType<typeof spawn> | null = null
   private ndiSender: VisualizerNdiSender | null = null
-  private window: BrowserWindow | null = null
-  private frameSubscribed = false
+  private outputConfig: VisualizerStreamConfig | null = null
+  private outputWidth = 0
+  private outputHeight = 0
+  private encoderReady = false
+  private useNativeNdi = false
+  private nativeLibraryPath: string | null = null
   private frameIntervalMs = 1000 / 30
   private nextFrameDueMs = 0
   private state: VisualizerStreamState = initVisualizerStreamState()
@@ -42,17 +46,9 @@ export default class VisualizerStreamOutputManager {
     return { ...this.state }
   }
 
-  start(
-    config: VisualizerStreamConfig,
-    window: BrowserWindow | null
-  ): VisualizerStreamState {
+  start(config: VisualizerStreamConfig): VisualizerStreamState {
     const startAt = performance.now()
     telemetryCounter('stream.output', 'start_requests')
-    if (window === null || window.isDestroyed()) {
-      telemetryHealth('stream.output', 'warn', 'Start failed: visualizer window missing')
-      return this.setError(config.protocol, 'Open the visualizer window first.')
-    }
-
     this.stopInternal('Restarting stream')
 
     const normalized = normalizeConfig(config)
@@ -83,31 +79,65 @@ export default class VisualizerStreamOutputManager {
       )
     }
 
-    const [windowWidth, windowHeight] = window.getContentSize()
-    const width = clampEven(windowWidth, 2, 7680)
-    const height = clampEven(windowHeight, 2, 4320)
+    this.useNativeNdi =
+      normalized.protocol === 'NDI' && health.ndi.delivery === 'native_sdk'
+    this.nativeLibraryPath = this.useNativeNdi
+      ? health.ndi.nativeLibraryPath ||
+        resolveNdiRuntimeLibrary(normalized.ndiRuntimePath)
+      : null
+    if (this.useNativeNdi && this.nativeLibraryPath === null) {
+      return this.setError(
+        normalized.protocol,
+        'NDI runtime library could not be resolved.'
+      )
+    }
 
-    this.window = window
+    this.outputConfig = normalized
+    this.encoderReady = false
+    this.outputWidth = 0
+    this.outputHeight = 0
     this.frameIntervalMs = 1000 / normalized.fps
     this.nextFrameDueMs = 0
     this.ffmpegPipeErrored = false
+    this.state = {
+      status: 'running',
+      protocol: normalized.protocol,
+      message: 'Waiting for the visualizer preview',
+    }
+    telemetryGauge('stream.output', 'fps', normalized.fps, 'fps')
+    telemetryDuration('stream.output', 'start_ms', performance.now() - startAt)
+    telemetryHealth('stream.output', 'ok', 'Stream waiting for preview frames')
+    telemetryCounter('stream.output', 'start_success')
+    return this.getState()
+  }
 
-    const shouldUseNativeNdi =
-      normalized.protocol === 'NDI' && health.ndi.delivery === 'native_sdk'
-    if (shouldUseNativeNdi) {
-      const runtimeLibraryPath =
-        health.ndi.nativeLibraryPath ||
-        resolveNdiRuntimeLibrary(normalized.ndiRuntimePath)
-      if (runtimeLibraryPath === null) {
-        return this.setError(
-          normalized.protocol,
-          'NDI runtime library could not be resolved.'
-        )
+  pushJpeg(jpeg: Buffer) {
+    if (this.state.status !== 'running' || this.outputConfig === null) return
+    const image = nativeImage.createFromBuffer(jpeg)
+    if (image.isEmpty()) return
+    if (!this.encoderReady) {
+      const size = image.getSize()
+      const width = clampEven(size.width, 2, 7680)
+      const height = clampEven(size.height, 2, 4320)
+      if (!this.openEncoder(width, height)) return
+    }
+    this.onFrame(image, this.outputWidth, this.outputHeight)
+  }
+
+  private openEncoder(width: number, height: number): boolean {
+    const normalized = this.outputConfig
+    if (normalized === null) return false
+    this.outputWidth = width
+    this.outputHeight = height
+
+    if (this.useNativeNdi) {
+      if (this.nativeLibraryPath === null) {
+        this.setError(normalized.protocol, 'NDI runtime library could not be resolved.')
+        return false
       }
-
       try {
         const ndiSender = new VisualizerNdiSender({
-          libraryPath: runtimeLibraryPath,
+          libraryPath: this.nativeLibraryPath,
           configuredRuntimePath: normalized.ndiRuntimePath,
           sourceName: normalized.ndiName,
           width,
@@ -121,10 +151,11 @@ export default class VisualizerStreamOutputManager {
         this.cleanupNdiSender()
         telemetryCounter('stream.output', 'ndi_native_start_failures')
         telemetryHealth('stream.output', 'error', 'Failed to start native NDI sender')
-        return this.setError(
+        this.setError(
           normalized.protocol,
           `Failed to start native NDI sender: ${toErrorMessage(err)}`
         )
+        return false
       }
     } else {
       const ffmpegArgs =
@@ -132,7 +163,6 @@ export default class VisualizerStreamOutputManager {
           ? buildRtspArgs(normalized, width, height)
           : buildNdiArgs(normalized, width, height)
       const ffmpegPath = resolveFfmpegPath(normalized.ffmpegPath)
-
       try {
         const ffmpeg = spawn(ffmpegPath, ffmpegArgs, {
           stdio: ['pipe', 'ignore', 'pipe'],
@@ -141,13 +171,14 @@ export default class VisualizerStreamOutputManager {
         })
         this.ffmpeg = ffmpeg
         ffmpeg.stdin?.on('error', (err) => {
+          if (this.ffmpeg !== ffmpeg) return
           this.handleFfmpegPipeError(
             normalized.protocol,
             `FFmpeg stdin error: ${err?.message || String(err)}`
           )
         })
-
         ffmpeg.on('error', (err) => {
+          if (this.ffmpeg !== ffmpeg) return
           telemetryCounter('stream.output', 'ffmpeg_errors')
           telemetryHealth(
             'stream.output',
@@ -161,17 +192,15 @@ export default class VisualizerStreamOutputManager {
             )
           }
           this.cleanupProcess()
-          this.stopFrameSubscription()
         })
-
         ffmpeg.stderr.on('data', (chunk: Buffer) => {
           const text = chunk.toString().trim()
           if (text.length > 0) {
             console.warn(`[visualizer-stream] ${text}`)
           }
         })
-
         ffmpeg.on('exit', (code, signal) => {
+          if (this.ffmpeg !== ffmpeg) return
           telemetryCounter('stream.output', 'ffmpeg_exits')
           telemetryHealth('stream.output', 'warn', 'FFmpeg process exited', {
             code,
@@ -190,7 +219,6 @@ export default class VisualizerStreamOutputManager {
             )
           }
           this.cleanupProcess()
-          this.stopFrameSubscription()
           if (!this.stopping && this.state.status !== 'error') {
             this.state = {
               status: 'idle',
@@ -202,45 +230,29 @@ export default class VisualizerStreamOutputManager {
       } catch (err) {
         telemetryCounter('stream.output', 'ffmpeg_start_failures')
         telemetryHealth('stream.output', 'error', 'Failed to launch FFmpeg')
-        return this.setError(
+        this.setError(
           normalized.protocol,
           `Failed to launch FFmpeg: ${String(err)}`
         )
+        return false
       }
     }
 
-    if (!this.startFrameSubscription(window, width, height)) {
-      telemetryCounter('stream.output', 'frame_subscription_failures')
-      telemetryHealth(
-        'stream.output',
-        'error',
-        'Frame subscription unsupported in this Electron build'
-      )
-      this.stopInternal('Not streaming')
-      return this.setError(
-        normalized.protocol,
-        `Your Electron build does not support frame subscription for capture.`
-      )
-    }
-
+    this.encoderReady = true
     this.state = {
       status: 'running',
       protocol: normalized.protocol,
       message:
         normalized.protocol === 'RTSP'
-          ? `Streaming to ${normalized.rtspUrl}`
-          : shouldUseNativeNdi
-          ? `Streaming as NDI source "${normalized.ndiName}" (native SDK)`
-          : `Streaming as NDI source "${normalized.ndiName}"`,
+          ? `Streaming the visualizer preview to ${normalized.rtspUrl}`
+          : this.useNativeNdi
+          ? `Streaming the visualizer preview as NDI source "${normalized.ndiName}" (native SDK)`
+          : `Streaming the visualizer preview as NDI source "${normalized.ndiName}"`,
     }
     telemetryGauge('stream.output', 'width', width, 'px')
     telemetryGauge('stream.output', 'height', height, 'px')
-    telemetryGauge('stream.output', 'fps', normalized.fps, 'fps')
-    telemetryDuration('stream.output', 'start_ms', performance.now() - startAt)
-    telemetryHealth('stream.output', 'ok', 'Stream running')
-    telemetryCounter('stream.output', 'start_success')
-
-    return this.getState()
+    telemetryHealth('stream.output', 'ok', 'Stream running from preview frames')
+    return true
   }
 
   stop(): VisualizerStreamState {
@@ -250,10 +262,12 @@ export default class VisualizerStreamOutputManager {
   private stopInternal(message: string): VisualizerStreamState {
     telemetryCounter('stream.output', 'stop_requests')
     this.stopping = true
-    this.stopFrameSubscription()
     this.cleanupProcess()
     this.cleanupNdiSender()
-    this.window = null
+    this.encoderReady = false
+    this.outputConfig = null
+    this.outputWidth = 0
+    this.outputHeight = 0
     this.state = {
       status: 'idle',
       protocol: this.state.protocol,
@@ -284,54 +298,6 @@ export default class VisualizerStreamOutputManager {
       this.ndiSender.stop()
     } catch (_err) {}
     this.ndiSender = null
-  }
-
-  private startFrameSubscription(
-    window: BrowserWindow,
-    width: number,
-    height: number
-  ): boolean {
-    const webContentsAny = window.webContents as unknown as {
-      beginFrameSubscription?: (
-        onlyDirty: boolean,
-        callback: (image: NativeImage) => void
-      ) => void
-      endFrameSubscription?: () => void
-    }
-
-    if (typeof webContentsAny.beginFrameSubscription !== 'function') {
-      return false
-    }
-
-    webContentsAny.beginFrameSubscription(false, (image) =>
-      this.onFrame(image, width, height)
-    )
-    this.frameSubscribed = true
-
-    window.once('closed', () => {
-      if (this.state.status === 'running' || this.state.status === 'starting') {
-        this.stopInternal('Visualizer window was closed')
-      }
-    })
-
-    return true
-  }
-
-  private stopFrameSubscription() {
-    if (!this.frameSubscribed || this.window === null || this.window.isDestroyed()) {
-      this.frameSubscribed = false
-      return
-    }
-
-    const webContentsAny = this.window.webContents as unknown as {
-      endFrameSubscription?: () => void
-    }
-
-    if (typeof webContentsAny.endFrameSubscription === 'function') {
-      webContentsAny.endFrameSubscription()
-    }
-
-    this.frameSubscribed = false
   }
 
   private onFrame(image: NativeImage, width: number, height: number) {
@@ -417,7 +383,6 @@ export default class VisualizerStreamOutputManager {
       this.setError(protocol, message)
     }
     this.cleanupProcess()
-    this.stopFrameSubscription()
   }
 
   private setError(

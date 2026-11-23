@@ -413,8 +413,10 @@ export default class VisualizerManager {
   private presentScene: THREE.Scene
   private presentMaterial: THREE.ShaderMaterial
 
-  constructor() {
-    this.renderer = new THREE.WebGLRenderer()
+  constructor(options?: { preserveDrawingBuffer?: boolean }) {
+    this.renderer = new THREE.WebGLRenderer({
+      preserveDrawingBuffer: options?.preserveDrawingBuffer === true,
+    })
     this.layerConfig = initLayerConfig('builtin')
     this.activeRandomSeed = this.computeRandomSeed(this.layerConfig)
     this.activeLayer = constructLayer(this.layerConfig)
@@ -737,10 +739,14 @@ export default class VisualizerManager {
     return false
   }
 
-  resize(width: number, height: number) {
+  setPixelRatio(ratio: number) {
+    this.renderer.setPixelRatio(ratio)
+  }
+
+  resize(width: number, height: number, updateStyle = true) {
     this.width = width
     this.height = height
-    this.renderer.setSize(width, height)
+    this.renderer.setSize(width, height, updateStyle)
     this.activeLayer.resize(width, height)
     if (this.transitionFromLayer !== null) {
       this.transitionFromLayer.resize(width, height)

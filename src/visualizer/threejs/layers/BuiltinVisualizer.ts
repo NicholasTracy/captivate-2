@@ -53,6 +53,7 @@ export type BuiltinGeneratorType =
   | 'fftRibbon'
   | 'voxelPulse'
   | 'importedModel'
+  | 'text'
   | 'legacyTextParticles'
   | 'legacyTextSpin'
   | 'legacySpaceTunnel'
@@ -142,9 +143,42 @@ export type BuiltinLayerSourceType =
   | 'videoFile'
   | 'rtspStream'
   | 'ndiStream'
+  | 'usbCamera'
   | 'projectM'
 
 export type BuiltinMediaFitMode = 'fill' | 'object3d'
+
+export type BuiltinTextFont =
+  | 'helvetikerBold'
+  | 'helvetiker'
+  | 'gentilis'
+  | 'sans'
+  | 'serif'
+  | 'mono'
+  | 'condensed'
+  | 'display'
+  | 'script'
+  | 'system'
+
+export type BuiltinTextStyle =
+  | 'solid'
+  | 'outline'
+  | 'glow'
+  | 'neon'
+  | 'shadow'
+  | 'gradient'
+  | 'chrome'
+  | 'glitch'
+  | 'hollow'
+
+export type BuiltinTextMotion =
+  | 'still'
+  | 'spin'
+  | 'wave'
+  | 'scroll'
+  | 'beat'
+  | 'typewriter'
+  | 'flicker'
 
 export interface BuiltinLayerItem {
   id: string
@@ -154,6 +188,9 @@ export interface BuiltinLayerItem {
   sourceType: BuiltinLayerSourceType
   source: string
   text: string
+  textFont: BuiltinTextFont
+  textStyle: BuiltinTextStyle
+  textMotion: BuiltinTextMotion
   /** `fill` = fullscreen plate (projectM-style); `object3d` = positioned plane in the scene. */
   mediaFit: BuiltinMediaFitMode
   enabled: boolean
@@ -232,6 +269,7 @@ export const builtinGeneratorTypeList: BuiltinGeneratorType[] = [
   'fftRibbon',
   'voxelPulse',
   'importedModel',
+  'text',
   'legacyTextParticles',
   'legacyTextSpin',
   'legacySpaceTunnel',
@@ -557,6 +595,7 @@ export const builtinLayerSourceTypeList: BuiltinLayerSourceType[] = [
   'videoFile',
   'rtspStream',
   'ndiStream',
+  'usbCamera',
   'projectM',
 ]
 
@@ -566,6 +605,7 @@ export const builtinLayerSourceDisplayName: Record<BuiltinLayerSourceType, strin
   videoFile: 'Video File',
   rtspStream: 'RTSP URL',
   ndiStream: 'NDI Source',
+  usbCamera: 'USB Camera',
   projectM: 'projectM Preset',
 }
 
@@ -577,6 +617,89 @@ export const builtinBlendDisplayName: Record<BuiltinBlendMode, string> = {
   overlay: 'Overlay',
   dodge: 'Dodge',
   dissolve: 'Dissolve',
+}
+
+export const builtinTextFontList: BuiltinTextFont[] = [
+  'helvetikerBold',
+  'helvetiker',
+  'gentilis',
+  'sans',
+  'serif',
+  'mono',
+  'condensed',
+  'display',
+  'script',
+  'system',
+]
+
+export const builtinTextFontDisplayName: Record<BuiltinTextFont, string> = {
+  helvetikerBold: 'Helvetiker Bold',
+  helvetiker: 'Helvetiker',
+  gentilis: 'Gentilis',
+  sans: 'Sans',
+  serif: 'Serif',
+  mono: 'Mono',
+  condensed: 'Condensed',
+  display: 'Display',
+  script: 'Script',
+  system: 'System',
+}
+
+export const builtinTextStyleList: BuiltinTextStyle[] = [
+  'solid',
+  'outline',
+  'glow',
+  'neon',
+  'shadow',
+  'gradient',
+  'chrome',
+  'glitch',
+  'hollow',
+]
+
+export const builtinTextStyleDisplayName: Record<BuiltinTextStyle, string> = {
+  solid: 'Solid',
+  outline: 'Outline',
+  glow: 'Glow',
+  neon: 'Neon',
+  shadow: 'Drop Shadow',
+  gradient: 'Gradient',
+  chrome: 'Chrome',
+  glitch: 'Glitch',
+  hollow: 'Hollow',
+}
+
+export const builtinTextMotionList: BuiltinTextMotion[] = [
+  'still',
+  'spin',
+  'wave',
+  'scroll',
+  'beat',
+  'typewriter',
+  'flicker',
+]
+
+export const builtinTextMotionDisplayName: Record<BuiltinTextMotion, string> = {
+  still: 'Still',
+  spin: 'Spin',
+  wave: 'Wave',
+  scroll: 'Scroll',
+  beat: 'Beat Pulse',
+  typewriter: 'Typewriter',
+  flicker: 'Flicker',
+}
+
+export function isBuiltinTextGenerator(generator: BuiltinGeneratorType) {
+  return (
+    generator === 'text' ||
+    generator === 'legacyTextParticles' ||
+    generator === 'legacyTextSpin'
+  )
+}
+
+function defaultTextMotion(generator: BuiltinGeneratorType): BuiltinTextMotion {
+  if (generator === 'legacyTextSpin') return 'spin'
+  return 'still'
 }
 
 export function createBuiltinLayer(
@@ -591,6 +714,9 @@ export function createBuiltinLayer(
     sourceType: 'procedural',
     source: '',
     text: 'Captivate',
+    textFont: generator === 'text' ? 'sans' : 'helvetikerBold',
+    textStyle: generator === 'text' ? 'glow' : 'solid',
+    textMotion: defaultTextMotion(generator),
     mediaFit: 'fill',
     enabled: true,
     density: 0.55,
@@ -1345,7 +1471,7 @@ export default class BuiltinVisualizer extends LayerBase {
           material instanceof THREE.MeshBasicMaterial &&
           material.map !== null
 
-        if (isColorMaterial(material) && !isMediaMaterial) {
+        if (isColorMaterial(material) && !isMediaMaterial && material.userData.keepTextureColor !== true) {
           const next = applyColorFx(
             color,
             invert,
@@ -1372,10 +1498,15 @@ export default class BuiltinVisualizer extends LayerBase {
         }
 
         if ('opacity' in material) {
+          const textOpacityScale = Number(runtimeLayer.scratch.textOpacityScale)
+          const opacityScale = Number.isFinite(textOpacityScale)
+            ? clamp01(textOpacityScale, 1)
+            : 1
           material.opacity =
-            layer.blend === 'dissolve'
+            opacityScale *
+            (layer.blend === 'dissolve'
               ? clamp01(layerOpacity * (0.7 + this.rng() * 0.6), layerOpacity)
-              : layerOpacity
+              : layerOpacity)
           material.transparent = material.opacity < 0.995 || layer.blend !== 'alpha'
         }
 
@@ -1554,19 +1685,20 @@ export default class BuiltinVisualizer extends LayerBase {
 
   private disposeRuntimeLayer(runtimeLayer: RuntimeLayer) {
     this.disposeLayerMedia(runtimeLayer)
+    const disposedGeometries = new Set<THREE.BufferGeometry>()
     for (const node of runtimeLayer.nodes) {
       const mesh = node.object as THREE.Mesh
-      if (mesh.geometry) {
+      if (mesh.geometry && !disposedGeometries.has(mesh.geometry)) {
+        disposedGeometries.add(mesh.geometry)
         mesh.geometry.dispose()
       }
     }
     for (const material of runtimeLayer.materials) {
-      if (
-        material instanceof THREE.MeshBasicMaterial &&
-        material.userData.disposeMap === true &&
-        material.map
-      ) {
-        material.map.dispose()
+      if (material instanceof THREE.MeshBasicMaterial && material.map) {
+        const isTextPlate = runtimeLayer.scratch.textPlateTexture === material.map
+        if (material.userData.disposeMap === true || isTextPlate) {
+          material.map.dispose()
+        }
       }
       material.dispose()
     }
@@ -1609,6 +1741,8 @@ export default class BuiltinVisualizer extends LayerBase {
         runtime.generator !== next.generator ||
         current.sourceType !== next.sourceType ||
         current.text !== next.text ||
+        current.textFont !== next.textFont ||
+        current.textStyle !== next.textStyle ||
         (isQuantitySensitiveGenerator(next.generator) &&
           (Math.abs(current.quantity - next.quantity) > 0.0001 ||
             Math.abs(current.variety - next.variety) > 0.0001 ||
@@ -1687,6 +1821,23 @@ export default class BuiltinVisualizer extends LayerBase {
         target = relay.url
       } catch (err) {
         console.error(`NDI relay failed`, err)
+        return
+      }
+    } else if (layer.sourceType === 'usbCamera') {
+      try {
+        const relay = await startRelay(
+          initVisualizerRelayRequest(`usb://${encodeURIComponent(source)}`)
+        )
+        if (this.disposed) {
+          if (relay.relayId) {
+            void stopRelay(relay.relayId)
+          }
+          return
+        }
+        media.relayId = relay.relayId
+        target = relay.url
+      } catch (err) {
+        console.error(`USB camera relay failed`, err)
         return
       }
     }
@@ -2821,12 +2972,13 @@ export default class BuiltinVisualizer extends LayerBase {
   }
 }
 
-/** Layer uses a camera-locked fullscreen plate (projectM / NDI / RTSP). */
+/** Layer uses a camera-locked fullscreen plate (projectM / NDI / RTSP / USB). */
 function isVisBackdropSrc(sourceType: BuiltinLayerSourceType) {
   return (
     sourceType === 'projectM' ||
     sourceType === 'ndiStream' ||
-    sourceType === 'rtspStream'
+    sourceType === 'rtspStream' ||
+    sourceType === 'usbCamera'
   )
 }
 
@@ -2942,6 +3094,19 @@ function normalizeLayerItem(source: unknown, index: number): BuiltinLayerItem {
       typeof input.text === 'string' && input.text.trim().length > 0
         ? input.text
         : fallback.text,
+    textFont: builtinTextFontList.includes(input.textFont as BuiltinTextFont)
+      ? (input.textFont as BuiltinTextFont)
+      : fallback.textFont,
+    textStyle: builtinTextStyleList.includes(input.textStyle as BuiltinTextStyle)
+      ? (input.textStyle as BuiltinTextStyle)
+      : fallback.textStyle,
+    textMotion: builtinTextMotionList.includes(input.textMotion as BuiltinTextMotion)
+      ? (input.textMotion as BuiltinTextMotion)
+      : defaultTextMotion(
+          builtinGeneratorTypeList.includes(input.generator as BuiltinGeneratorType)
+            ? (input.generator as BuiltinGeneratorType)
+            : fallback.generator
+        ),
     mediaFit: normalizeMediaFitMode(input.mediaFit, fallback.mediaFit),
     enabled: input.enabled !== false,
     density: clamp01(input.density, fallback.density),
@@ -3779,11 +3944,21 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       addMesh(mesh, 0.15)
       break
     }
+    case 'text': {
+      const plate = createTextPlate(layer)
+      materials.push(plate.material)
+      addMesh(plate.mesh, 0.04)
+      scratch.textPlateTexture = plate.texture
+      scratch.textPlateCanvas = plate.canvas
+      scratch.textPlateContext = plate.context
+      break
+    }
     case 'legacyTextParticles': {
       const count = Math.max(540, Math.round(800 + layer.density * 3400))
       const words = parseLegacyTextWords(layer.text)
       const textSize = 0.58 + layer.scale * 0.95
-      const targets = buildTextPointTargets(words[0], textSize, count)
+      const font = typefaceForTextFont(layer.textFont)
+      const targets = buildTextPointTargets(words[0], textSize, count, font)
       const positions = new Float32Array(count * 3)
       for (let i = 0; i < count; i++) {
         positions[i * 3] = (Math.random() - 0.5) * 9.5
@@ -3792,9 +3967,15 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
       }
       const geometry = new THREE.BufferGeometry()
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+      const pointSize =
+        layer.textStyle === 'outline' || layer.textStyle === 'hollow'
+          ? 0.012 + layer.scale * 0.03
+          : layer.textStyle === 'glow' || layer.textStyle === 'neon'
+          ? 0.035 + layer.scale * 0.09
+          : 0.02 + layer.scale * 0.06
       const material = new THREE.PointsMaterial({
-        color: '#ffe1a8',
-        size: 0.055 + layer.scale * 0.1,
+        color: layer.textStyle === 'neon' ? '#7ef9ff' : '#ffd37f',
+        size: pointSize,
         transparent: true,
         opacity: layer.mix,
         depthWrite: false,
@@ -3813,7 +3994,7 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
     case 'legacyTextSpin': {
       const text = sanitizeLegacyText(layer.text)
       const textSize = 0.45 + layer.scale * 0.9
-      const font = fonts.helvetiker_bold ?? fallbackFont
+      const font = typefaceForTextFont(layer.textFont)
       const shapes = font.generateShapes(text, textSize)
       const geometry = new THREE.ShapeGeometry(shapes, 6)
       geometry.computeBoundingBox()
@@ -3823,21 +4004,60 @@ function buildLayerGeometry(layer: BuiltinLayerItem, index: number): RuntimeLaye
         const centerY = (bb.min.y + bb.max.y) * 0.5
         geometry.translate(-centerX, -centerY, 0)
       }
-      const material = createStdMat()
-      materials.push(material)
-      const mesh = new THREE.Mesh(geometry, material)
-      addMesh(mesh, 0.14 + layer.density * 0.2)
+      applyShapeVertexStyle(geometry, layer.textStyle)
+      const filled = layer.textStyle !== 'outline' && layer.textStyle !== 'hollow'
+      const createTextMat = () =>
+        new THREE.MeshStandardMaterial({
+          color: '#9fd4ff',
+          transparent: true,
+          opacity: layer.mix,
+          depthWrite: false,
+          toneMapped: false,
+          roughness: 0.45,
+          metalness: 0.05,
+        })
+      if (filled) {
+        const material = createTextMat()
+        if (layer.textStyle === 'chrome') {
+          material.metalness = 0.92
+          material.roughness = 0.16
+          material.color.set('#ffffff')
+          material.vertexColors = true
+        } else if (layer.textStyle === 'gradient') {
+          material.color.set('#ffffff')
+          material.vertexColors = true
+        } else if (layer.textStyle === 'neon') {
+          material.emissive.set('#39ffd4')
+          material.emissiveIntensity = 1.4
+          material.color.set('#07332c')
+        } else if (layer.textStyle === 'glow') {
+          material.emissiveIntensity = 1.15
+        }
+        materials.push(material)
+        const mesh = new THREE.Mesh(geometry, material)
+        addMesh(mesh, 0.14 + layer.density * 0.2)
+        scratch.textSpinBaseY = mesh.position.y
+      }
+      if (layer.textStyle === 'shadow' && filled) {
+        const shadowMaterial = createTextMat()
+        shadowMaterial.color.set('#070b14')
+        shadowMaterial.emissive.set('#000000')
+        shadowMaterial.emissiveIntensity = 0
+        materials.push(shadowMaterial)
+        const shadow = new THREE.Mesh(geometry, shadowMaterial)
+        shadow.position.set(0.08, -0.08, -0.04)
+        addMesh(shadow, 0.02)
+      }
 
       const edgeMaterial = new THREE.LineBasicMaterial({
-        color: '#aee0ff',
+        color: layer.textStyle === 'neon' ? '#9fffee' : '#aee0ff',
         transparent: true,
-        opacity: layer.mix * 0.9,
+        opacity: layer.mix * (layer.textStyle === 'hollow' || layer.textStyle === 'outline' ? 1 : 0.9),
       })
       materials.push(edgeMaterial)
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial)
       edges.position.z = 0.01
       addMesh(edges, 0.11)
-      scratch.textSpinBaseY = mesh.position.y
       break
     }
     case 'legacySpaceTunnel': {
@@ -3995,9 +4215,275 @@ function parseLegacyTextWords(text: string): string[] {
   return parsed.length > 0 ? parsed : ['Captivate']
 }
 
-function buildTextPointTargets(text: string, size: number, count: number): Float32Array {
+function typefaceForTextFont(font: BuiltinTextFont) {
+  if (font === 'gentilis' || font === 'serif' || font === 'script') {
+    return fonts.gentilis ?? fallbackFont
+  }
+  if (font === 'helvetiker' || font === 'mono' || font === 'system' || font === 'condensed') {
+    return fonts.helvetiker_reg ?? fallbackFont
+  }
+  return fonts.helvetiker_bold ?? fallbackFont
+}
+
+const builtinTextFontCanvas: Record<BuiltinTextFont, string> = {
+  helvetikerBold: '700 168px "Segoe UI", Arial, sans-serif',
+  helvetiker: '500 168px "Segoe UI", Arial, sans-serif',
+  gentilis: '500 168px Georgia, "Times New Roman", serif',
+  sans: '600 168px "Segoe UI", Arial, sans-serif',
+  serif: '600 168px Georgia, "Times New Roman", serif',
+  mono: '600 150px Consolas, "Courier New", monospace',
+  condensed: '700 168px "Arial Narrow", "Franklin Gothic Medium", sans-serif',
+  display: '700 176px Impact, "Arial Black", sans-serif',
+  script: '600 168px "Segoe Script", "Brush Script MT", cursive',
+  system: '600 168px system-ui, sans-serif',
+}
+
+function textPlateLines(text: string, reveal = 1) {
+  const source = sanitizeLegacyText(text)
+  const amount = clamp01(reveal, 1)
+  const visibleCount = Math.max(1, Math.round(source.length * amount))
+  const visible = amount >= 0.999 ? source : source.slice(0, visibleCount)
+  const lines = visible
+    .split(/\r?\n|\|/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+  return lines.length > 0 ? lines : ['']
+}
+
+function paintTextPlate(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  text: string,
+  font: BuiltinTextFont,
+  style: BuiltinTextStyle,
+  glitchSeed: number
+) {
+  ctx.clearRect(0, 0, width, height)
+  ctx.font = builtinTextFontCanvas[font]
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const lines = textPlateLines(text, 1)
+  const measured = Math.max(
+    1,
+    ...lines.map((line) => ctx.measureText(line).width)
+  )
+  const fit = Math.min(1, (width * 0.86) / measured)
+  const lineHeight = 190 * fit
+  const startY = height / 2 - ((lines.length - 1) * lineHeight) / 2
+  ctx.save()
+  ctx.translate(width / 2, 0)
+  ctx.scale(fit, fit)
+  for (let i = 0; i < lines.length; i++) {
+    drawStyledTextLine(
+      ctx,
+      lines[i],
+      0,
+      (startY + i * lineHeight) / Math.max(0.001, fit),
+      style,
+      glitchSeed + i * 17
+    )
+  }
+  ctx.restore()
+}
+
+function drawStyledTextLine(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  x: number,
+  y: number,
+  style: BuiltinTextStyle,
+  seed: number
+) {
+  ctx.lineJoin = 'round'
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetX = 0
+  ctx.shadowOffsetY = 0
+  if (style === 'shadow') {
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.72)'
+    ctx.shadowBlur = 18
+    ctx.shadowOffsetX = 10
+    ctx.shadowOffsetY = 14
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(line, x, y)
+    return
+  }
+  if (style === 'glow') {
+    ctx.shadowColor = 'rgba(186, 230, 255, 0.95)'
+    ctx.shadowBlur = 36
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(line, x, y)
+    ctx.shadowBlur = 12
+    ctx.fillText(line, x, y)
+    return
+  }
+  if (style === 'neon') {
+    ctx.strokeStyle = '#f5ff9a'
+    ctx.lineWidth = 10
+    ctx.shadowColor = '#39ffd4'
+    ctx.shadowBlur = 28
+    ctx.strokeText(line, x, y)
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#eaffff'
+    ctx.fillText(line, x, y)
+    return
+  }
+  if (style === 'outline' || style === 'hollow') {
+    ctx.lineWidth = style === 'hollow' ? 8 : 14
+    ctx.strokeStyle = '#ffffff'
+    ctx.strokeText(line, x, y)
+    if (style === 'outline') {
+      ctx.fillStyle = 'rgba(8, 16, 32, 0.35)'
+      ctx.fillText(line, x, y)
+    }
+    return
+  }
+  if (style === 'gradient' || style === 'chrome') {
+    const gradient = ctx.createLinearGradient(x - 420, y - 80, x + 420, y + 80)
+    if (style === 'chrome') {
+      gradient.addColorStop(0, '#8ea0b8')
+      gradient.addColorStop(0.35, '#f4f7fb')
+      gradient.addColorStop(0.5, '#6d7d93')
+      gradient.addColorStop(0.72, '#ffffff')
+      gradient.addColorStop(1, '#9aabbe')
+    } else {
+      gradient.addColorStop(0, '#7cf7ff')
+      gradient.addColorStop(0.45, '#ffffff')
+      gradient.addColorStop(1, '#ff8ad4')
+    }
+    ctx.fillStyle = gradient
+    ctx.fillText(line, x, y)
+    return
+  }
+  if (style === 'glitch') {
+    const shift = ((seed * 13) % 18) - 9
+    ctx.fillStyle = 'rgba(255, 48, 96, 0.85)'
+    ctx.fillText(line, x + shift, y)
+    ctx.fillStyle = 'rgba(48, 220, 255, 0.85)'
+    ctx.fillText(line, x - shift, y + 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(line, x, y)
+    return
+  }
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(line, x, y)
+}
+
+function createTextPlate(layer: BuiltinLayerItem) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 2048
+  canvas.height = 512
+  const context = canvas.getContext('2d')
+  if (context) {
+    paintTextPlate(
+      context,
+      canvas.width,
+      canvas.height,
+      layer.text,
+      layer.textFont,
+      layer.textStyle,
+      0
+    )
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
+  texture.needsUpdate = true
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    color: '#ffffff',
+    transparent: true,
+    opacity: layer.mix,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  })
+  if (
+    layer.textStyle === 'gradient' ||
+    layer.textStyle === 'chrome' ||
+    layer.textStyle === 'neon'
+  ) {
+    material.userData.keepTextureColor = true
+  }
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.1), material)
+  return { canvas, context, texture, material, mesh }
+}
+
+function applyShapeVertexStyle(geometry: THREE.ShapeGeometry, style: BuiltinTextStyle) {
+  if (style !== 'gradient' && style !== 'chrome') return
+  const position = geometry.getAttribute('position')
+  if (!position) return
+  const colors = new Float32Array(position.count * 3)
+  let minX = Infinity
+  let maxX = -Infinity
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i)
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+  }
+  const span = Math.max(0.0001, maxX - minX)
+  const color = new THREE.Color()
+  for (let i = 0; i < position.count; i++) {
+    const t = (position.getX(i) - minX) / span
+    if (style === 'chrome') {
+      const band = 0.55 + 0.45 * Math.abs(Math.sin(t * Math.PI * 3))
+      color.setRGB(band, band, Math.min(1, band + 0.08))
+    } else {
+      color.setHSL(0.52 + t * 0.28, 0.75, 0.62)
+    }
+    colors[i * 3] = color.r
+    colors[i * 3 + 1] = color.g
+    colors[i * 3 + 2] = color.b
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+}
+
+function textMotionOffset(
+  motion: BuiltinTextMotion,
+  clockSec: number,
+  speed: number,
+  beatPulse: number
+) {
+  const rate = 0.6 + speed * 1.8
+  if (motion === 'spin') {
+    return { x: 0, y: 0, z: 0, rotY: clockSec * rate, rotZ: 0, scale: 1, opacity: 1 }
+  }
+  if (motion === 'wave') {
+    return {
+      x: 0,
+      y: Math.sin(clockSec * rate) * 0.28,
+      z: 0,
+      rotY: 0,
+      rotZ: Math.sin(clockSec * rate * 0.7) * 0.18,
+      scale: 1,
+      opacity: 1,
+    }
+  }
+  if (motion === 'scroll') {
+    const span = 5.2
+    const phase = ((clockSec * (0.35 + speed * 0.9)) % 2) - 1
+    return { x: phase * span, y: 0, z: 0, rotY: 0, rotZ: 0, scale: 1, opacity: 1 }
+  }
+  if (motion === 'beat') {
+    const pulse = Math.max(beatPulse, 0.5 + 0.5 * Math.sin(clockSec * rate * 2))
+    return { x: 0, y: 0, z: 0, rotY: 0, rotZ: 0, scale: 0.86 + pulse * 0.34, opacity: 1 }
+  }
+  if (motion === 'flicker') {
+    const gate = Math.sin(clockSec * (10 + speed * 18)) > -0.72 ? 1 : 0.25
+    return { x: 0, y: 0, z: 0, rotY: 0, rotZ: 0, scale: 1, opacity: gate }
+  }
+  return { x: 0, y: 0, z: 0, rotY: 0, rotZ: 0, scale: 1, opacity: 1 }
+}
+
+function buildTextPointTargets(
+  text: string,
+  size: number,
+  count: number,
+  font: ReturnType<typeof typefaceForTextFont>
+): Float32Array {
   const safeText = sanitizeLegacyText(text)
-  const font = fonts.helvetiker_bold ?? fallbackFont
   const shapes = font.generateShapes(safeText, size)
 
   const paths: Array<THREE.Shape | THREE.Path> = []
@@ -4405,6 +4891,7 @@ const LAYER_SCALE_GROUP_FACTOR_GENERATORS = new Set<BuiltinGeneratorType>([
   'geodesic',
   'torusKnot',
   'importedModel',
+  'text',
   'legacyTextParticles',
   'legacySpaceTunnel',
   'text',
@@ -5303,7 +5790,12 @@ function updateLayerGeneratorBehavior(
       targets.length !== attr.count * 3
     ) {
       wordIndex = (wordIndex + 1) % words.length
-      targets = buildTextPointTargets(words[wordIndex], textSize, attr.count)
+      targets = buildTextPointTargets(
+        words[wordIndex],
+        textSize,
+        attr.count,
+        typefaceForTextFont(runtimeLayer.layer.textFont)
+      )
       runtimeLayer.scratch.textMorphWordIndex = wordIndex
       runtimeLayer.scratch.textMorphTargets = targets
       runtimeLayer.scratch.textMorphLastSwitchBeat = input.beats
@@ -5312,12 +5804,24 @@ function updateLayerGeneratorBehavior(
     if (targets === undefined) {
       return
     }
+    const motion = textMotionOffset(
+      runtimeLayer.layer.textMotion,
+      input.clockSec,
+      input.speed,
+      input.beatPulse
+    )
+    const glitch = runtimeLayer.layer.textStyle === 'glitch' ? 0.16 : 0
+    const reveal =
+      runtimeLayer.layer.textMotion === 'typewriter'
+        ? ((input.clockSec * (0.15 + input.speed * 0.25)) % 1)
+        : 1
     const converge = clamp01(input.dtSec * (1.8 + input.speed * 0.35), 0.1)
-    const jitterScale = input.beatPulse * 0.18
+    const jitterScale = input.beatPulse * 0.18 + glitch
     for (let i = 0; i < attr.count; i++) {
-      const tx = targets[i * 3]
-      const ty = targets[i * 3 + 1]
-      const tz = targets[i * 3 + 2]
+      const shown = i / Math.max(1, attr.count - 1) <= reveal
+      const tx = shown ? targets[i * 3] : (i % 17) * 0.15 - 1.2
+      const ty = shown ? targets[i * 3 + 1] : ((i * 7) % 11) * 0.12 - 0.6
+      const tz = shown ? targets[i * 3 + 2] : 0
       const x = attr.getX(i)
       const y = attr.getY(i)
       const z = attr.getZ(i)
@@ -5327,23 +5831,105 @@ function updateLayerGeneratorBehavior(
       attr.setXYZ(i, nx, ny, nz)
     }
     attr.needsUpdate = true
+    node.object.position.set(
+      node.basePosition.x + motion.x,
+      node.basePosition.y + motion.y,
+      node.basePosition.z
+    )
+    node.object.rotation.z = node.baseRotation.z + motion.rotZ
+    node.object.scale.setScalar(motion.scale)
+    runtimeLayer.scratch.textOpacityScale = motion.opacity
+    return
+  }
+
+  if (generator === 'text') {
+    const layer = runtimeLayer.layer
+    const motion = textMotionOffset(
+      layer.textMotion,
+      input.clockSec,
+      input.speed,
+      input.beatPulse
+    )
+    const canvas = runtimeLayer.scratch.textPlateCanvas as HTMLCanvasElement | undefined
+    const context = runtimeLayer.scratch.textPlateContext as
+      | CanvasRenderingContext2D
+      | null
+      | undefined
+    const texture = runtimeLayer.scratch.textPlateTexture as THREE.Texture | undefined
+    let reveal = 1
+    if (layer.textMotion === 'typewriter') {
+      const cycle = 3.2 + (1 - Math.min(1, input.speed)) * 5
+      const phase = (input.clockSec % cycle) / cycle
+      reveal = phase < 0.8 ? phase / 0.8 : 1
+    }
+    const glitchSeed = layer.textStyle === 'glitch' ? Math.floor(input.clockSec * 9) : 0
+    const source = sanitizeLegacyText(layer.text)
+    const shown =
+      reveal >= 0.999
+        ? source
+        : source.slice(0, Math.max(1, Math.round(source.length * reveal)))
+    const signature = `${shown}|${layer.textFont}|${layer.textStyle}|${glitchSeed}`
+    if (
+      context &&
+      canvas &&
+      texture &&
+      runtimeLayer.scratch.textPlateSignature !== signature
+    ) {
+      paintTextPlate(
+        context,
+        canvas.width,
+        canvas.height,
+        shown,
+        layer.textFont,
+        layer.textStyle,
+        glitchSeed
+      )
+      texture.needsUpdate = true
+      runtimeLayer.scratch.textPlateSignature = signature
+    }
+    for (const textNode of runtimeLayer.nodes) {
+      textNode.object.position.set(
+        textNode.basePosition.x + motion.x,
+        textNode.basePosition.y + motion.y,
+        textNode.basePosition.z + motion.z
+      )
+      textNode.object.rotation.set(
+        textNode.baseRotation.x,
+        textNode.baseRotation.y + motion.rotY,
+        textNode.baseRotation.z + motion.rotZ
+      )
+      textNode.object.scale.setScalar(motion.scale)
+    }
+    runtimeLayer.scratch.textOpacityScale = motion.opacity
     return
   }
 
   if (generator === 'legacyTextSpin') {
-    const spinSpeed = 0.7 + input.speed * 2.1
-    const beatScale = 1 + input.beatPulse * 0.45
-    const tilt = Math.sin(input.clockSec * 0.65) * 0.42
+    const motion = textMotionOffset(
+      runtimeLayer.layer.textMotion,
+      input.clockSec,
+      input.speed,
+      input.beatPulse
+    )
+    const glitch = runtimeLayer.layer.textStyle === 'glitch'
+      ? Math.sin(input.clockSec * 23) * 0.06
+      : 0
     for (const node of runtimeLayer.nodes) {
+      node.object.position.set(
+        node.basePosition.x + motion.x + glitch,
+        node.basePosition.y + motion.y,
+        node.basePosition.z
+      )
       node.object.rotation.set(
-        node.baseRotation.x + tilt,
-        node.baseRotation.y + input.clockSec * spinSpeed,
-        node.baseRotation.z + input.clockSec * spinSpeed * 0.18
+        node.baseRotation.x,
+        node.baseRotation.y + motion.rotY,
+        node.baseRotation.z + motion.rotZ
       )
     }
     runtimeLayer.group.scale.setScalar(
-      proceduralBuiltSizeScaleFactor(runtimeLayer, runtimeLayer.layer) * beatScale
+      proceduralBuiltSizeScaleFactor(runtimeLayer, runtimeLayer.layer) * motion.scale
     )
+    runtimeLayer.scratch.textOpacityScale = motion.opacity
     return
   }
 

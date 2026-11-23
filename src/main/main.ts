@@ -395,6 +395,70 @@ function findFallbackVisualizerWindow(excludeWebContentsId?: number): BrowserWin
   return null
 }
 
+function previewOutputWanted() {
+  return (
+    findDetachedWindowByPage('VideoViewport') !== null ||
+    findDetachedWindowByPage('Streaming') !== null ||
+    engine.isVisualizerStreamActive()
+  )
+}
+
+function syncPreviewDemand() {
+  const video = findDetachedWindowByPage('Video')
+  if (
+    video === null ||
+    video.isDestroyed() ||
+    video.webContents.isDestroyed()
+  ) {
+    return
+  }
+  video.webContents.send(
+    ipcChannels.visualizer_preview_demand,
+    previewOutputWanted()
+  )
+}
+
+function jpegBufferFromIpc(raw: unknown): Buffer | null {
+  if (Buffer.isBuffer(raw)) {
+    return raw.byteLength >= 4 ? raw : null
+  }
+  if (raw instanceof Uint8Array && raw.byteLength >= 4) {
+    return Buffer.from(raw)
+  }
+  if (raw instanceof ArrayBuffer && raw.byteLength >= 4) {
+    return Buffer.from(raw)
+  }
+  return null
+}
+
+ipcMain.on(ipcChannels.visualizer_preview_hello, (event) => {
+  if (detachedWindowPagesById.get(event.sender.id) !== 'Video') return
+  event.sender.send(
+    ipcChannels.visualizer_preview_demand,
+    previewOutputWanted()
+  )
+})
+
+ipcMain.on(ipcChannels.visualizer_preview_frame, (event, raw: unknown) => {
+  if (detachedWindowPagesById.get(event.sender.id) !== 'Video') return
+  const jpeg = jpegBufferFromIpc(raw)
+  if (jpeg === null) return
+  for (const page of ['VideoViewport', 'Streaming'] as const) {
+    const mirror = findDetachedWindowByPage(page)
+    if (
+      mirror === null ||
+      mirror.isDestroyed() ||
+      mirror.webContents.isDestroyed()
+    ) {
+      continue
+    }
+    mirror.webContents.send(ipcChannels.visualizer_preview_frame, jpeg)
+  }
+  engine.pushVisualizerPreviewFrame(jpeg)
+})
+
+engine.setVisualizerPreviewDemandListener(syncPreviewDemand)
+
 function setupDesktopLoopbackCapture() {
   const defaultSession: {
     setDisplayMediaRequestHandler?: (
@@ -562,6 +626,11 @@ function createAppWindow({
   }
   if (detachedPartition !== undefined) {
     webPreferences.partition = detachedPartition
+  }
+  if (!isMain && isVisualizerDetachedPage(defaultPage)) {
+    // Unfocused output windows must keep compositing. Otherwise the second
+    // screen freezes and the video stream keeps capturing that stale frame.
+    webPreferences.backgroundThrottling = false
   }
 
   const window = new BrowserWindow({
@@ -798,6 +867,7 @@ function createAppWindow({
     ) {
       bindVisualizerContainerWindow(window)
     }
+    syncPreviewDemand()
     syncDetachedWindowLayoutSnapshot()
     if (isVisualizerDetachedPage(defaultPage)) {
       syncVideoEnabledToDetachedVisualizerCount()
@@ -838,6 +908,7 @@ function createAppWindow({
         if (wasVisualizerDetached) {
           syncVideoEnabledToDetachedVisualizerCount()
         }
+        syncPreviewDemand()
       } catch (error) {
         console.error('Error while cleaning up detached window:', error)
       }

@@ -20,7 +20,14 @@ import {
   setAllVisualScenesProjectionMapping,
   setVisualSceneConfig,
 } from '../redux/controlSlice'
-import { heliosSetPoints, sendDiagnosticsEvent, sendTelemetryMark } from '../ipcHandler'
+import {
+  heliosSetPoints,
+  onVisualizerPreviewDemand,
+  sendDiagnosticsEvent,
+  sendTelemetryMark,
+  sendVisualizerPreviewFrame,
+  sendVisualizerPreviewHello,
+} from '../ipcHandler'
 import type {
   ProjectionMappingConfig,
   ProjectionMappingOutput,
@@ -42,6 +49,10 @@ import {
 
 interface VisualizerProps {
   viewportOnly?: boolean
+  /** Keep drawing when this window is unfocused so preview frames keep going out. */
+  paintWhenHidden?: boolean
+  /** JPEG this canvas for the other screen and the outgoing stream. */
+  publishPreview?: boolean
 }
 
 type CornerIndex = 0 | 1 | 2 | 3
@@ -206,6 +217,115 @@ function makeOutputId() {
   return `pm-out-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+function bilinear(corners: ProjectionMappingOutput['corners'], u: number, v: number) {
+  const topX = lerp(corners[0].x, corners[1].x, u)
+  const topY = lerp(corners[0].y, corners[1].y, u)
+  const botX = lerp(corners[3].x, corners[2].x, u)
+  const botY = lerp(corners[3].y, corners[2].y, u)
+  return { x: lerp(topX, botX, v), y: lerp(topY, botY, v) }
+}
+
+function outputBufferSize(aspectRatio: string | undefined) {
+  const wide = aspectRatio !== '4:3'
+  const width = wide ? 1920 : 1440
+  let height = Math.round(width / (wide ? 16 / 9 : 4 / 3))
+  if (height % 2 !== 0) height -= 1
+  return { width, height: Math.max(2, height) }
+}
+
+const PUBLISH_GRID = 16
+
+function drawTexturedTriangle(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  s0: { x: number; y: number },
+  s1: { x: number; y: number },
+  s2: { x: number; y: number },
+  d0: { x: number; y: number },
+  d1: { x: number; y: number },
+  d2: { x: number; y: number }
+) {
+  const denom =
+    s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y)
+  if (Math.abs(denom) < 1e-4) return
+  const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / denom
+  const b = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / denom
+  const c =
+    (d0.x * (s1.x * s2.y - s2.x * s1.y) +
+      d1.x * (s2.x * s0.y - s0.x * s2.y) +
+      d2.x * (s0.x * s1.y - s1.x * s0.y)) /
+    denom
+  const d = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / denom
+  const e = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / denom
+  const f =
+    (d0.y * (s1.x * s2.y - s2.x * s1.y) +
+      d1.y * (s2.x * s0.y - s0.x * s2.y) +
+      d2.y * (s0.x * s1.y - s1.x * s0.y)) /
+    denom
+  const minX = Math.max(0, Math.floor(Math.min(s0.x, s1.x, s2.x)))
+  const minY = Math.max(0, Math.floor(Math.min(s0.y, s1.y, s2.y)))
+  const maxX = Math.ceil(Math.max(s0.x, s1.x, s2.x))
+  const maxY = Math.ceil(Math.max(s0.y, s1.y, s2.y))
+  const sw = Math.max(1, maxX - minX)
+  const sh = Math.max(1, maxY - minY)
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(d0.x, d0.y)
+  ctx.lineTo(d1.x, d1.y)
+  ctx.lineTo(d2.x, d2.y)
+  ctx.closePath()
+  ctx.clip()
+  ctx.setTransform(a, d, b, e, c, f)
+  ctx.drawImage(source, minX, minY, sw, sh, minX, minY, sw, sh)
+  ctx.restore()
+}
+
+function drawMappedPreview(
+  ctx: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  outputs: ProjectionMappingOutput[],
+  destWidth: number,
+  destHeight: number
+) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, destWidth, destHeight)
+  for (const output of outputs) {
+    if (!output.enabled) continue
+    const sr = output.sourceRect
+    const originX = sr.x * source.width
+    const originY = sr.y * source.height
+    const spanX = Math.max(1, sr.width * source.width)
+    const spanY = Math.max(1, sr.height * source.height)
+    for (let row = 0; row < PUBLISH_GRID; row++) {
+      for (let col = 0; col < PUBLISH_GRID; col++) {
+        const u0 = col / PUBLISH_GRID
+        const u1 = (col + 1) / PUBLISH_GRID
+        const v0 = row / PUBLISH_GRID
+        const v1 = (row + 1) / PUBLISH_GRID
+        const s00 = { x: originX + u0 * spanX, y: originY + v0 * spanY }
+        const s10 = { x: originX + u1 * spanX, y: originY + v0 * spanY }
+        const s11 = { x: originX + u1 * spanX, y: originY + v1 * spanY }
+        const s01 = { x: originX + u0 * spanX, y: originY + v1 * spanY }
+        const d00 = bilinear(output.corners, u0, v0)
+        const d10 = bilinear(output.corners, u1, v0)
+        const d11 = bilinear(output.corners, u1, v1)
+        const d01 = bilinear(output.corners, u0, v1)
+        const p = (point: { x: number; y: number }) => ({
+          x: point.x * destWidth,
+          y: point.y * destHeight,
+        })
+        drawTexturedTriangle(ctx, source, s00, s10, s11, p(d00), p(d10), p(d11))
+        drawTexturedTriangle(ctx, source, s00, s11, s01, p(d00), p(d11), p(d01))
+      }
+    }
+  }
+}
+
 function split2x2(output: ProjectionMappingOutput): ProjectionMappingOutput[] {
   const next: ProjectionMappingOutput[] = []
   const halfW = output.sourceRect.width * 0.5
@@ -242,7 +362,11 @@ function split2x2(output: ProjectionMappingOutput): ProjectionMappingOutput[] {
 /** Laser output UI stays off until a later patch. */
 const showLaserOutput = false
 
-export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
+export default function Visualizer({
+  viewportOnly = false,
+  paintWhenHidden = false,
+  publishPreview = false,
+}: VisualizerProps) {
   const dispatch = useDispatch()
   const visualizerDiv = useRef<null | HTMLDivElement>(null)
   const viewportFrameRef = useRef<null | HTMLDivElement>(null)
@@ -264,6 +388,12 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const mappingGpuRef = useRef<ProjectionMappingGpuCompositor | null>(null)
   const [gpuMappingActive, setGpuMappingActive] = useState(false)
   const dt = useRef<number>(60)
+  const paintWhenHiddenRef = useRef(viewportOnly || paintWhenHidden)
+  paintWhenHiddenRef.current = viewportOnly || paintWhenHidden
+  const publishPreviewRef = useRef(publishPreview)
+  publishPreviewRef.current = publishPreview
+  const previewDemandRef = useRef(false)
+  const applyOutputSizeRef = useRef<(() => void) | null>(null)
   const cleanStateRef = useRef(getCleanReduxState(store.getState()))
   const realtimeStateRef = useRef(realtimeStore.getState())
   const framePayloadRef = useRef<{
@@ -293,6 +423,8 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   const [selectedGrabPoint, setSelectedGrabPoint] = useState<SelectedGrabPoint | null>(null)
   const [marqueeRect, setMarqueeRect] = useState<NormalizedRect | null>(null)
   const visualSceneConfig = useActiveVisualScene((scene) => scene.config)
+  const aspectRatioRef = useRef(visualSceneConfig.previewAspectRatio)
+  aspectRatioRef.current = visualSceneConfig.previewAspectRatio
   const projectionMapping = sanitizeProjectionMapping(visualSceneConfig.projectionMapping)
   const [mappingDraft, setMappingDraft] = useState<ProjectionMappingConfig>(projectionMapping)
   const mappingDraftRef = useRef<ProjectionMappingConfig>(projectionMapping)
@@ -849,19 +981,97 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
     let disposed = false
     const host = sourceHostRef.current
     if (host === null) return
-    const vm = new VisualizerManager()
+    const vm = new VisualizerManager({ preserveDrawingBuffer: true })
+    vm.setPixelRatio(1)
     const sourceCanvas = vm.getElement()
     sourceCanvasRef.current = sourceCanvas
+    sourceCanvas.style.width = '100%'
+    sourceCanvas.style.height = '100%'
+    sourceCanvas.style.objectFit = 'contain'
+    sourceCanvas.style.display = 'block'
     host.appendChild(sourceCanvas)
+    const publishCanvas = document.createElement('canvas')
+    const publishCtx = publishCanvas.getContext('2d', { alpha: false })
+    let captureBusy = false
+    let nextCaptureAt = 0
+    let appliedWidth = 0
+    let appliedHeight = 0
 
-    const resize = () => vm.resize(host.clientWidth, host.clientHeight)
+    const applyOutputSize = () => {
+      const next = outputBufferSize(aspectRatioRef.current)
+      if (next.width === appliedWidth && next.height === appliedHeight) return
+      appliedWidth = next.width
+      appliedHeight = next.height
+      vm.resize(next.width, next.height, false)
+      sourceCanvas.style.width = '100%'
+      sourceCanvas.style.height = '100%'
+    }
+    applyOutputSizeRef.current = applyOutputSize
+
+    const publishFrame = () => {
+      if (!publishPreviewRef.current || !previewDemandRef.current || captureBusy) return
+      const now = performance.now()
+      if (now < nextCaptureAt) return
+      nextCaptureAt = now + 33
+      const mapping = mappingDraftRef.current
+      let target: HTMLCanvasElement = sourceCanvas
+      if (mapping.enabled && publishCtx !== null) {
+        if (
+          publishCanvas.width !== sourceCanvas.width ||
+          publishCanvas.height !== sourceCanvas.height
+        ) {
+          publishCanvas.width = sourceCanvas.width
+          publishCanvas.height = sourceCanvas.height
+        }
+        drawMappedPreview(
+          publishCtx,
+          sourceCanvas,
+          mapping.outputs,
+          publishCanvas.width,
+          publishCanvas.height
+        )
+        target = publishCanvas
+      }
+      captureBusy = true
+      target.toBlob(
+        (blob) => {
+          if (blob === null) {
+            captureBusy = false
+            return
+          }
+          blob
+            .arrayBuffer()
+            .then((buffer) => {
+              sendVisualizerPreviewFrame(new Uint8Array(buffer))
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              captureBusy = false
+            })
+        },
+        'image/jpeg',
+        0.82
+      )
+    }
+
+    const resize = () => applyOutputSize()
     const schedule = () => {
       if (disposed || frameHandle !== null) return
+      const hidden = document.visibilityState !== 'visible'
+      if (hidden && paintWhenHiddenRef.current) {
+        // rAF is paused for unfocused windows. A timer keeps the preview
+        // painting so its picture can keep feeding the other screen and stream.
+        frameHandle = window.setTimeout(() => {
+          animate()
+        }, 16) as unknown as number
+        return
+      }
       frameHandle = requestAnimationFrame(animate)
     }
     const cancel = () => {
       if (frameHandle === null) return
       cancelAnimationFrame(frameHandle)
+      window.clearTimeout(frameHandle)
       frameHandle = null
     }
     let lastTraceAt = 0
@@ -910,7 +1120,13 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
 
     const animate = () => {
       frameHandle = null
-      if (disposed || document.visibilityState !== 'visible') return
+      if (disposed) return
+      if (
+        document.visibilityState !== 'visible' &&
+        !paintWhenHiddenRef.current
+      ) {
+        return
+      }
       const now = performance.now()
       if (lastUpdateTime === null) lastUpdateTime = now
       const elapsed = now - lastUpdateTime
@@ -928,6 +1144,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       framePayloadRef.current.state = cleanStateRef.current
       const updateStartMs = performance.now()
       vm.update(dt.current, framePayloadRef.current)
+      publishFrame()
       const updateDurationMs = Math.max(0, performance.now() - updateStartMs)
       // Copy and trace before this turn yields. A later animation frame sees
       // a cleared WebGL drawing buffer, so the projection and the laser go blank.
@@ -1072,7 +1289,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
     }
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' || paintWhenHiddenRef.current) {
         lastUpdateTime = null
         lastFpsCommitRef.current = 0
         schedule()
@@ -1099,6 +1316,7 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
       cancel()
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
+      applyOutputSizeRef.current = null
       vm.dispose()
       mappingGpuRef.current?.dispose()
       mappingGpuRef.current = null
@@ -1118,13 +1336,27 @@ export default function Visualizer({ viewportOnly = false }: VisualizerProps) {
   }, [])
 
   useEffect(() => {
+    applyOutputSizeRef.current?.()
+  }, [visualSceneConfig.previewAspectRatio])
+
+  useEffect(() => {
+    if (!publishPreview) {
+      previewDemandRef.current = false
+      return
+    }
+    sendVisualizerPreviewHello()
+    return onVisualizerPreviewDemand((wanted) => {
+      previewDemandRef.current = wanted
+    })
+  }, [publishPreview])
+
+  useEffect(() => {
     if (!mappingDraft.enabled) {
       setGpuMappingActive(false)
       mappingGpuRef.current?.dispose()
       mappingGpuRef.current = null
       return
     }
-
     let disposed = false
     let frameHandle: number | null = null
     const gpuCanvas = mappingGpuCanvasRef.current

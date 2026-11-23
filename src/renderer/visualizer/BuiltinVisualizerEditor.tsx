@@ -32,14 +32,24 @@ import {
   fullFrameGenerators,
   generativeLayerHelp,
   builtinLayerSourceTypeList,
+  builtinTextFontDisplayName,
+  builtinTextFontList,
+  builtinTextMotionDisplayName,
+  builtinTextMotionList,
+  builtinTextStyleDisplayName,
+  builtinTextStyleList,
   createBuiltinCameraEffect,
   createBuiltinEffect,
   createBuiltinLayer,
+  isBuiltinTextGenerator,
   isMediaFileSourceType,
   layerUsesVisBackdropLayout,
   normBuiltinVisCfg,
   proceduralLayerControlSupport,
   type BuiltinMediaFitMode,
+  type BuiltinTextFont,
+  type BuiltinTextMotion,
+  type BuiltinTextStyle,
 } from '../../visualizer/threejs/layers/BuiltinVisualizer'
 import { visSplitIdx } from '../scenes/splitUiVisibility'
 import {
@@ -49,6 +59,7 @@ import {
   listProjectMPresets,
   listProjectMPresetsInDirectory,
   visNdiList,
+  visUsbCameras,
   readTextFile,
 } from '../ipcHandler'
 import { loadFile, saveFile } from '../autosave'
@@ -308,6 +319,42 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
     loading: boolean
     hint: string
   }>({ sources: [], loading: false, hint: '' })
+  const [usbCameras, setUsbCameras] = useState<{
+    sources: Array<{ id: string; label: string }>
+    loading: boolean
+    loaded: boolean
+    hint: string
+  }>({ sources: [], loading: false, loaded: false, hint: '' })
+
+  const refreshUsbCameras = useCallback(async () => {
+    setUsbCameras((current) => ({ ...current, loading: true, hint: '' }))
+    try {
+      const res = await visUsbCameras()
+      const hint =
+        res.sources.length === 0 && res.error.trim().length === 0
+          ? 'No USB cameras found.'
+          : res.error
+      setUsbCameras({
+        sources: res.sources,
+        loading: false,
+        loaded: true,
+        hint,
+      })
+    } catch (error) {
+      setUsbCameras({
+        sources: [],
+        loading: false,
+        loaded: true,
+        hint: error instanceof Error ? error.message : 'USB camera scan failed.',
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    const wantsUsb = config.layers.some((layer) => layer.sourceType === 'usbCamera')
+    if (!wantsUsb || usbCameras.loaded || usbCameras.loading) return
+    void refreshUsbCameras()
+  }, [config.layers, refreshUsbCameras, usbCameras.loaded, usbCameras.loading])
 
   const refreshInlineProjectMPresets = useCallback(async (
     directoryOverride?: string,
@@ -891,7 +938,8 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                         ))}
                       </Select>
                     </FieldRow>
-                    {layer.generator.startsWith('legacy') && (
+                    {layer.generator.startsWith('legacy') &&
+                      !isBuiltinTextGenerator(layer.generator) && (
                       <HelperText>
                         Classic Captivate 1.03 tribute generator.
                       </HelperText>
@@ -899,21 +947,83 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                     {generativeLayerHelp[layer.generator] ? (
                       <HelperText>{generativeLayerHelp[layer.generator]}</HelperText>
                     ) : null}
-                    {(layer.generator === 'legacyTextParticles' ||
-                      layer.generator === 'legacyTextSpin' ||
-                      layer.generator === 'text') && (
-                      <FieldRow>
-                        <Label>Text</Label>
-                        <Input
-                          value={layer.text}
-                          onChange={(event) =>
-                            updateLayer(config, patch, index, {
-                              text: event.target.value,
-                            })
-                          }
-                          placeholder="Captivate"
-                        />
-                      </FieldRow>
+                    {layer.generator === 'text' && (
+                      <HelperText>
+                        Draws with the font you pick. Use | for a second line.
+                      </HelperText>
+                    )}
+                    {isBuiltinTextGenerator(layer.generator) &&
+                      layer.generator !== 'text' && (
+                      <HelperText>
+                        Classic Captivate 1.03 tribute. Sans, serif, script, and the other families map onto the built-in outline fonts.
+                      </HelperText>
+                    )}
+                    {isBuiltinTextGenerator(layer.generator) && (
+                      <>
+                        <FieldRow>
+                          <Label>Text</Label>
+                          <Input
+                            value={layer.text}
+                            onChange={(event) =>
+                              updateLayer(config, patch, index, {
+                                text: event.target.value,
+                              })
+                            }
+                            placeholder="Captivate | Live"
+                          />
+                        </FieldRow>
+                        <FieldRow>
+                          <Label>Font</Label>
+                          <Select
+                            value={layer.textFont}
+                            onChange={(event) =>
+                              updateLayer(config, patch, index, {
+                                textFont: event.target.value as BuiltinTextFont,
+                              })
+                            }
+                          >
+                            {builtinTextFontList.map((font) => (
+                              <option key={font} value={font}>
+                                {builtinTextFontDisplayName[font]}
+                              </option>
+                            ))}
+                          </Select>
+                        </FieldRow>
+                        <FieldRow>
+                          <Label>Style</Label>
+                          <Select
+                            value={layer.textStyle}
+                            onChange={(event) =>
+                              updateLayer(config, patch, index, {
+                                textStyle: event.target.value as BuiltinTextStyle,
+                              })
+                            }
+                          >
+                            {builtinTextStyleList.map((style) => (
+                              <option key={style} value={style}>
+                                {builtinTextStyleDisplayName[style]}
+                              </option>
+                            ))}
+                          </Select>
+                        </FieldRow>
+                        <FieldRow>
+                          <Label>Motion</Label>
+                          <Select
+                            value={layer.textMotion}
+                            onChange={(event) =>
+                              updateLayer(config, patch, index, {
+                                textMotion: event.target.value as BuiltinTextMotion,
+                              })
+                            }
+                          >
+                            {builtinTextMotionList.map((motion) => (
+                              <option key={motion} value={motion}>
+                                {builtinTextMotionDisplayName[motion]}
+                              </option>
+                            ))}
+                          </Select>
+                        </FieldRow>
+                      </>
                     )}
                     {layer.generator === 'importedModel' && (
                       <>
@@ -1145,7 +1255,11 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                   layer.sourceType !== 'projectM' && (
                     <FieldRow>
                       <Label>
-                        {layer.sourceType === 'ndiStream' ? 'NDI source' : 'Path/URL'}
+                        {layer.sourceType === 'ndiStream'
+                          ? 'NDI source'
+                          : layer.sourceType === 'usbCamera'
+                          ? 'USB camera'
+                          : 'Path/URL'}
                       </Label>
                       <Input
                         value={layer.source}
@@ -1157,6 +1271,8 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                         placeholder={
                           layer.sourceType === 'ndiStream'
                             ? 'Exact NDI source name (from Scan)'
+                            : layer.sourceType === 'usbCamera'
+                            ? 'Camera name'
                             : layer.sourceType === 'rtspStream'
                             ? 'rtsp://...'
                             : layer.sourceType === 'videoFile'
@@ -1200,6 +1316,17 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                           }}
                         >
                           {ndiSourcesScan.loading ? 'Scanning…' : 'Scan network'}
+                        </SmallButton>
+                      )}
+                      {layer.sourceType === 'usbCamera' && (
+                        <SmallButton
+                          type="button"
+                          disabled={usbCameras.loading}
+                          onClick={() => {
+                            void refreshUsbCameras()
+                          }}
+                        >
+                          {usbCameras.loading ? 'Looking…' : 'Refresh cameras'}
                         </SmallButton>
                       )}
                       {(layer.sourceType === 'imageFile' ||
@@ -1249,10 +1376,50 @@ export default function BuiltinVisualizerEditor({ config, onChange }: Props) {
                       {ndiSourcesScan.hint}
                     </ProjectMInlineMessage>
                   )}
+                {layer.sourceType === 'usbCamera' && (
+                  <FieldRow>
+                    <Label>Choose camera</Label>
+                    <Select
+                      aria-label="Choose a USB camera"
+                      value={
+                        usbCameras.sources.some((camera) => camera.id === layer.source) ||
+                        layer.source.length > 0
+                          ? layer.source
+                          : ''
+                      }
+                      onChange={(event) => {
+                        const value = event.target.value
+                        if (value.length > 0) {
+                          updateLayer(config, patch, index, { source: value })
+                        }
+                      }}
+                    >
+                      <option value="">
+                        {usbCameras.loading ? 'Looking…' : '—'}
+                      </option>
+                      {usbCameras.sources.map((camera) => (
+                        <option key={camera.id} value={camera.id}>
+                          {camera.label}
+                        </option>
+                      ))}
+                      {layer.source.length > 0 &&
+                        !usbCameras.sources.some((camera) => camera.id === layer.source) && (
+                          <option value={layer.source}>{layer.source}</option>
+                        )}
+                    </Select>
+                  </FieldRow>
+                )}
+                {layer.sourceType === 'usbCamera' &&
+                  usbCameras.hint.trim().length > 0 && (
+                    <ProjectMInlineMessage title={usbCameras.hint}>
+                      {usbCameras.hint}
+                    </ProjectMInlineMessage>
+                  )}
                 {layer.sourceType !== 'procedural' &&
                   layer.sourceType !== 'projectM' &&
                   layer.sourceType !== 'ndiStream' &&
-                  layer.sourceType !== 'rtspStream' && (
+                  layer.sourceType !== 'rtspStream' &&
+                  layer.sourceType !== 'usbCamera' && (
                   <FieldRow>
                     <Label>Fit</Label>
                     <Select

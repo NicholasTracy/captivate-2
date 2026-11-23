@@ -134,12 +134,55 @@ let _lastReceivedControlStateSerialized: string | null = null
 let _pendingRemoteCleanState: CleanReduxState | null = null
 let _pendingRemoteStateRaf: number | null = null
 
+/** Last visual-scene slice applied in this window. Editor windows use it to ignore stale echoes. */
+let _lastAppliedVisualSliceJson: string | null = null
+
+function visualSliceJson(state: CleanReduxState) {
+  return JSON.stringify(state.control?.visual ?? null)
+}
+
+function isVisualizerEditorPage(page: Page | null) {
+  return page === 'Video' || page === 'Streaming'
+}
+
+/**
+ * The visualizer editor applies each change locally, then the engine echoes a
+ * full snapshot. A slower echo can roll the text field back a character.
+ * While this window has a newer visual scene than the last snapshot it
+ * accepted, keep that local slice and still take the rest of the show.
+ */
+function keepLocalVisualEdits(incoming: CleanReduxState): CleanReduxState {
+  if (!isVisualizerEditorPage(pageFromLocation)) {
+    return incoming
+  }
+  const local = getCleanReduxState(store.getState())
+  const localSlice = visualSliceJson(local)
+  const remoteSlice = visualSliceJson(incoming)
+  if (_lastAppliedVisualSliceJson === null || localSlice === remoteSlice) {
+    _lastAppliedVisualSliceJson = remoteSlice
+    return incoming
+  }
+  if (localSlice === _lastAppliedVisualSliceJson) {
+    _lastAppliedVisualSliceJson = remoteSlice
+    return incoming
+  }
+  const next: CleanReduxState = {
+    ...incoming,
+    control: {
+      ...incoming.control,
+      visual: JSON.parse(localSlice) as CleanReduxState['control']['visual'],
+    },
+  }
+  _lastAppliedVisualSliceJson = localSlice
+  return next
+}
+
 function flushPendingRemoteState() {
   _pendingRemoteStateRaf = null
   if (_pendingRemoteCleanState === null) {
     return
   }
-  const next = _pendingRemoteCleanState
+  const next = keepLocalVisualEdits(_pendingRemoteCleanState)
   _pendingRemoteCleanState = null
   _isApplyingRemoteState = true
   try {
@@ -230,6 +273,10 @@ function controlPublishAffectsLiveDmx(actionType: string | null): boolean {
 
 let _lastDispatchActionType: string | null = null
 
+function isVisualizerDetachedPage(page: Page | null) {
+  return page === 'Video' || page === 'VideoViewport' || page === 'Streaming'
+}
+
 function shouldForwardActionToPrimary(action: unknown) {
   if (isPrimaryWindow) return false
   if (_isApplyingRemoteDispatch) return false
@@ -242,6 +289,12 @@ function shouldForwardActionToPrimary(action: unknown) {
   if (type.startsWith('scenes/')) return true
   if (SHARED_GUI_ACTION_TYPES.has(type)) return true
   if (SHARED_MIXER_ACTION_TYPES.has(type)) return true
+  // The visualizer editor lives in a detached window. Its preview reads local
+  // Redux, but the other screen and the video stream follow engine state.
+  // Forward show-control edits so those outputs pick up the same scene.
+  if (isVisualizerDetachedPage(pageFromLocation) && type.startsWith('control/')) {
+    return true
+  }
   return false
 }
 

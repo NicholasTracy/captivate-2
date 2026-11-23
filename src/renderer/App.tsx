@@ -14,7 +14,7 @@ import AtmosphericsPage from './pages/Atmospherics'
 import Share from './pages/Share'
 import Mixer from './pages/Mixer'
 import MenuBar from './menu/MenuBar'
-import Visualizer from './visualizer/Visualizer'
+import VisualizerMirror from './visualizer/VisualizerMirror'
 import DetachedVisualizerFullscreenBar from './visualizer/DetachedVisualizerFullscreenBar'
 import { useTypedSelector } from './redux/store'
 import { setActivePage } from './redux/guiSlice'
@@ -66,8 +66,8 @@ export default function App() {
   }, [activePage, dispatch, ledSidebarEnabled])
   const detachedPage = new URLSearchParams(window.location.search).get('page')
   const isDedicatedLighting3DWindow = detachedPage === 'Lighting3D'
-  const isDedicatedVisualizerWindow =
-    detachedPage === 'Video' || detachedPage === 'Streaming'
+  const isDedicatedVisualizerWindow = detachedPage === 'Video'
+  const isDedicatedStreamingWindow = detachedPage === 'Streaming'
   const isDedicatedVisualizerViewportWindow = detachedPage === 'VideoViewport'
 
   function getActivePage() {
@@ -121,6 +121,23 @@ export default function App() {
     )
   }
 
+  if (isDedicatedStreamingWindow) {
+    return (
+      <Root>
+        <KeyboardMappingFocus />
+        <ErrorBoundary FallbackComponent={ErrorBoundaryFallback}>
+          <Col>
+            <PageWrapper style={{ position: 'relative' }}>
+              <DetachedKeyboardMappingBar />
+              <Video standalone previewMode="mirror" />
+            </PageWrapper>
+          </Col>
+          <FullscreenOverlay />
+        </ErrorBoundary>
+      </Root>
+    )
+  }
+
   if (isDedicatedVisualizerViewportWindow) {
     return (
       <Root>
@@ -130,7 +147,7 @@ export default function App() {
             <PageWrapper style={{ position: 'relative' }}>
               <DetachedKeyboardMappingBar />
               <DetachedVisualizerFullscreenBar />
-              <Visualizer viewportOnly />
+              <VisualizerMirror />
             </PageWrapper>
           </Col>
           <FullscreenOverlay />
