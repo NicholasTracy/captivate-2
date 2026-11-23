@@ -192,7 +192,7 @@ never use Square for period (stepped octave jumps). Full intermod depth
 |----------|---------------------------|
 | Fixture count / window anchors | Zones, wig-wag, spectrum, chase strips (fallback) |
 | Movers | Showcases + mover awareness |
-| Strobe | Peak-drive strobe param |
+| Strobe | Peak Drive stores `strobe` **0.38** and Strobe Gate stores **0.48** when a patched type has a `strobe` leaf. See [Strobe channels](strobe.md). |
 | Usable groups (≥2, non-reserved) | Dual-zone / group splits |
 | Smart group families (prefix / even-odd / quadrants / strips) | Preferred chase + multi-split recipes with group filters |
 | Atmosphere | Summary only |
