@@ -9,6 +9,7 @@ import {
   removePerformanceRoute,
   renamePerformanceControl,
   setPerformanceControlColor,
+  setPerformanceCellSize,
   setPerformanceEditUnlocked,
   setPerformanceGridSize,
   setPerformanceOscOut,
@@ -21,11 +22,12 @@ import {
 } from '../redux/performanceControl'
 import { isSendablePerformanceOscAddress } from '../../shared/performance'
 import {
+  PERFORMANCE_CELL_MAX_PX,
+  PERFORMANCE_CELL_MIN_PX,
   PERFORMANCE_COLOR_PRESETS,
-  PERFORMANCE_DEFAULT_COLS,
-  PERFORMANCE_DEFAULT_ROWS,
   PERFORMANCE_PAD_SIZE,
   PERFORMANCE_SLIDER_SIZE,
+  performanceGridCount,
   type PerformanceControl,
   type PerformanceControlKind,
 } from '../../shared/performance'
@@ -95,18 +97,6 @@ export default function PerformanceCanvas() {
   }, [bank.controls, bank.order])
 
   useEffect(() => {
-    // One-time bump from the original 8×8 default to denser cells.
-    if (bank.cols === 8 && bank.rows === 8) {
-      dispatch(
-        setPerformanceGridSize({
-          cols: PERFORMANCE_DEFAULT_COLS,
-          rows: PERFORMANCE_DEFAULT_ROWS,
-        })
-      )
-    }
-  }, [bank.cols, bank.rows, dispatch])
-
-  useEffect(() => {
     const el = gridRef.current
     if (el === null) return
 
@@ -114,8 +104,11 @@ export default function PerformanceCanvas() {
       const width = el.clientWidth
       const height = el.clientHeight
       if (width <= 0 || height <= 0) return
-      const cols = Math.max(1, bank.cols)
-      const rows = Math.max(1, bank.rows)
+      const cols = performanceGridCount(width, bank.cellPx, GAP_PX)
+      const rows = performanceGridCount(height, bank.cellPx, GAP_PX)
+      if (cols !== bank.cols || rows !== bank.rows) {
+        dispatch(setPerformanceGridSize({ cols, rows }))
+      }
       const cellW = (width - (cols - 1) * GAP_PX) / cols
       const cellH = (height - (rows - 1) * GAP_PX) / rows
       setMetrics((prev) => {
@@ -133,7 +126,7 @@ export default function PerformanceCanvas() {
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [bank.cols, bank.rows])
+  }, [bank.cellPx, bank.cols, bank.rows, dispatch])
 
   const selected =
     selectedId !== null
@@ -150,6 +143,20 @@ export default function PerformanceCanvas() {
     <Root data-tour="tour-performance-bank">
       <Toolbar>
         <Title>Performance</Title>
+        <SizeRow>
+          <ToggleLabel>Grid size</ToggleLabel>
+          <SizeSlider
+            type="range"
+            min={PERFORMANCE_CELL_MIN_PX}
+            max={PERFORMANCE_CELL_MAX_PX}
+            step={4}
+            value={bank.cellPx}
+            aria-label="Grid size"
+            onChange={(event) => {
+              dispatch(setPerformanceCellSize(Number(event.target.value)))
+            }}
+          />
+        </SizeRow>
         <ToolbarSpacer />
         <ToggleRow>
           <ToggleLabel>Edit</ToggleLabel>
@@ -653,6 +660,19 @@ const Title = styled.div`
 
 const ToolbarSpacer = styled.div`
   flex: 1;
+`
+
+const SizeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+`
+
+const SizeSlider = styled.input`
+  width: 8rem;
+  margin: 0;
+  accent-color: ${(p) => p.theme.colors.text.primary};
 `
 
 const ToggleRow = styled.div`

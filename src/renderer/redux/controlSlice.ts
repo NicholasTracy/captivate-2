@@ -59,8 +59,10 @@ import {
   clampGridToBank,
   createPerformanceControl,
   findFreeGridSlot,
+  clampPerformanceCellPx,
   initPerformanceBank,
   normalizeGridCell,
+  PERFORMANCE_GRID_MAX,
   normalizePerformanceColor,
   normalizePerformanceOscAddress,
   normalizePerformanceRouteList,
@@ -346,12 +348,21 @@ const scenesSlice = createSlice({
     ) => {
       state.performance.editUnlocked = payload === true
     },
+    setPerformanceCellSize: (state, { payload }: PayloadAction<number>) => {
+      state.performance.cellPx = clampPerformanceCellPx(payload)
+    },
     setPerformanceGridSize: (
       state,
       { payload }: PayloadAction<{ cols: number; rows: number }>
     ) => {
-      const cols = Math.min(24, Math.max(2, Math.round(payload.cols)))
-      const rows = Math.min(24, Math.max(2, Math.round(payload.rows)))
+      const cols = Math.min(
+        PERFORMANCE_GRID_MAX,
+        Math.max(2, Math.round(payload.cols))
+      )
+      const rows = Math.min(
+        PERFORMANCE_GRID_MAX,
+        Math.max(2, Math.round(payload.rows))
+      )
       state.performance.cols = cols
       state.performance.rows = rows
       for (const control of Object.values(state.performance.controls)) {
@@ -1549,6 +1560,7 @@ export const {
 
   // PERFORMANCE BANK
   setPerformanceEditUnlocked,
+  setPerformanceCellSize,
   setPerformanceGridSize,
   addPerformanceControl,
   removePerformanceControl,

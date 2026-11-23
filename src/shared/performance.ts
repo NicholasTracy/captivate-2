@@ -32,10 +32,15 @@ export interface PerformanceControl {
 }
 
 export interface PerformanceBank {
-  /** Grid width in cells. */
+  /** Grid width in cells. Derived from `cellPx` and the canvas size. */
   cols: number
-  /** Grid height in cells. */
+  /** Grid height in cells. Derived from `cellPx` and the canvas size. */
   rows: number
+  /**
+   * Target square size in pixels. The canvas picks how many columns and
+   * rows fit, then stretches those tracks so they fill the window exactly.
+   */
+  cellPx: number
   /**
    * When true, canvas allows add / remove / drag.
    * When false (default), controls are performance-only.
@@ -48,6 +53,38 @@ export interface PerformanceBank {
 /** ~25% smaller cells than the original 8×8 when filling the same area. */
 export const PERFORMANCE_DEFAULT_COLS = 11
 export const PERFORMANCE_DEFAULT_ROWS = 11
+/** Target cell size. The live count is whatever fits the current window. */
+export const PERFORMANCE_CELL_MIN_PX = 36
+export const PERFORMANCE_CELL_MAX_PX = 180
+export const PERFORMANCE_CELL_DEFAULT_PX = 72
+/** Upper bound so a huge window cannot create thousands of cells. */
+export const PERFORMANCE_GRID_MAX = 48
+
+export function clampPerformanceCellPx(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return PERFORMANCE_CELL_DEFAULT_PX
+  return Math.min(
+    PERFORMANCE_CELL_MAX_PX,
+    Math.max(PERFORMANCE_CELL_MIN_PX, Math.round(n))
+  )
+}
+
+/**
+ * How many cells fit in `spanPx` at the target size, including gaps.
+ * The caller stretches those tracks with equal fractions so they fill
+ * the span exactly (no leftover strip, no scrollbar).
+ */
+export function performanceGridCount(
+  spanPx: number,
+  cellPx: number,
+  gapPx: number
+): number {
+  const cell = clampPerformanceCellPx(cellPx)
+  const gap = Math.max(0, gapPx)
+  const span = Math.max(0, spanPx)
+  const count = Math.floor((span + gap) / (cell + gap))
+  return Math.min(PERFORMANCE_GRID_MAX, Math.max(2, count))
+}
 export const PERFORMANCE_PAD_SIZE = { w: 2, h: 2 } as const
 /** One cell wide, tall enough for a usable vertical fader. */
 export const PERFORMANCE_SLIDER_SIZE = { w: 1, h: 4 } as const
@@ -84,6 +121,7 @@ export function initPerformanceBank(): PerformanceBank {
   return {
     cols: PERFORMANCE_DEFAULT_COLS,
     rows: PERFORMANCE_DEFAULT_ROWS,
+    cellPx: PERFORMANCE_CELL_DEFAULT_PX,
     editUnlocked: false,
     controls: {},
     order: [],
@@ -169,11 +207,11 @@ export function normalizePerformanceBank(raw: unknown): PerformanceBank {
   if (!raw || typeof raw !== 'object') return base
   const r = raw as Partial<PerformanceBank>
   let cols = Math.min(
-    24,
+    PERFORMANCE_GRID_MAX,
     Math.max(2, Math.round(Number(r.cols) || PERFORMANCE_DEFAULT_COLS))
   )
   let rows = Math.min(
-    24,
+    PERFORMANCE_GRID_MAX,
     Math.max(2, Math.round(Number(r.rows) || PERFORMANCE_DEFAULT_ROWS))
   )
   // Migrate the original 8×8 default up so cells are ~25% smaller when filling.
@@ -231,6 +269,9 @@ export function normalizePerformanceBank(raw: unknown): PerformanceBank {
   return {
     cols,
     rows,
+    cellPx: clampPerformanceCellPx(
+      (r as { cellPx?: unknown }).cellPx ?? PERFORMANCE_CELL_DEFAULT_PX
+    ),
     editUnlocked: r.editUnlocked === true,
     controls,
     order,
